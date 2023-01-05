@@ -1,0 +1,211 @@
+name: rust
+
+on:
+  push:
+    branches:
+      - 'main'
+  pull_request:
+
+env:
+  CARGO_INCREMENTAL: 0
+  RUSTFLAGS: "-Dwarnings"
+  CARGO_UNSTABLE_SPARSE_REGISTRY: true
+
+jobs:
+  rustfmt:
+    runs-on: ubuntu-20.04
+    strategy:
+      matrix:
+        rust:
+          - nightly-2022-04-29
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust }}
+          profile: minimal
+          components: rustfmt
+          override: true
+      - uses: r7kamura/rust-problem-matchers@v1
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --all -- --check
+
+  markdown-lint:
+    runs-on: ubuntu-20.04
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - uses: xt0rted/markdownlint-problem-matcher@v2
+      - uses: DavidAnson/markdownlint-cli2-action@v8
+        with:
+          globs: |
+            **/*.md
+            !mobilecoin
+
+  deny:
+    runs-on: ubuntu-20.04
+    needs:
+      - "rustfmt"
+      - "markdown-lint"
+    strategy:
+      matrix:
+        checks:
+          - advisories
+          - bans licenses sources
+    # Prevent sudden announcement of a new advisory from failing ci:
+    continue-on-error: ${{ matrix.checks == 'advisories' }}
+    steps:
+    - uses: actions/checkout@v3
+      with:
+        submodules: recursive
+    - uses: EmbarkStudios/cargo-deny-action@v1
+      with:
+        command: check ${{ matrix.checks }}
+
+  sort:
+    runs-on: ubuntu-20.04
+    needs:
+      - "rustfmt"
+      - "markdown-lint"
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+      - uses: actions-rs/install@v0.1
+        with:
+          crate: cargo-sort
+          version: latest
+          use-tool-cache: true
+      # We run this manually because actions-rs/cargo doesn't have output redirect
+      - run: cargo sort --grouped --workspace --check >/dev/null
+
+  clippy:
+    runs-on: ubuntu-20.04
+    container: mobilecoin/builder-install:v0.0.21
+    needs:
+      - "rustfmt"
+      - "markdown-lint"
+    strategy:
+      matrix:
+        rust:
+          - nightly-2022-04-29
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          components: clippy
+          override: true
+      - uses: r7kamura/rust-problem-matchers@v1
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --all --all-features --locked -- -D warnings
+
+  build:
+    runs-on: ubuntu-20.04
+    container: mobilecoin/builder-install:v0.0.21
+    needs:
+      - "rustfmt"
+      - "markdown-lint"
+    strategy:
+      matrix:
+        rust:
+          - nightly-2022-04-29
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          override: true
+      - uses: r7kamura/rust-problem-matchers@v1
+      - uses: actions-rs/cargo@v1
+        with:
+          command: build
+          args: --release --locked
+  test:
+    runs-on: ubuntu-20.04
+    container: mobilecoin/builder-install:v0.0.21
+    needs:
+      - "rustfmt"
+      - "markdown-lint"
+    strategy:
+      matrix:
+        rust:
+          - nightly-2022-04-29
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ matrix.rust }}
+          override: true
+      - uses: r7kamura/rust-problem-matchers@v1
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --release --locked
+  doc:
+    runs-on: ubuntu-20.04
+    container: mobilecoin/builder-install:v0.0.21
+    needs:
+      - "rustfmt"
+      - "markdown-lint"
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          submodules: recursive
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          # FIXME: replace with stable ASAP
+          toolchain: nightly-2022-04-29
+          override: true
+      - uses: r7kamura/rust-problem-matchers@v1
+      - uses: actions-rs/cargo@v1
+        with:
+          command: doc
+          args: --release --locked --no-deps
+
+  # coverage:
+  #   runs-on: ubuntu-20.04
+  #   needs:
+  #     - "rustfmt"
+  #     - "markdown-lint"
+  #   steps:
+  #     - uses: actions/checkout@v3
+  #        with:
+  #        submodules: recursive
+  #     - uses: actions-rs/toolchain@v1
+  #       with:
+  #         profile: minimal
+  #         # FIXME: replace with stable ASAP
+  #         toolchain: nightly-2022-04-29
+  #         override: true
+  #         components: llvm-tools-preview
+  #     - uses: taiki-e/install-action@cargo-llvm-cov
+  #     - uses: actions-rs/cargo@v1
+  #       with:
+  #         command: llvm-cov
+  #         args: --workspace --lcov --output-path lcov.info
+  #     - uses: codecov/codecov-action@v3
+  #       with:
+  #         files: lcov.info
+
