@@ -1,6 +1,3 @@
-# Local-users generated keys for development of enclaves
-Enclave_private.pem
-
 # IntelliJ IDEA
 .idea/
 *.iml
@@ -56,14 +53,6 @@ atlassian-ide-plugin.xml
 *.sublime-workspace
 *.sublime-project
 
-# Dockerfile-build output
-dist/
-/keyrings/live/pubring.gpg~
-/keyrings/live/pubring.kbx~
-/keyrings/live/secring.gpg
-/docker/nginx/nginx.key
-/docker/nginx/nginx.crt
-
 # Per-crate lock files
 Cargo.lock
 !/Cargo.lock
@@ -73,17 +62,7 @@ Cargo.lock
 
 # Python stuff
 __pycache__/
-mobilecoind/clients/python/blockchain_explorer/latest.tar.gz
-mobilecoind/clients/python/env/
-mobilecoind/clients/python/mob_client/blockchain_pb2.py
 *.pyc
-
-# fog conformance test python stuff
-env/
-tools/fog-local-network/*_pb2*.py
 
 # css files (should not be committed)
 *.css
-
-# libmobilecoin/rust-bitcode build
-libmobilecoin/rust-bitcode/*
