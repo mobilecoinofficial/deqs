@@ -1,0 +1,42 @@
+// Copyright (c) 2018-2022 The MobileCoin Foundation
+
+// API for decentralized quoting service (DEQS)
+
+syntax = "proto3";
+
+package deqs;
+option java_package = "com.mobilecoin.api";
+option go_package = "mobilecoin/api";
+
+import "external.proto";
+
+service DeqsAPI {
+    /// This is called to submit a new quote
+    rpc SubmitQuote(SubmitQuoteRequest) returns (SubmitQuoteResponse) {}
+    /// This is called to get the existing quotes
+    rpc GetQuotes(GetQuotesRequest) returns (GetQuotesResponse) {}
+}
+
+message SubmitQuoteRequest {
+    /// One or more quotes to submit
+    repeated external.SignedContingentInput quotes = 1;
+}
+
+message SubmitQuoteResponse {
+    /// The status of each submission
+    repeated QuoteStatusCode status_codes = 1;
+}
+
+/// The status that a quote can have upon submission
+///
+/// (Should there be a status code here for each way a SignedContingentInput can be invalid?)
+enum QuoteStatusCode {
+    VALID = 0;
+    INVALID = 1;
+}
+
+message GetQuotesRequest {}
+
+message GetQuotesResponse {
+    repeated external.SignedContingentInput quotes = 1;
+}
