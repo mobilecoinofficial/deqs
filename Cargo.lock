@@ -635,7 +635,10 @@ dependencies = [
  "grpcio",
  "mc-common",
  "mc-util-grpc",
+ "mc-util-metrics",
  "mc-util-uri",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

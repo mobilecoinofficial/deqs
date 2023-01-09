@@ -7,6 +7,7 @@ use deqs_api::{
 use grpcio::{RpcContext, RpcStatus, Service, UnarySink};
 use mc_common::logger::{scoped_global_logger, Logger};
 use mc_util_grpc::{rpc_logger, send_result};
+use mc_util_metrics::SVC_COUNTERS;
 
 /// GRPC Client service
 #[derive(Clone)]
@@ -46,7 +47,7 @@ impl DeqsClientApi for ClientService {
         req: SubmitQuoteRequest,
         sink: UnarySink<SubmitQuoteResponse>,
     ) {
-        // TODO let _timer = SVC_COUNTERS.req(&ctx);
+        let _timer = SVC_COUNTERS.req(&ctx);
         scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
             // Build a prost response, then convert it to rpc/protobuf types and the errors
             // to rpc status codes.
@@ -60,7 +61,7 @@ impl DeqsClientApi for ClientService {
         req: GetQuotesRequest,
         sink: UnarySink<GetQuotesResponse>,
     ) {
-        // TODO let _timer = SVC_COUNTERS.req(&ctx);
+        let _timer = SVC_COUNTERS.req(&ctx);
         scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
             // Build a prost response, then convert it to rpc/protobuf types and the errors
             // to rpc status codes.
