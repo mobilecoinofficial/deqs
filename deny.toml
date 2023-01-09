@@ -7,30 +7,42 @@ vulnerability = "deny"
 unmaintained = "warn"
 yanked = "warn"
 notice = "warn"
-ignore = []
+ignore = [
+    "RUSTSEC-2021-0145", # some Windows-only vuln by the `atty` crate brought in via `clap`.
+    "RUSTSEC-2020-0071", # `time` crate brought in by `chrono` has a vuln, see https://github.com/chronotope/chrono/issues/602#issuecomment-1075915577 on why there's currently no solution for that
+]
 
 [licenses]
+# TODO: Disabled since mobilecoin/ is too much of a mess right now
+# unlicensed = "allow"
+# allow = [
+#     "Apache-2.0",
+#     "Apache-2.0 WITH LLVM-exception",
+#     "BSD-2-Clause",
+#     "BSD-3-Clause",
+#     "ISC",
+#     "MIT",
+#     "Unicode-DFS-2016",
+#     "OpenSSL",
+#     "GPL-3.0"
+# ]
+# deny = []
+# copyleft = "deny"
+# allow-osi-fsf-free = "neither"
+# default = "deny"
+# confidence-threshold = 0.8
+# exceptions = []
+# clarify = [
+#     { name = "ring", expression = "MIT AND ISC AND OpenSSL", license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }] },
+# ]
+
 unlicensed = "allow"
-allow = [
-    "Apache-2.0",
-    "Apache-2.0 WITH LLVM-exception",
-    "BSD-2-Clause",
-    "BSD-3-Clause",
-    "ISC",
-    "MIT",
-    "Unicode-DFS-2016",
-    "OpenSSL",
-    "GPL-3.0"
-]
-deny = []
-copyleft = "deny"
-allow-osi-fsf-free = "neither"
-default = "deny"
-confidence-threshold = 0.8
-exceptions = []
+copyleft = "allow"
+default = "allow"
 clarify = [
     { name = "ring", expression = "MIT AND ISC AND OpenSSL", license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }] },
 ]
+
 
 [bans]
 multiple-versions = "warn"
