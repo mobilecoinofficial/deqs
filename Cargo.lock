@@ -625,6 +625,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "deqs-order-book"
+version = "1.3.0-pre0"
+dependencies = [
+ "displaydoc",
+ "mc-crypto-digestible",
+ "mc-crypto-ring-signature",
+ "mc-transaction-extra",
+ "mc-transaction-types",
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "deqs-server"
 version = "1.3.0-pre0"
 dependencies = [

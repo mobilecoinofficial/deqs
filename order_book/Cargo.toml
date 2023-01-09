@@ -1,0 +1,15 @@
+[package]
+name = "deqs-order-book"
+version = "1.3.0-pre0"
+authors = ["MobileCoin"]
+edition = "2021"
+
+[dependencies]
+displaydoc = "0.2"
+
+mc-crypto-digestible = { path = "../mobilecoin/crypto/digestible" }
+mc-crypto-ring-signature = { path = "../mobilecoin/crypto/ring-signature" }
+mc-transaction-types = { path = "../mobilecoin/transaction/types" }
+mc-transaction-extra = { path = "../mobilecoin/transaction/extra" }
+
+rand = "0.8" # build fails without this
