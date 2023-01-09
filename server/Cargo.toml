@@ -4,6 +4,10 @@ version = "1.3.0-pre0"
 authors = ["MobileCoin"]
 edition = "2021"
 
+[lib]
+name = "deqs_server"
+path = "src/lib.rs"
+
 [[bin]]
 name = "deqs-server"
 path = "src/bin/main.rs"
@@ -12,10 +16,13 @@ path = "src/bin/main.rs"
 deqs-api = { path = "../api" }
 
 mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
+mc-util-grpc = { path = "../mobilecoin/util/grpc" }
+mc-util-uri = { path = "../mobilecoin/util/uri" }
 
 clap = { version = "4.0", features = ["derive", "env"] }
+displaydoc = { version = "0.2", default-features = false }
+futures = "0.3"
+grpcio = "0.12.0"
 
-#futures = "0.3"
-#grpcio = "0.12.0"
 #protobuf = "2.27.1"
 #rand = "0.8" # TODO something needs to enable the default features on rand, and since we don't have any dependency of mc-api doing that we need to do it here for now
