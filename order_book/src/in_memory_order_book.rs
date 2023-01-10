@@ -12,8 +12,6 @@ use std::{
     sync::{Arc, PoisonError, RwLock},
 };
 
-// TODO think about partial fills
-
 /// A naive in-memory order book implementation
 #[derive(Clone, Debug)]
 pub struct InMemoryOrderBook {
@@ -126,9 +124,7 @@ impl OrderBook for InMemoryOrderBook {
         if let Some(orders) = scis.get(&pair) {
             for order in orders.iter() {
                 // Skip orders that require the fulfiller to pay an amount that is outside of
-                // the range `counter_token_quantity`. For that we need to
-                // calculate how many tokens the fulfiller would have to pay as change when
-                // taking `base_token_quantity` tokens for themselves.
+                // the range `counter_token_quantity`, or that cannot fulfill the order at all.
                 if let Ok(cost) = order.counter_tokens_cost(base_token_quantity) {
                     if counter_token_quantity.contains(&cost) {
                         results.push(order.clone());
