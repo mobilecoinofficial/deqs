@@ -47,16 +47,16 @@ impl Order {
         &self.base_range
     }
 
-    /// Get the number of tokens we need to pay as a required/partial output
-    /// when fulfilling this order.
+    // Get the number of counter tokens we will need to provide in order to consume
+    // this SCI and receive a total of base_tokens back.
     pub fn counter_tokens_cost(&self, base_tokens: u64) -> Result<u64, Error> {
         if !self.base_range.contains(&base_tokens) {
             return Err(Error::CannotFulfilBaseTokens(base_tokens));
         }
 
-        // TODO: We currently only support a single output, whether required or partial.
-        // We do not support SCIs without input rules since that is handing out the
-        // input for free.
+        // TODO: This is making strong assumptions about the structure of the SCI and
+        // doesn't currently take into account the scenario where we would also
+        // want a fee output to pay the DEQS.
         let input_rules = if let Some(input_rules) = self.sci.tx_in.input_rules.as_ref() {
             input_rules
         } else {
@@ -98,9 +98,9 @@ impl Order {
                 Ok((num_128 / fill_fractions_denom) as u64)
             }
             (1, 1) => {
-                // Single partial output with a required change. The amount we are taking must
-                // be above the partial fill value, and below the max available
-                // amount.
+                // Single partial output with a required change output. The amount we are taking
+                // must be above the partial fill value, and below the max
+                // available amount.
                 // The asserts here makes sense since we should only get here if base_range
                 // (checked at the beginning of the function) is between
                 // input_rules.min_partial_fill_value and max_available_amount
@@ -145,9 +145,9 @@ impl TryFrom<SignedContingentInput> for Order {
         // fulfiller will provide.
         let base_token_id = TokenId::from(sci.pseudo_output_amount.token_id);
 
-        // TODO: We currently only support a single output, whether required or partial.
-        // We do not support SCIs without input rules since that is handing out the
-        // input for free.
+        // TODO: This is making strong assumptions about the structure of the SCI and
+        // doesn't currently take into account the scenario where we would also
+        // want a fee output to pay the DEQS.
         let input_rules = if let Some(input_rules) = sci.tx_in.input_rules.as_ref() {
             input_rules
         } else {
@@ -168,7 +168,7 @@ impl TryFrom<SignedContingentInput> for Order {
             }
             (0, 1) => {
                 // Single partial output
-                let (amount, _) = input_rules.partial_fill_outputs[0].reveal_amount().unwrap(); // TODO
+                let (amount, _) = input_rules.partial_fill_outputs[0].reveal_amount()?;
                 let min_base_amount = input_rules.min_partial_fill_value;
                 let max_base_amount = sci.pseudo_output_amount.value;
 
@@ -176,7 +176,7 @@ impl TryFrom<SignedContingentInput> for Order {
             }
             (1, 1) => {
                 // Partial output and what we think is a mandatory change output.
-                let (amount, _) = input_rules.partial_fill_outputs[0].reveal_amount().unwrap(); // TODO
+                let (amount, _) = input_rules.partial_fill_outputs[0].reveal_amount()?;
                 let min_base_amount = input_rules.min_partial_fill_value;
                 let max_base_amount = sci.pseudo_output_amount.value;
 

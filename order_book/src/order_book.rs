@@ -1,12 +1,12 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{Error, OrderId, Pair, Order};
+use crate::{Error, Order, OrderId, Pair};
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
 use mc_transaction_extra::SignedContingentInput;
 use std::{
     fmt::{Debug, Display},
-    ops::{RangeBounds},
+    ops::RangeBounds,
 };
 
 /// Order book functionality for a single trading pair
@@ -32,10 +32,11 @@ pub trait OrderBook {
         current_block_index: BlockIndex,
     ) -> Result<Vec<Order>, Self::Error>;
 
-    /// Search for orders that can provide `base_token_quantity` tokens, in exchange for being sent
-    /// `pair.counter_token_id` at a quantity in the range `counter_token_quantity`
-    /// tokens.
-    /// This allows searching for orders that want to obtain a specific number of tokens at a given price range.
+    /// Search for orders that can provide `base_token_quantity` tokens, in
+    /// exchange for being sent `pair.counter_token_id` at a quantity in the
+    /// range `counter_token_quantity` tokens.
+    /// This allows searching for orders that want to obtain a specific number
+    /// of tokens at a given price range.
     fn get_orders(
         &self,
         pair: &Pair,

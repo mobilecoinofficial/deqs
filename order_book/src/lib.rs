@@ -12,4 +12,4 @@ pub use basic_types::{OrderId, Pair};
 pub use error::Error;
 pub use in_memory_order_book::{Error as InMemoryOrderBookError, InMemoryOrderBook};
 pub use order::Order;
-pub use order_book::{OrderBook};
+pub use order_book::OrderBook;

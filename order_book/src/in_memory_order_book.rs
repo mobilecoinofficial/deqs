@@ -8,7 +8,7 @@ use mc_transaction_core::validation::validate_tombstone;
 use mc_transaction_extra::SignedContingentInput;
 use std::{
     collections::HashMap,
-    ops::{RangeBounds},
+    ops::RangeBounds,
     sync::{Arc, PoisonError, RwLock},
 };
 
@@ -145,34 +145,6 @@ impl OrderBook for InMemoryOrderBook {
     }
 }
 
-// fn range_overlaps(x: &impl RangeBounds<u64>, y: &impl RangeBounds<u64>) -> bool {
-//     let x1 = match x.start_bound() {
-//         Bound::Included(start) => *start,
-//         Bound::Excluded(start) => start.saturating_add(1),
-//         Bound::Unbounded => 0,
-//     };
-
-//     let x2 = match x.end_bound() {
-//         Bound::Included(end) => *end,
-//         Bound::Excluded(end) => end.saturating_sub(1),
-//         Bound::Unbounded => u64::MAX,
-//     };
-
-//     let y1 = match y.start_bound() {
-//         Bound::Included(start) => *start,
-//         Bound::Excluded(start) => start.saturating_add(1),
-//         Bound::Unbounded => 0,
-//     };
-
-//     let y2 = match y.end_bound() {
-//         Bound::Included(end) => *end,
-//         Bound::Excluded(end) => end.saturating_sub(1),
-//         Bound::Unbounded => u64::MAX,
-//     };
-
-//     x1 <= y2 && y1 <= x2
-// }
-
 /// Error data type
 #[derive(Debug, Display, Eq, PartialEq)]
 pub enum Error {
@@ -207,5 +179,6 @@ impl<T> From<PoisonError<T>> for Error {
 #[cfg(test)]
 mod tests {
     // Tests for this are under the tests/ directory since we want to be able to
-    // re-use some test code between implementations and that seems to be the way to make Rust do that.
+    // re-use some test code between implementations and that seems to be the
+    // way to make Rust do that.
 }
