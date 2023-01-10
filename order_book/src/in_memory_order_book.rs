@@ -1,11 +1,11 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{Order, OrderBook, OrderId, Pair};
+use crate::{Error as OrderBookError, Order, OrderBook, OrderId, Pair};
 use displaydoc::Display;
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
 use mc_transaction_core::validation::validate_tombstone;
-use mc_transaction_extra::{SignedContingentInput, SignedContingentInputError};
+use mc_transaction_extra::SignedContingentInput;
 use std::{
     collections::HashMap,
     ops::RangeBounds,
@@ -34,22 +34,12 @@ impl OrderBook for InMemoryOrderBook {
     type Error = Error;
 
     fn add_sci(&self, sci: SignedContingentInput) -> Result<Order, Self::Error> {
-        // The SCI must be valid.
-        sci.validate()?;
+        // Convert SCI into an order. This also validates it.
+        let order = Order::try_from(sci)?;
 
-        // TODO - Sanity - we currently expect the SCI to contain only a single required
-        // output. Future version might require another output for paying fees to
-        // the DEQS
-        if sci.required_output_amounts.len() != 1 {
-            return Err(Error::IncorrectNumberOfOutputs);
-        }
-
-        // Try adding the order.
-        let pair = Pair::from(&sci);
-        let order = Order::from(sci);
-
+        // Try adding to order book.
         let mut scis = self.scis.write()?;
-        let orders = scis.entry(pair).or_insert_with(Default::default);
+        let orders = scis.entry(*order.pair()).or_insert_with(Default::default);
 
         // Make sure order doesn't already exist. For a single pair we disallow
         // duplicate key images since we don't want the same input with
@@ -60,7 +50,7 @@ impl OrderBook for InMemoryOrderBook {
             .iter()
             .any(|entry| entry.sci().key_image() == order.sci().key_image())
         {
-            return Err(Error::AlreadyExists);
+            return Err(OrderBookError::OrderAlreadyExists.into());
         }
 
         // Add order
@@ -80,7 +70,7 @@ impl OrderBook for InMemoryOrderBook {
             }
         }
 
-        Err(Error::SciNotFound)
+        Err(OrderBookError::OrderNotFound.into())
     }
 
     fn remove_orders_by_key_image(&self, key_image: &KeyImage) -> Result<Vec<Order>, Self::Error> {
@@ -152,25 +142,25 @@ impl OrderBook for InMemoryOrderBook {
 /// Error data type
 #[derive(Debug, Display, Eq, PartialEq)]
 pub enum Error {
-    /// SCI: {0}
-    Sci(SignedContingentInputError),
-
-    /// Number of outputs is incorrect
-    IncorrectNumberOfOutputs,
+    /// Order book: {0}
+    OrderBook(OrderBookError),
 
     /// Lock poisoned
     LockPoisoned,
-
-    /// SCI already exists in book
-    AlreadyExists,
-
-    /// SCI not found
-    SciNotFound,
 }
 
-impl From<SignedContingentInputError> for Error {
-    fn from(src: SignedContingentInputError) -> Self {
-        Self::Sci(src)
+impl Into<OrderBookError> for Error {
+    fn into(self) -> OrderBookError {
+        match self {
+            Self::OrderBook(err) => err,
+            err => OrderBookError::ImplementationSpecific(err.to_string()),
+        }
+    }
+}
+
+impl From<OrderBookError> for Error {
+    fn from(err: OrderBookError) -> Self {
+        Self::OrderBook(err)
     }
 }
 
