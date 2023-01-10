@@ -32,14 +32,14 @@ pub trait OrderBook {
         current_block_index: BlockIndex,
     ) -> Result<Vec<Order>, Self::Error>;
 
-    /// Search for orders that will pay out `pair.base_token_id` in the range of
-    /// `base_token_quantity` tokens, in exchange for being sent
-    /// `pair.counter_token_id` at a price range of `counter_token_price_range`
+    /// Search for orders that can provide `base_token_quantity` tokens, in exchange for being sent
+    /// `pair.counter_token_id` at a quantity in the range `counter_token_quantity`
     /// tokens.
+    /// This allows searching for orders that want to obtain a specific number of tokens at a given price range.
     fn get_orders(
         &self,
         pair: &Pair,
-        base_token_quantity: impl RangeBounds<u64>,
-        counter_token_price_range: impl RangeBounds<u64>,
+        base_token_quantity: u64,
+        counter_token_quantity: impl RangeBounds<u64>,
     ) -> Result<Vec<Order>, Self::Error>;
 }

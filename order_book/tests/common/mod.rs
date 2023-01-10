@@ -1,12 +1,18 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+// This module is reused by various tests, and Rust is annoying since each test
+// file is compiled as an independent crate which makes Rust think methods in
+// this file are unused if they are not called by each and every test file :/
+#![allow(dead_code)]
+
 use deqs_order_book::{Error, OrderBook, Pair};
 use mc_account_keys::AccountKey;
 use mc_crypto_ring_signature::Error as RingSignatureError;
 use mc_crypto_ring_signature_signer::NoKeysRingSigner;
 use mc_fog_report_validation_test_utils::MockFogResolver;
 use mc_transaction_builder::{
-    test_utils::get_input_credentials, EmptyMemoBuilder, SignedContingentInputBuilder,
+    test_utils::get_input_credentials, EmptyMemoBuilder, ReservedSubaddresses,
+    SignedContingentInputBuilder,
 };
 use mc_transaction_extra::{SignedContingentInput, SignedContingentInputError};
 use mc_transaction_types::{Amount, BlockVersion, TokenId};
@@ -83,6 +89,72 @@ pub fn create_sci(
     sci
 }
 
+/// Create a partial fill SCI that offers between required_base_change_amount
+/// and base_amount_offered tokens, with a minimum required fill of
+/// min_base_fill_amount.
+pub fn create_partial_sci(
+    pair: &Pair,
+    base_amount_offered: u64,
+    min_base_fill_amount: u64,
+    required_base_change_amount: u64,
+    counter_amount: u64,
+    rng: &mut (impl RngCore + CryptoRng),
+) -> SignedContingentInput {
+    let block_version = BlockVersion::MAX;
+    let fog_resolver = MockFogResolver::default();
+
+    let offerer_account = AccountKey::random(rng);
+
+    let offered_input_credentials = get_input_credentials(
+        block_version,
+        Amount::new(base_amount_offered, pair.base_token_id),
+        &offerer_account,
+        &fog_resolver,
+        rng,
+    );
+
+    let mut builder = SignedContingentInputBuilder::new(
+        block_version,
+        offered_input_credentials,
+        fog_resolver.clone(),
+        EmptyMemoBuilder::default(),
+    )
+    .unwrap();
+
+    builder
+        .add_partial_fill_change_output(
+            Amount::new(base_amount_offered, pair.base_token_id),
+            &ReservedSubaddresses::from(&offerer_account),
+            rng,
+        )
+        .unwrap();
+
+    if required_base_change_amount > 0 {
+        builder
+            .add_required_change_output(
+                Amount::new(required_base_change_amount, pair.base_token_id),
+                &ReservedSubaddresses::from(&offerer_account),
+                rng,
+            )
+            .unwrap();
+    }
+
+    // Originator requests an output worth counter_amount to themselves
+    builder
+        .add_partial_fill_output(
+            Amount::new(counter_amount, pair.counter_token_id),
+            &offerer_account.default_subaddress(),
+            rng,
+        )
+        .unwrap();
+
+    builder.set_min_partial_fill_value(min_base_fill_amount);
+
+    let sci = builder.build(&NoKeysRingSigner {}, rng).unwrap();
+    sci.validate().unwrap();
+    sci
+}
+
 /// Test order book basic happy flow
 pub fn basic_happy_flow<OB: OrderBook>(order_book: &OB) {
     let pair = pair();
@@ -92,20 +164,20 @@ pub fn basic_happy_flow<OB: OrderBook>(order_book: &OB) {
     let sci = create_sci(&pair, 10, 20, &mut rng);
     let order = order_book.add_sci(sci).unwrap();
 
-    let orders = order_book.get_orders(&pair, .., ..).unwrap();
+    let orders = order_book.get_orders(&pair, 10, ..).unwrap();
     assert_eq!(orders, vec![order.clone()]);
 
     // Adding a second order should work
     let sci = create_sci(&pair, 10, 200, &mut rng);
     let order2 = order_book.add_sci(sci).unwrap();
 
-    let orders = order_book.get_orders(&pair, .., ..).unwrap();
+    let orders = order_book.get_orders(&pair, 10, ..).unwrap();
     assert_eq!(orders, vec![order.clone(), order2.clone()]);
 
     // Removing the order by its id should work
     assert_eq!(order, order_book.remove_order_by_id(order.id()).unwrap());
 
-    let orders = order_book.get_orders(&pair, .., ..).unwrap();
+    let orders = order_book.get_orders(&pair, 10, ..).unwrap();
     assert_eq!(orders, vec![order2.clone()]);
 
     // Can't remove the order again
@@ -130,7 +202,7 @@ pub fn basic_happy_flow<OB: OrderBook>(order_book: &OB) {
             .remove_orders_by_key_image(&order2.sci().key_image())
             .unwrap()
     );
-    let orders = order_book.get_orders(&pair, .., ..).unwrap();
+    let orders = order_book.get_orders(&pair, 10, ..).unwrap();
     assert_eq!(orders, vec![]);
 
     // Removing orders by tombstone block should work
@@ -196,7 +268,7 @@ pub fn cannot_add_invalid_sci<OB: OrderBook>(order_book: &OB) {
 
     assert_eq!(
         order_book.add_sci(sci).unwrap_err().into(),
-        Error::UnsupportedSci("2/0 required/partial outputs, expected 1/0 or 0/1".into())
+        Error::UnsupportedSci("Unsupported number of required/partial outputs 2/0".into())
     );
 
     // Make an SCI invalid by messing with the MLSAG

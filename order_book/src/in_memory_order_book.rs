@@ -8,7 +8,7 @@ use mc_transaction_core::validation::validate_tombstone;
 use mc_transaction_extra::SignedContingentInput;
 use std::{
     collections::HashMap,
-    ops::RangeBounds,
+    ops::{RangeBounds},
     sync::{Arc, PoisonError, RwLock},
 };
 
@@ -118,26 +118,60 @@ impl OrderBook for InMemoryOrderBook {
     fn get_orders(
         &self,
         pair: &Pair,
-        base_token_quantity: impl RangeBounds<u64>,
-        counter_token_price_range: impl RangeBounds<u64>,
+        base_token_quantity: u64,
+        counter_token_quantity: impl RangeBounds<u64>,
     ) -> Result<Vec<Order>, Self::Error> {
         let scis = self.scis.read()?;
         let mut results = Vec::new();
         if let Some(orders) = scis.get(&pair) {
             for order in orders.iter() {
-                let payout = order.sci().pseudo_output_amount.value;
-                let cost = order.sci().required_output_amounts[0].value; // TODO assumption about number of outputs
+                // Skip orders that are not able to pay base_token_quantity.
+                if !order.base_range().contains(&base_token_quantity) {
+                    continue;
+                }
 
-                if base_token_quantity.contains(&payout)
-                    && counter_token_price_range.contains(&cost)
-                {
-                    results.push(order.clone());
+                // Skip orders that require the fulfiller to pay an amount that is outside of
+                // the range `counter_token_quantity`. For that we need to
+                // calculate how many tokens the fulfiller would have to pay as change when
+                // taking `base_token_quantity` tokens for themselves.
+                if let Ok(cost) = order.counter_tokens_cost(base_token_quantity) {
+                    if counter_token_quantity.contains(&cost) {
+                        results.push(order.clone());
+                    }
                 }
             }
         }
         Ok(results)
     }
 }
+
+// fn range_overlaps(x: &impl RangeBounds<u64>, y: &impl RangeBounds<u64>) -> bool {
+//     let x1 = match x.start_bound() {
+//         Bound::Included(start) => *start,
+//         Bound::Excluded(start) => start.saturating_add(1),
+//         Bound::Unbounded => 0,
+//     };
+
+//     let x2 = match x.end_bound() {
+//         Bound::Included(end) => *end,
+//         Bound::Excluded(end) => end.saturating_sub(1),
+//         Bound::Unbounded => u64::MAX,
+//     };
+
+//     let y1 = match y.start_bound() {
+//         Bound::Included(start) => *start,
+//         Bound::Excluded(start) => start.saturating_add(1),
+//         Bound::Unbounded => 0,
+//     };
+
+//     let y2 = match y.end_bound() {
+//         Bound::Included(end) => *end,
+//         Bound::Excluded(end) => end.saturating_sub(1),
+//         Bound::Unbounded => u64::MAX,
+//     };
+
+//     x1 <= y2 && y1 <= x2
+// }
 
 /// Error data type
 #[derive(Debug, Display, Eq, PartialEq)]
@@ -172,6 +206,6 @@ impl<T> From<PoisonError<T>> for Error {
 
 #[cfg(test)]
 mod tests {
-    // Tests for this are under the tests/ library since we want to be able to
-    // re-use some test code between implementations
+    // Tests for this are under the tests/ directory since we want to be able to
+    // re-use some test code between implementations and that seems to be the way to make Rust do that.
 }
