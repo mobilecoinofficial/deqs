@@ -3,7 +3,8 @@
 use mc_crypto_digestible::{Digestible, MerlinTranscript};
 use mc_crypto_ring_signature::KeyImage;
 use mc_transaction_extra::SignedContingentInput;
-use mc_transaction_types::TokenId;
+use mc_transaction_types::{TokenId};
+use mc_blockchain_types::BlockIndex;
 use std::{
     fmt::{Debug, Display},
     hash::Hash,
@@ -95,6 +96,13 @@ pub trait OrderBook {
     /// Remove all orders matching a given key image, returns the list of orders
     /// removed
     fn remove_orders_by_key_image(&self, key_image: &KeyImage) -> Result<Vec<Order>, Self::Error>;
+
+    /// Remove all orders whose tombstone block is >= current block index,
+    /// returns the list of orders removed.
+    fn remove_orders_by_tombstone_block(
+        &self,
+        current_block_index: BlockIndex,
+    ) -> Result<Vec<Order>, Self::Error>;
 
     /// Search for orders that will pay out `pair.base_token_id` in the range of
     /// `base_token_quantity` tokens, in exchange for being sent

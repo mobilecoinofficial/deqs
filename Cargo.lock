@@ -630,11 +630,13 @@ version = "1.3.0-pre0"
 dependencies = [
  "displaydoc",
  "mc-account-keys",
+ "mc-blockchain-types",
  "mc-crypto-digestible",
  "mc-crypto-ring-signature",
  "mc-crypto-ring-signature-signer",
  "mc-fog-report-validation-test-utils",
  "mc-transaction-builder",
+ "mc-transaction-core",
  "mc-transaction-extra",
  "mc-transaction-types",
  "mc-util-from-random",

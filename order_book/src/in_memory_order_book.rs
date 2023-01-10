@@ -2,7 +2,9 @@
 
 use crate::{Order, OrderBook, OrderId, Pair};
 use displaydoc::Display;
+use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
+use mc_transaction_core::validation::validate_tombstone;
 use mc_transaction_extra::{SignedContingentInput, SignedContingentInputError};
 use std::{
     collections::HashMap,
@@ -36,7 +38,7 @@ impl OrderBook for InMemoryOrderBook {
         sci.validate()?;
 
         // TODO - Sanity - we currently expect the SCI to contain only a single required
-        // output Future version might require another output for paying fees to
+        // output. Future version might require another output for paying fees to
         // the DEQS
         if sci.required_output_amounts.len() != 1 {
             return Err(Error::IncorrectNumberOfOutputs);
@@ -49,8 +51,15 @@ impl OrderBook for InMemoryOrderBook {
         let mut scis = self.scis.write()?;
         let orders = scis.entry(pair).or_insert_with(Default::default);
 
-        // Make sure order doesn't already exist.
-        if orders.iter().any(|entry| entry.id() == order.id()) {
+        // Make sure order doesn't already exist. For a single pair we disallow
+        // duplicate key images since we don't want the same input with
+        // different pricing.
+        // This also ensures that we do not encounter a duplicate id, since the id is a
+        // hash of the entire SCI including its key image.
+        if orders
+            .iter()
+            .any(|entry| entry.sci().key_image() == order.sci().key_image())
+        {
             return Err(Error::AlreadyExists);
         }
 
@@ -64,6 +73,9 @@ impl OrderBook for InMemoryOrderBook {
 
         for entries in scis.values_mut() {
             if let Some(index) = entries.iter().position(|entry| entry.id() == id) {
+                // We return since we expect the id to be unique amongst all orders across all
+                // pairs. This is to be expected because the id is the hash of
+                // the entire SCI, and when adding SCIs we ensure uniqueness.
                 return Ok(entries.remove(index));
             }
         }
@@ -79,6 +91,32 @@ impl OrderBook for InMemoryOrderBook {
         for entries in scis.values_mut() {
             let mut removed_entries = entries
                 .drain_filter(|entry| entry.key_image() == *key_image)
+                .collect();
+
+            all_removed_orders.append(&mut removed_entries);
+        }
+
+        Ok(all_removed_orders)
+    }
+
+    fn remove_orders_by_tombstone_block(
+        &self,
+        current_block_index: BlockIndex,
+    ) -> Result<Vec<Order>, Self::Error> {
+        let mut scis = self.scis.write()?;
+
+        let mut all_removed_orders = Vec::new();
+
+        for entries in scis.values_mut() {
+            let mut removed_entries = entries
+                .drain_filter(|entry| {
+                    if let Some(input_rules) = &entry.sci().tx_in.input_rules {
+                        validate_tombstone(current_block_index, input_rules.max_tombstone_block)
+                            .is_err()
+                    } else {
+                        false
+                    }
+                })
                 .collect();
 
             all_removed_orders.append(&mut removed_entries);
