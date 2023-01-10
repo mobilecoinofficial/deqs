@@ -1,5 +1,4 @@
-DEQS
-====
+# DEQS
 
 A decentralized quoting service.
 
@@ -11,22 +10,23 @@ which is (informally) a signed offer to trade one cryptocurrency on the Mobileco
 
 This quoting service can be used to facilitate private peer-to-peer trades.
 
-### License
+## License
 
 This code is available under open-source licenses. Look for the [LICENSE](./LICENSE) file for more
 information.
 
-### Usage and Documentation
+## Usage and Documentation
 
 TODO
 
-### Build
+## Build
 
-1. Install Rust from https://www.rust-lang.org/tools/install
+1. Install Rust from [https://www.rust-lang.org/tools/install](https://www.rust-lang.org/tools/install)
 
 2. Install dependencies.
 
    On Ubuntu:
+
     ```sh
     sudo apt install build-essential protobuf-compiler
     ```
