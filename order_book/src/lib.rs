@@ -1,7 +1,9 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-mod order_book;
-mod in_memory_order_book;
+#![feature(drain_filter)]
 
-pub use order_book::OrderBook;
-pub use in_memory_order_book::InMemoryOrderBook;
+mod in_memory_order_book;
+mod order_book;
+
+pub use in_memory_order_book::{Error as InMemoryOrderBookError, InMemoryOrderBook};
+pub use order_book::{Order, OrderBook, OrderId};
