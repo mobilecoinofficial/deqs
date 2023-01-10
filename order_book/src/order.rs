@@ -99,15 +99,6 @@ impl Order {
                 };
                 assert!(base_tokens <= max_available_amount);
 
-                // The amount we are taking must be above the partial
-                // fill value, and below the max available amount.
-                // The asserts here makes sense since we should only get here if base_range
-                // (checked at the beginning of the function) is between
-                // input_rules.min_partial_fill_value and self.sci.
-                // pseudo_output_amount.value
-                // assert!(base_tokens >= input_rules.min_partial_fill_value);
-                // assert!(base_tokens <= self.sci.pseudo_output_amount.value);
-
                 // The ratio being filled
                 let fill_fraction_num: u128 = base_tokens as u128;
                 let fill_fractions_denom = self.sci.pseudo_output_amount.value as u128;

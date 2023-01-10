@@ -144,6 +144,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
+name = "base64"
+version = "0.21.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a4a4ddaa51a5bc52a6948f74c06d20aaaddb71924eab79b8c97a8c556e942d6a"
+
+[[package]]
 name = "bindgen"
 version = "0.59.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1497,7 +1503,7 @@ dependencies = [
 name = "mc-attest-core"
 version = "4.0.0"
 dependencies = [
- "base64",
+ "base64 0.13.0",
  "bitflags",
  "cargo-emit",
  "chrono",
@@ -1526,7 +1532,7 @@ dependencies = [
 name = "mc-attest-verifier-types"
 version = "4.0.0"
 dependencies = [
- "base64",
+ "base64 0.13.0",
  "displaydoc",
  "hex",
  "hex_fmt",
@@ -1718,7 +1724,7 @@ dependencies = [
 name = "mc-crypto-keys"
 version = "4.0.0"
 dependencies = [
- "base64",
+ "base64 0.13.0",
  "curve25519-dalek",
  "digest",
  "displaydoc",
@@ -2058,7 +2064,7 @@ dependencies = [
 name = "mc-util-encodings"
 version = "4.0.0"
 dependencies = [
- "base64",
+ "base64 0.13.0",
  "displaydoc",
  "hex",
  "mc-util-repr-bytes",
@@ -2076,7 +2082,7 @@ dependencies = [
 name = "mc-util-grpc"
 version = "4.0.0"
 dependencies = [
- "base64",
+ "base64 0.13.0",
  "clap 4.0.26",
  "cookie",
  "displaydoc",
@@ -2164,7 +2170,7 @@ dependencies = [
 name = "mc-util-uri"
 version = "4.0.0"
 dependencies = [
- "base64",
+ "base64 0.13.0",
  "displaydoc",
  "hex",
  "mc-common",
@@ -2414,7 +2420,7 @@ version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "03c64931a1a212348ec4f3b4362585eca7159d0d09cbdf4a7f74f02173596fd4"
 dependencies = [
- "base64",
+ "base64 0.13.0",
 ]
 
 [[package]]
@@ -2721,7 +2727,7 @@ version = "0.11.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "68cc60575865c7831548863cc02356512e3f1dc2f3f82cb837d7fc4cc8f3c97c"
 dependencies = [
- "base64",
+ "base64 0.13.0",
  "bytes",
  "encoding_rs",
  "futures-core",
@@ -2819,11 +2825,11 @@ dependencies = [
 
 [[package]]
 name = "rustls-pemfile"
-version = "1.0.1"
+version = "1.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0864aeff53f8c05aa08d86e5ef839d3dfcf07aeba2db32f12db0ef716e87bd55"
+checksum = "d194b56d58803a43635bdc398cd17e383d6f71f9182b9a192c127ca42494a59b"
 dependencies = [
- "base64",
+ "base64 0.21.0",
 ]
 
 [[package]]
@@ -3064,9 +3070,9 @@ dependencies = [
 
 [[package]]
 name = "serde_with"
-version = "2.1.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "25bf4a5a814902cd1014dbccfa4d4560fb8432c779471e96e035602519f82eef"
+checksum = "30d904179146de381af4c93d3af6ca4984b3152db687dacb9c3c35e86f39809c"
 dependencies = [
  "serde",
  "serde_with_macros",
@@ -3074,9 +3080,9 @@ dependencies = [
 
 [[package]]
 name = "serde_with_macros"
-version = "2.1.0"
+version = "2.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3452b4c0f6c1e357f73fdb87cd1efabaa12acf328c7a528e252893baeb3f4aa"
+checksum = "a1966009f3c05f095697c537312f5415d1e3ed31ce0a56942bac4c771c5c335e"
 dependencies = [
  "darling",
  "proc-macro2",
@@ -3644,7 +3650,7 @@ version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "733b5ad78377302af52c0dbcb2623d78fe50e4b3bf215948ff29e9ee031d8566"
 dependencies = [
- "base64",
+ "base64 0.13.0",
  "log",
  "once_cell",
  "rustls",
