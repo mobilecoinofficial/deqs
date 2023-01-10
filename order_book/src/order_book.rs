@@ -6,8 +6,31 @@ use mc_transaction_extra::SignedContingentInput;
 use mc_transaction_types::TokenId;
 use std::{
     fmt::{Debug, Display},
-    ops::Deref, ops::RangeBounds,
+    hash::Hash,
+    ops::{Deref, RangeBounds},
 };
+
+/// A single trading pair
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct Pair {
+    /// The token id being offered "for sale".
+    pub base_token_id: TokenId,
+
+    /// The token id that needs to be paid to satisfy the offering.
+    /// (The SCI is "priced" with this token id)
+    pub counter_token_id: TokenId,
+}
+
+impl From<&SignedContingentInput> for Pair {
+    fn from(sci: &SignedContingentInput) -> Self {
+        // TODO: This assumes the first output is the one that specifies what we need to
+        // pay the offerer
+        Self {
+            base_token_id: TokenId::from(sci.pseudo_output_amount.token_id),
+            counter_token_id: TokenId::from(sci.required_output_amounts[0].token_id),
+        }
+    }
+}
 
 /// A unique identifier for a single order
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -73,16 +96,14 @@ pub trait OrderBook {
     /// removed
     fn remove_orders_by_key_image(&self, key_image: &KeyImage) -> Result<Vec<Order>, Self::Error>;
 
-    /// Search for orders, optionally filtering by SCIs that pay out more than a
-    /// given threshold or cost up to a given threshold. min_payout is
-    /// priced in offered_token_id, max_cost is priced in priced_token_id.
-    /// Search for orders that will pay out `base_token_id` in the range of `base_token_quantity` tokens,
-    /// in exchange for being sent `counter_token_id` at a price range of `counter_token_price_range` tokens.
+    /// Search for orders that will pay out `pair.base_token_id` in the range of
+    /// `base_token_quantity` tokens, in exchange for being sent
+    /// `pair.counter_token_id` at a price range of `counter_token_price_range`
+    /// tokens.
     fn get_orders(
         &self,
-        base_token_id: TokenId,
+        pair: &Pair,
         base_token_quantity: impl RangeBounds<u64>,
-        counter_token_id: TokenId,
         counter_token_price_range: impl RangeBounds<u64>,
     ) -> Result<Vec<Order>, Self::Error>;
 }

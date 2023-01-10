@@ -1,40 +1,16 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{Order, OrderBook, OrderId};
+use crate::{Order, OrderBook, OrderId, Pair};
 use displaydoc::Display;
 use mc_crypto_ring_signature::KeyImage;
 use mc_transaction_extra::{SignedContingentInput, SignedContingentInputError};
-use mc_transaction_types::TokenId;
 use std::{
     collections::HashMap,
-    hash::Hash,
     ops::RangeBounds,
     sync::{Arc, PoisonError, RwLock},
 };
 
 // TODO think about partial fills
-
-// TODO: Maybe this should be shared between OrderBook implementations
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-pub struct Pair {
-    /// The token id being offered "for sale".
-    base_token_id: TokenId,
-
-    /// The token id that needs to be paid to satisfy the offering.
-    /// (The SCI is "priced" with this token id)
-    counter_token_id: TokenId,
-}
-
-impl From<&SignedContingentInput> for Pair {
-    fn from(sci: &SignedContingentInput) -> Self {
-        // TODO: This assumes the first output is the one that specifies what we need to
-        // pay the offerer
-        Self {
-            base_token_id: TokenId::from(sci.pseudo_output_amount.token_id),
-            counter_token_id: TokenId::from(sci.required_output_amounts[0].token_id),
-        }
-    }
-}
 
 /// A naive in-memory order book implementation
 #[derive(Clone, Debug)]
@@ -113,16 +89,10 @@ impl OrderBook for InMemoryOrderBook {
 
     fn get_orders(
         &self,
-        base_token_id: TokenId,
+        pair: &Pair,
         base_token_quantity: impl RangeBounds<u64>,
-        counter_token_id: TokenId,
         counter_token_price_range: impl RangeBounds<u64>,
     ) -> Result<Vec<Order>, Self::Error> {
-        let pair = Pair {
-            base_token_id,
-            counter_token_id,
-        };
-
         let scis = self.scis.read()?;
         let mut results = Vec::new();
         if let Some(orders) = scis.get(&pair) {
@@ -130,7 +100,9 @@ impl OrderBook for InMemoryOrderBook {
                 let payout = order.sci().pseudo_output_amount.value;
                 let cost = order.sci().required_output_amounts[0].value; // TODO assumption about number of outputs
 
-                if base_token_quantity.contains(&payout) && counter_token_price_range.contains(&cost) {
+                if base_token_quantity.contains(&payout)
+                    && counter_token_price_range.contains(&cost)
+                {
                     results.push(order.clone());
                 }
             }

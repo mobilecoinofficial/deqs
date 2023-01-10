@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use deqs_order_book::OrderBook;
+use deqs_order_book::{OrderBook, Pair};
 use mc_account_keys::AccountKey;
 use mc_crypto_ring_signature_signer::NoKeysRingSigner;
 use mc_fog_report_validation_test_utils::MockFogResolver;
@@ -12,14 +12,21 @@ use mc_transaction_types::{Amount, BlockVersion, TokenId};
 use rand::{rngs::StdRng, SeedableRng};
 use rand_core::{CryptoRng, RngCore};
 
+/// Default test pair
+pub fn pair() -> Pair {
+    Pair {
+        base_token_id: TokenId::from(1),
+        counter_token_id: TokenId::from(2),
+    }
+}
+
 /// Create an SCI builder that offers some amount of a given token in exchange
 /// for a different amount of another token. Returning the builder allows the
 /// caller to customize the SCI further.
 pub fn create_sci_builder(
-    offered_token_id: TokenId,
-    offered_amount: u64,
-    priced_in_token_id: TokenId,
-    cost: u64,
+    pair: &Pair,
+    base_amount: u64,
+    counter_amount: u64,
     rng: &mut (impl RngCore + CryptoRng),
 ) -> SignedContingentInputBuilder<MockFogResolver> {
     let block_version = BlockVersion::MAX;
@@ -29,7 +36,7 @@ pub fn create_sci_builder(
 
     let offered_input_credentials = get_input_credentials(
         block_version,
-        Amount::new(offered_amount, offered_token_id),
+        Amount::new(base_amount, pair.base_token_id),
         &offerer_account,
         &fog_resolver,
         rng,
@@ -45,7 +52,7 @@ pub fn create_sci_builder(
 
     builder
         .add_required_output(
-            Amount::new(cost, priced_in_token_id),
+            Amount::new(counter_amount, pair.counter_token_id),
             &offerer_account.default_subaddress(),
             rng,
         )
@@ -60,19 +67,12 @@ pub fn create_sci_builder(
 /// different amount of another token. Returning the builder allows the caller
 /// to customize the SCI further.
 pub fn create_sci(
-    offered_token_id: TokenId,
-    offered_amount: u64,
-    priced_in_token_id: TokenId,
-    cost: u64,
+    pair: &Pair,
+    base_amount: u64,
+    counter_amount: u64,
     rng: &mut (impl RngCore + CryptoRng),
 ) -> SignedContingentInput {
-    let builder = create_sci_builder(
-        offered_token_id,
-        offered_amount,
-        priced_in_token_id,
-        cost,
-        rng,
-    );
+    let builder = create_sci_builder(pair, base_amount, counter_amount, rng);
 
     let sci = builder.build(&NoKeysRingSigner {}, rng).unwrap();
 
@@ -84,23 +84,22 @@ pub fn create_sci(
 
 /// Test order book basic happy flow
 pub fn basic_happy_flow<OB: OrderBook>(order_book: &OB, not_found_err_variant: OB::Error) {
+    let pair = pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
     // Adding an order should work
-    let sci = create_sci(TokenId::from(1), 10, TokenId::from(2), 20, &mut rng);
+    let sci = create_sci(&pair, 10, 20, &mut rng);
     let order = order_book.add_sci(sci).unwrap();
 
-    let orders = order_book
-        .get_orders(TokenId::from(1), .., TokenId::from(2), ..)
-        .unwrap();
+    let orders = order_book.get_orders(&pair, .., ..).unwrap();
     assert_eq!(orders, vec![order.clone()]);
 
     // Adding a second order should work
-    let sci = create_sci(TokenId::from(1), 10, TokenId::from(2), 200, &mut rng);
+    let sci = create_sci(&pair, 10, 200, &mut rng);
     let order2 = order_book.add_sci(sci).unwrap();
 
     let orders = order_book
-        .get_orders(TokenId::from(1), .., TokenId::from(2), ..)
+        .get_orders(&pair, .., ..)
         .unwrap();
     assert_eq!(orders, vec![order.clone(), order2.clone()]);
 
@@ -108,7 +107,7 @@ pub fn basic_happy_flow<OB: OrderBook>(order_book: &OB, not_found_err_variant: O
     assert_eq!(order, order_book.remove_order_by_id(order.id()).unwrap());
 
     let orders = order_book
-        .get_orders(TokenId::from(1), .., TokenId::from(2), ..)
+        .get_orders(&pair, .., ..)
         .unwrap();
     assert_eq!(orders, vec![order2.clone()]);
 
@@ -139,10 +138,11 @@ pub fn cannot_add_invalid_sci<OB: OrderBook>(
     incorrect_number_of_outputs_err_variant: OB::Error,
     invalid_signature_err_variant: OB::Error,
 ) {
+    let pair = pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
     // Make an SCI invalid by adding some random required output
-    let mut sci_builder = create_sci_builder(TokenId::from(1), 10, TokenId::from(2), 20, &mut rng);
+    let mut sci_builder = create_sci_builder(&pair, 10, 20, &mut rng);
     let recipient = AccountKey::random(&mut rng);
     sci_builder
         .add_required_output(
@@ -160,11 +160,8 @@ pub fn cannot_add_invalid_sci<OB: OrderBook>(
     );
 
     // Make an SCI invalid by messing with the MLSAG
-    let mut sci = create_sci(TokenId::from(1), 10, TokenId::from(2), 20, &mut rng);
+    let mut sci = create_sci(&pair, 10, 20, &mut rng);
     sci.mlsag.responses.pop();
 
-    assert_eq!(
-        order_book.add_sci(sci),
-        Err(invalid_signature_err_variant)
-    );
+    assert_eq!(order_book.add_sci(sci), Err(invalid_signature_err_variant));
 }
