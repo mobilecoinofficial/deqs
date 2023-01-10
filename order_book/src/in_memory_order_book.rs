@@ -125,11 +125,6 @@ impl OrderBook for InMemoryOrderBook {
         let mut results = Vec::new();
         if let Some(orders) = scis.get(&pair) {
             for order in orders.iter() {
-                // Skip orders that are not able to pay base_token_quantity.
-                if !order.base_range().contains(&base_token_quantity) {
-                    continue;
-                }
-
                 // Skip orders that require the fulfiller to pay an amount that is outside of
                 // the range `counter_token_quantity`. For that we need to
                 // calculate how many tokens the fulfiller would have to pay as change when
