@@ -323,6 +323,13 @@ pub fn get_orders_filtering_works(order_book: &impl OrderBook) {
         vec![order1.clone()]
     );
 
+    // Which orders can trade 100 pair2.base for anywhere between 50 and 1010
+    // counter tokens
+    assert_eq!(
+        order_book.get_orders(&pair2, 100, 50..=1010).unwrap(),
+        vec![order2.clone()]
+    );
+
     // Which orders can trade 30 pair2.base for any amount of pair2.counter
     assert_eq!(
         order_book.get_orders(&pair2, 30, ..).unwrap(),
