@@ -17,7 +17,7 @@ pub struct Pair {
 }
 
 /// A unique identifier for a single order
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct OrderId([u8; 32]);
 
 impl From<&SignedContingentInput> for OrderId {

@@ -3,7 +3,11 @@
 use crate::{Error, OrderId, Pair};
 use mc_transaction_extra::SignedContingentInput;
 use mc_transaction_types::TokenId;
-use std::ops::{Deref, RangeInclusive};
+use std::{
+    cmp::Ordering,
+    ops::{Deref, RangeInclusive},
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 /// A single "order" in the book. This is a wrapper around an SCI and some
 /// auxiliary data
@@ -22,6 +26,13 @@ pub struct Order {
     /// maximum amount of base token that can be obtained by fulfiling the
     /// order)
     base_range: RangeInclusive<u64>,
+
+    /// The number of counter tokens needed to trade the max amount of base
+    /// tokens (which can be obtained from base_range).
+    max_counter_tokens: u64,
+
+    /// Timestamp at which the order arrived, in nanoseconds since the Epoch.
+    timestamp: u128,
 }
 
 impl Order {
@@ -45,6 +56,18 @@ impl Order {
     /// order).
     pub fn base_range(&self) -> &RangeInclusive<u64> {
         &self.base_range
+    }
+
+    /// Get the maximum amount of base tokens that can be provided by this
+    /// order.
+    pub fn max_base_tokens(&self) -> u64 {
+        *self.base_range.end()
+    }
+
+    /// Get the maximum amount of counter tokens required to completely use all
+    /// the available base tokens
+    pub fn max_counter_tokens(&self) -> u64 {
+        self.max_counter_tokens
     }
 
     // Get the number of counter tokens we will need to provide in order to consume
@@ -125,6 +148,11 @@ impl TryFrom<SignedContingentInput> for Order {
     type Error = Error;
 
     fn try_from(sci: SignedContingentInput) -> Result<Self, Self::Error> {
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("Time went backwards")
+            .as_nanos();
+
         sci.validate()?;
 
         // The base token being offered in exchange for some other token that the
@@ -140,7 +168,7 @@ impl TryFrom<SignedContingentInput> for Order {
             return Err(Error::UnsupportedSci("Missing input rules".into()));
         };
 
-        let (counter_token_id, base_range) = match (
+        let (counter_token_id, base_range, max_counter_tokens) = match (
             input_rules.required_outputs.len(),
             input_rules.partial_fill_outputs.len(),
         ) {
@@ -150,6 +178,7 @@ impl TryFrom<SignedContingentInput> for Order {
                 (
                     TokenId::from(sci.required_output_amounts[0].token_id),
                     sci.pseudo_output_amount.value..=sci.pseudo_output_amount.value,
+                    sci.required_output_amounts[0].value,
                 )
             }
             (num_required_outputs @ (0 | 1), 1) => {
@@ -180,7 +209,11 @@ impl TryFrom<SignedContingentInput> for Order {
                         })?;
                 }
 
-                (amount.token_id, min_base_amount..=max_base_amount)
+                (
+                    amount.token_id,
+                    min_base_amount..=max_base_amount,
+                    amount.value,
+                )
             }
             _ => {
                 return Err(Error::UnsupportedSci(format!(
@@ -203,6 +236,8 @@ impl TryFrom<SignedContingentInput> for Order {
             id,
             pair,
             base_range,
+            max_counter_tokens,
+            timestamp,
         })
     }
 }
@@ -212,6 +247,35 @@ impl Deref for Order {
 
     fn deref(&self) -> &Self::Target {
         &self.sci
+    }
+}
+
+impl Ord for Order {
+    fn cmp(&self, other: &Self) -> Ordering {
+        // We sort orders by the following, in this order:
+        // 1) The pair (so that orders of the same pair are grouped together)
+        // 2) The ratio of base to counter, putting orders with a more favorable
+        // exchange rate (to the fulfiller) first.
+        // 3) Timestamp (so that older orders are filled first)
+        // 4) Order id (in case of orders where all the above were identical)
+
+        // The rate is calculated as base / counter. We want to sort by:
+        // (self_base / self_counter) > (other_base / other_counter)
+        // Since we want to avoid division, we multiply both sides by the denominators
+        // and get: self_base * other_counter > other_base * self_counter
+        let self_rate = other.max_base_tokens() as u64 * self.max_counter_tokens() as u64;
+        let other_rate = self.max_base_tokens() as u64 * other.max_counter_tokens() as u64;
+
+        let k1 = (&self.pair, self_rate, &self.timestamp, &self.id);
+        let k2 = (&other.pair, other_rate, &other.timestamp, &other.id);
+
+        k1.cmp(&k2)
+    }
+}
+
+impl PartialOrd for Order {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
