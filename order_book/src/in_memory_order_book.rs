@@ -20,8 +20,8 @@ pub struct InMemoryOrderBook {
     scis: Arc<RwLock<HashMap<Pair, Vec<Order>>>>,
 }
 
-impl InMemoryOrderBook {
-    pub fn new() -> Self {
+impl Default for InMemoryOrderBook {
+    fn default() -> Self {
         Self {
             scis: Arc::new(RwLock::new(HashMap::new())),
         }
@@ -121,7 +121,7 @@ impl OrderBook for InMemoryOrderBook {
     ) -> Result<Vec<Order>, Self::Error> {
         let scis = self.scis.read()?;
         let mut results = Vec::new();
-        if let Some(orders) = scis.get(&pair) {
+        if let Some(orders) = scis.get(pair) {
             for order in orders.iter() {
                 // Skip orders that require the fulfiller to pay an amount that is outside of
                 // the range `counter_token_quantity`, or that cannot fulfill the order at all.
@@ -146,10 +146,10 @@ pub enum Error {
     LockPoisoned,
 }
 
-impl Into<OrderBookError> for Error {
-    fn into(self) -> OrderBookError {
-        match self {
-            Self::OrderBook(err) => err,
+impl From<Error> for OrderBookError {
+    fn from(src: Error) -> Self {
+        match src {
+            Error::OrderBook(err) => err,
             err => OrderBookError::ImplementationSpecific(err.to_string()),
         }
     }

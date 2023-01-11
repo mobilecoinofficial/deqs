@@ -67,7 +67,7 @@ impl Order {
             input_rules.required_outputs.len(),
             input_rules.partial_fill_outputs.len(),
         ) {
-            (0, 0) => return Err(Error::UnsupportedSci("No required/partial outputs".into())),
+            (0, 0) => Err(Error::UnsupportedSci("No required/partial outputs".into())),
 
             (1, 0) => {
                 // Single required non-partial output. This order can only execute if are taking
@@ -112,13 +112,11 @@ impl Order {
                 Ok((num_128 / fill_fractions_denom) as u64)
             }
 
-            _ => {
-                return Err(Error::UnsupportedSci(format!(
-                    "Unsupported number of required/partial outputs {}/{}",
-                    input_rules.required_outputs.len(),
-                    input_rules.partial_fill_outputs.len()
-                )))
-            }
+            _ => Err(Error::UnsupportedSci(format!(
+                "Unsupported number of required/partial outputs {}/{}",
+                input_rules.required_outputs.len(),
+                input_rules.partial_fill_outputs.len()
+            ))),
         }
     }
 }

@@ -156,7 +156,7 @@ pub fn create_partial_sci(
 }
 
 /// Test order book basic happy flow
-pub fn basic_happy_flow<OB: OrderBook>(order_book: &OB) {
+pub fn basic_happy_flow(order_book: &impl OrderBook) {
     let pair = pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
@@ -249,7 +249,7 @@ pub fn basic_happy_flow<OB: OrderBook>(order_book: &OB) {
 }
 
 /// Test some invalid SCI scenarios
-pub fn cannot_add_invalid_sci<OB: OrderBook>(order_book: &OB) {
+pub fn cannot_add_invalid_sci(order_book: &impl OrderBook) {
     let pair = pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
@@ -280,5 +280,86 @@ pub fn cannot_add_invalid_sci<OB: OrderBook>(order_book: &OB) {
         Error::Sci(SignedContingentInputError::RingSignature(
             RingSignatureError::LengthMismatch(22, 21),
         ))
+    );
+}
+
+/// Test that get_orders filter correctly.
+pub fn get_orders_filtering_works(order_book: &impl OrderBook) {
+    let pair1 = pair();
+    let pair2 = Pair {
+        base_token_id: TokenId::from(10),
+        counter_token_id: TokenId::from(2),
+    };
+    let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+
+    // Offer for trading 100 pair1.base tokens into 1000 pair1.counter tokens
+    let sci = create_sci(&pair1, 100, 1000, &mut rng);
+    let order1 = order_book.add_sci(sci).unwrap();
+
+    // Offer for partially trading up to 100 pair2.base tokens into 1000
+    // pair2.counter tokens
+    let sci = create_partial_sci(&pair2, 100, 1, 0, 1000, &mut rng);
+    let order2 = order_book.add_sci(sci).unwrap();
+
+    // Offer for partially trading 5 pair2.base tokens into 50 pair2.counter
+    // tokens
+    let sci = create_partial_sci(&pair2, 5, 1, 0, 50, &mut rng);
+    let order3 = order_book.add_sci(sci).unwrap();
+
+    // Offer for partially trading 50 pair2.base tokens into 5 pair2.counter
+    // tokens
+    let sci = create_partial_sci(&pair2, 50, 1, 0, 5, &mut rng);
+    let order4 = order_book.add_sci(sci).unwrap();
+
+    // Offer for exactly trading 50 pair2.base tokens into 3 pair2.counter
+    // tokens
+    let sci = create_sci(&pair2, 50, 3, &mut rng);
+    let order5 = order_book.add_sci(sci).unwrap();
+
+    // Which orders can trade 100 pair1.base for anywhere between 50 and 1010
+    // counter tokens
+    assert_eq!(
+        order_book.get_orders(&pair1, 100, 50..=1010).unwrap(),
+        vec![order1.clone()]
+    );
+
+    // Which orders can trade 30 pair2.base for any amount of pair2.counter
+    assert_eq!(
+        order_book.get_orders(&pair2, 30, ..).unwrap(),
+        vec![order2.clone(), order4.clone()]
+    );
+
+    // Which orders can trade 3 pair2.base for any amount of pair2.counter
+    assert_eq!(
+        order_book.get_orders(&pair2, 3, ..).unwrap(),
+        vec![order2.clone(), order3.clone(), order4.clone()]
+    );
+
+    // Which orders can trade 50 pair2.base for any amount of pair2.counter
+    assert_eq!(
+        order_book.get_orders(&pair2, 50, ..).unwrap(),
+        vec![order2.clone(), order4.clone(), order5.clone()]
+    );
+
+    // Which order can trade 50 pairs2.base for not more than 5 counter tokens.
+    assert_eq!(
+        order_book.get_orders(&pair2, 50, ..=5).unwrap(),
+        vec![order4.clone(), order5.clone()]
+    );
+
+    // Which order can trade 10 pair2.base tokens for exactly 1 pair2.counter
+    // tokens.
+    assert_eq!(
+        order_book.get_orders(&pair2, 10, 1..2).unwrap(),
+        vec![order4.clone()]
+    );
+
+    // Which order can trade 50 pair2.base tokens into less than 3 counter tokens.
+    assert_eq!(order_book.get_orders(&pair2, 50, ..3).unwrap(), vec![]);
+
+    // Which order can trade 50 pair2.base tokens into less than 4 counter tokens.
+    assert_eq!(
+        order_book.get_orders(&pair2, 50, ..4).unwrap(),
+        vec![order5.clone()]
     );
 }
