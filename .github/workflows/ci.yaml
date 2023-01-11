@@ -10,6 +10,8 @@ env:
   CARGO_INCREMENTAL: 0
   RUSTFLAGS: "-Dwarnings"
   CARGO_UNSTABLE_SPARSE_REGISTRY: true
+  IAS_MODE: "DEV"
+  SGX_MODE: "SW"
 
 jobs:
   rustfmt:
