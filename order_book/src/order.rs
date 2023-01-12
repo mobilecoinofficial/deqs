@@ -32,7 +32,7 @@ pub struct Order {
     max_counter_tokens: u64,
 
     /// Timestamp at which the order arrived, in nanoseconds since the Epoch.
-    timestamp: u128,
+    timestamp: u64,
 }
 
 impl Order {
@@ -150,8 +150,10 @@ impl TryFrom<SignedContingentInput> for Order {
     fn try_from(sci: SignedContingentInput) -> Result<Self, Self::Error> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .expect("Time went backwards")
-            .as_nanos();
+            .map_err(|_| Error::Time)?
+            .as_nanos()
+            .try_into()
+            .map_err(|_| Error::Time)?;
 
         sci.validate()?;
 

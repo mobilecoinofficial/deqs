@@ -27,6 +27,9 @@ pub enum Error {
 
     /// RevealedTxOut: {0}
     RevealedTxOut(RevealedTxOutError),
+
+    /// Time conversion error
+    Time,
 }
 
 impl From<SignedContingentInputError> for Error {
