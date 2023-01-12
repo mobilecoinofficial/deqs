@@ -4,15 +4,28 @@ use clap::Parser;
 use deqs_server::{Server, ServerConfig};
 use mc_common::logger::o;
 use mc_util_grpc::AdminServer;
-use std::{sync::Arc, thread::sleep, time::Duration};
+use std::sync::Arc;
+use tokio::time::{sleep, Duration};
 
-fn main() {
+use deqs_server::Msg;
+use postage::broadcast;
+
+#[tokio::main]
+async fn main() {
     let _sentry_guard = mc_common::sentry::init();
     let config = ServerConfig::parse();
     let (logger, _global_logger_guard) = mc_common::logger::create_app_logger(o!());
     mc_common::setup_panic_handler();
 
-    let mut server = Server::new(config.client_listen_uri.clone(), logger.clone());
+    let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(1);
+
+    let rx2 = msg_bus_rx.clone();
+
+    // Alice and Bob will see both messages
+    tokio::task::spawn(print_messages("alice", msg_bus_rx));
+    tokio::task::spawn(print_messages("bob", rx2));
+
+    let mut server = Server::new(msg_bus_tx, config.client_listen_uri.clone(), logger.clone());
     server.start().expect("Failed starting client GRPC server");
 
     let config_json = serde_json::to_string(&config).expect("failed to serialize config to JSON");
@@ -32,6 +45,14 @@ fn main() {
 
     // Keep the server alive
     loop {
-        sleep(Duration::from_secs(1));
+        sleep(Duration::from_secs(1)).await;
+    }
+}
+
+use postage::stream::Stream;
+async fn print_messages(name: &'static str, mut rx: impl Stream<Item = Msg> + Unpin) {
+    while let Some(message) = rx.recv().await {
+        println!("{} got a message: {:?}", name, message);
+        sleep(Duration::from_secs(5)).await;
     }
 }

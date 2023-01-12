@@ -1,15 +1,19 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{ClientService, Error};
+use crate::{ClientService, Error, Msg};
 use deqs_api::DeqsClientUri;
 use futures::executor::block_on;
 use mc_common::logger::{log, Logger};
 use mc_util_grpc::ConnectionUriGrpcioServer;
 use mc_util_uri::ConnectionUri;
+use postage::broadcast::Sender;
 use std::sync::Arc;
 
 /// DEQS server
 pub struct Server {
+    /// Message bus sender.
+    msg_bus_tx: Sender<Msg>,
+
     /// Client listen URI.
     client_listen_uri: DeqsClientUri,
 
@@ -21,8 +25,13 @@ pub struct Server {
 }
 
 impl Server {
-    pub fn new(client_listen_uri: DeqsClientUri, logger: Logger) -> Self {
+    pub fn new(
+        msg_bus_tx: Sender<Msg>,
+        client_listen_uri: DeqsClientUri,
+        logger: Logger,
+    ) -> Self {
         Self {
+            msg_bus_tx,
             client_listen_uri,
             logger,
             server: None,
@@ -56,7 +65,8 @@ impl Server {
         let health_service =
             mc_util_grpc::HealthService::new(None, self.logger.clone()).into_service();
 
-        let client_service = ClientService::new(self.logger.clone()).into_service();
+        let client_service =
+            ClientService::new(self.msg_bus_tx.clone(), self.logger.clone()).into_service();
 
         let grpc_env = Arc::new(
             grpcio::EnvBuilder::new()
