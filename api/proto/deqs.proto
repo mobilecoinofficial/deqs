@@ -3,6 +3,7 @@
 // API for decentralized quoting service (DEQS)
 
 syntax = "proto3";
+import "google/protobuf/timestamp.proto";
 
 package deqs;
 option java_package = "com.mobilecoin.api";
@@ -42,4 +43,31 @@ message GetQuotesRequest {}
 
 message GetQuotesResponse {
     repeated external.SignedContingentInput quotes = 1;
+}
+
+/// Order Unique Identifier.
+message OrderId {
+    bytes data = 1;
+}
+
+/// Single trading pair.
+message Pair {
+    /// The token id being offered "for sale".
+    uint64 base_token_id = 1;
+
+    /// The token id that needs to be paid to satisfy the offering.
+    /// (The SCI is "priced" with this token id)
+    uint64 counter_token_id = 2;
+}
+
+/// A single order in the order book.
+/// See deqs_order_book::Order
+message Order {
+    external.SignedContingentInput sci = 1;
+    OrderId id = 2;
+    Pair pair = 3;
+    uint64 base_range_min = 4;
+    uint64 base_range_max = 5;
+    uint64 max_counter_tokens = 6;
+    google.protobuf.Timestamp timestamp = 7;
 }

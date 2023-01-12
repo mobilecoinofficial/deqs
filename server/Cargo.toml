@@ -16,7 +16,9 @@ path = "src/bin/main.rs"
 deqs-api = { path = "../api" }
 deqs-order-book = { path = "../order-book" }
 
+mc-api = { path = "../mobilecoin/api" }
 mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
+mc-transaction-extra = { path =  "../mobilecoin/transaction/extra" }
 mc-util-grpc = { path = "../mobilecoin/util/grpc" }
 mc-util-metrics  = { path = "../mobilecoin/util/metrics" }
 mc-util-uri = { path = "../mobilecoin/util/uri" }

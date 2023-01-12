@@ -1,6 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use clap::Parser;
+use deqs_order_book::InMemoryOrderBook;
 use deqs_server::{Server, ServerConfig};
 use mc_common::logger::o;
 use mc_util_grpc::AdminServer;
@@ -18,6 +19,7 @@ async fn main() {
     mc_common::setup_panic_handler();
 
     let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(1);
+    let order_book = InMemoryOrderBook::default();
 
     let rx2 = msg_bus_rx.clone();
 
@@ -25,7 +27,12 @@ async fn main() {
     tokio::task::spawn(print_messages("alice", msg_bus_rx));
     tokio::task::spawn(print_messages("bob", rx2));
 
-    let mut server = Server::new(msg_bus_tx, config.client_listen_uri.clone(), logger.clone());
+    let mut server = Server::new(
+        msg_bus_tx,
+        order_book,
+        config.client_listen_uri.clone(),
+        logger.clone(),
+    );
     server.start().expect("Failed starting client GRPC server");
 
     let config_json = serde_json::to_string(&config).expect("failed to serialize config to JSON");

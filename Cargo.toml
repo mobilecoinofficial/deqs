@@ -3,7 +3,7 @@ cargo-features = ["named-profiles"]
 [workspace]
 members = [
     "api",
-    "order_book",
+    "order-book",
     "server",
 ]
 exclude = [

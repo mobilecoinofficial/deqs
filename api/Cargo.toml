@@ -7,7 +7,9 @@ edition = "2021"
 links = "deqs-api"
 
 [dependencies]
+deqs-order-book = { path = "../order-book" }
 mc-api = { path = "../mobilecoin/api" }
+mc-transaction-types = { path = "../mobilecoin/transaction/types" }
 mc-util-uri = { path = "../mobilecoin/util/uri" }
 
 futures = "0.3"
