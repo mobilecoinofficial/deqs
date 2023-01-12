@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-#![feature(drain_filter)]
+#![feature(btree_drain_filter)]
 
 mod basic_types;
 mod error;

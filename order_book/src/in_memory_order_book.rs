@@ -7,7 +7,7 @@ use mc_crypto_ring_signature::KeyImage;
 use mc_transaction_core::validation::validate_tombstone;
 use mc_transaction_extra::SignedContingentInput;
 use std::{
-    collections::HashMap,
+    collections::{BTreeSet, HashMap},
     ops::{Bound, RangeBounds},
     sync::{Arc, PoisonError, RwLock},
 };
@@ -17,7 +17,7 @@ use std::{
 pub struct InMemoryOrderBook {
     /// List of all SCIs in the order book, grouped by trading pair.
     /// Naturally sorted by the time they got added to the book.
-    scis: Arc<RwLock<HashMap<Pair, Vec<Order>>>>,
+    scis: Arc<RwLock<HashMap<Pair, BTreeSet<Order>>>>,
 }
 
 impl Default for InMemoryOrderBook {
@@ -51,8 +51,9 @@ impl OrderBook for InMemoryOrderBook {
             return Err(OrderBookError::OrderAlreadyExists.into());
         }
 
-        // Add order
-        orders.push(order.clone());
+        // Add order. We assert it doesn't fail since we do not expect duplicate orders
+        // due to the key image check above.
+        assert!(orders.insert(order.clone()));
         Ok(order)
     }
 
@@ -60,11 +61,12 @@ impl OrderBook for InMemoryOrderBook {
         let mut scis = self.scis.write()?;
 
         for entries in scis.values_mut() {
-            if let Some(index) = entries.iter().position(|entry| entry.id() == id) {
+            if let Some(element) = entries.iter().find(|entry| entry.id() == id).cloned() {
                 // We return since we expect the id to be unique amongst all orders across all
                 // pairs. This is to be expected because the id is the hash of
                 // the entire SCI, and when adding SCIs we ensure uniqueness.
-                return Ok(entries.remove(index));
+                assert!(entries.remove(&element));
+                return Ok(element);
             }
         }
 
@@ -121,18 +123,18 @@ impl OrderBook for InMemoryOrderBook {
     ) -> Result<Vec<Order>, Self::Error> {
         let scis = self.scis.read()?;
         let mut results = Vec::new();
+
         if let Some(orders) = scis.get(pair) {
+            // NOTE: This implementation relies on orders being sorted due to being held in
+            // a BTreeSet
             for order in orders.iter() {
                 if range_overlaps(&base_token_quantity, order.base_range()) {
                     results.push(order.clone());
+                    if results.len() == limit {
+                        break;
+                    }
                 }
             }
-        }
-
-        // TODO use BTreeSet
-        results.sort();
-        if limit > 0 {
-            results.truncate(limit);
         }
 
         Ok(results)
