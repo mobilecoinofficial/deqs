@@ -164,20 +164,20 @@ pub fn basic_happy_flow(order_book: &impl OrderBook) {
     let sci = create_sci(&pair, 10, 20, &mut rng);
     let order = order_book.add_sci(sci).unwrap();
 
-    let orders = order_book.get_orders(&pair, 10, ..).unwrap();
+    let orders = order_book.get_orders(&pair, .., 0).unwrap();
     assert_eq!(orders, vec![order.clone()]);
 
     // Adding a second order should work
     let sci = create_sci(&pair, 10, 200, &mut rng);
     let order2 = order_book.add_sci(sci).unwrap();
 
-    let orders = order_book.get_orders(&pair, 10, ..).unwrap();
+    let orders = order_book.get_orders(&pair, .., 0).unwrap();
     assert_eq!(orders, vec![order.clone(), order2.clone()]);
 
     // Removing the order by its id should work
     assert_eq!(order, order_book.remove_order_by_id(order.id()).unwrap());
 
-    let orders = order_book.get_orders(&pair, 10, ..).unwrap();
+    let orders = order_book.get_orders(&pair, .., 0).unwrap();
     assert_eq!(orders, vec![order2.clone()]);
 
     // Can't remove the order again
@@ -202,7 +202,7 @@ pub fn basic_happy_flow(order_book: &impl OrderBook) {
             .remove_orders_by_key_image(&order2.sci().key_image())
             .unwrap()
     );
-    let orders = order_book.get_orders(&pair, 10, ..).unwrap();
+    let orders = order_book.get_orders(&pair, .., 0).unwrap();
     assert_eq!(orders, vec![]);
 
     // Removing orders by tombstone block should work
@@ -294,79 +294,83 @@ pub fn get_orders_filtering_works(order_book: &impl OrderBook) {
 
     // Offer for trading 100 pair1.base tokens into 1000 pair1.counter tokens
     let sci = create_sci(&pair1, 100, 1000, &mut rng);
-    let order1 = order_book.add_sci(sci).unwrap();
+    let p1_100_for_1000 = order_book.add_sci(sci).unwrap();
 
     // Offer for partially trading up to 100 pair2.base tokens into 1000
     // pair2.counter tokens
     let sci = create_partial_sci(&pair2, 100, 1, 0, 1000, &mut rng);
-    let order2 = order_book.add_sci(sci).unwrap();
+    let p2_100_for_1000 = order_book.add_sci(sci).unwrap();
 
     // Offer for partially trading 5 pair2.base tokens into 50 pair2.counter
     // tokens
     let sci = create_partial_sci(&pair2, 5, 1, 0, 50, &mut rng);
-    let order3 = order_book.add_sci(sci).unwrap();
+    let p2_5_for_50 = order_book.add_sci(sci).unwrap();
 
     // Offer for partially trading 50 pair2.base tokens into 5 pair2.counter
     // tokens
     let sci = create_partial_sci(&pair2, 50, 1, 0, 5, &mut rng);
-    let order4 = order_book.add_sci(sci).unwrap();
+    let p2_50_for_5 = order_book.add_sci(sci).unwrap();
 
     // Offer for exactly trading 50 pair2.base tokens into 3 pair2.counter
     // tokens
     let sci = create_sci(&pair2, 50, 3, &mut rng);
-    let order5 = order_book.add_sci(sci).unwrap();
+    let p2_50_for_3 = order_book.add_sci(sci).unwrap();
 
-    // Which orders can trade 100 pair1.base for anywhere between 50 and 1010
-    // counter tokens
+    // Get all orders at any quantity.
+    let orders = order_book.get_orders(&pair1, .., 0).unwrap();
+    assert_eq!(orders, vec![p1_100_for_1000.clone()]);
+
+    let orders = order_book.get_orders(&pair2, .., 0).unwrap();
     assert_eq!(
-        order_book.get_orders(&pair1, 100, 50..=1010).unwrap(),
-        vec![order1.clone()]
+        orders,
+        vec![
+            p2_50_for_3.clone(),     // rate is 16.6667
+            p2_50_for_5.clone(),     // rate is 10
+            p2_100_for_1000.clone(), // rate is 0.1
+            p2_5_for_50.clone(),     // rate is 0.1
+        ]
     );
 
-    // Which orders can trade 100 pair2.base for anywhere between 50 and 1010
-    // counter tokens
+    // Get all orders but limit to the first 2
+    let orders = order_book.get_orders(&pair1, .., 2).unwrap();
+    assert_eq!(orders, vec![p1_100_for_1000.clone()]);
+
+    let orders = order_book.get_orders(&pair2, .., 2).unwrap();
+    assert_eq!(orders, vec![p2_50_for_3.clone(), p2_50_for_5.clone(),]);
+
+    // Get all orders that can provide an amount that is not available.
+    let orders = order_book.get_orders(&pair1, 10000.., 2).unwrap();
+    assert_eq!(orders, vec![]);
+
+    let orders = order_book.get_orders(&pair2, 10000.., 2).unwrap();
+    assert_eq!(orders, vec![]);
+
+    // Get all orders that can provide a subset of the amount requested.
+    let orders = order_book.get_orders(&pair2, 50.., 0).unwrap();
     assert_eq!(
-        order_book.get_orders(&pair2, 100, 50..=1010).unwrap(),
-        vec![order2.clone()]
+        orders,
+        vec![
+            p2_50_for_3.clone(),     // rate is 16.6667
+            p2_50_for_5.clone(),     // rate is 10
+            p2_100_for_1000.clone(), // rate is 0.1
+        ]
     );
 
-    // Which orders can trade 30 pair2.base for any amount of pair2.counter
+    let orders = order_book.get_orders(&pair2, 51.., 0).unwrap();
     assert_eq!(
-        order_book.get_orders(&pair2, 30, ..).unwrap(),
-        vec![order2.clone(), order4.clone()]
+        orders,
+        vec![
+            p2_100_for_1000.clone(), // rate is 0.1
+        ]
     );
 
-    // Which orders can trade 3 pair2.base for any amount of pair2.counter
+    let orders = order_book.get_orders(&pair2, 50..70, 0).unwrap();
     assert_eq!(
-        order_book.get_orders(&pair2, 3, ..).unwrap(),
-        vec![order2.clone(), order3.clone(), order4.clone()]
-    );
-
-    // Which orders can trade 50 pair2.base for any amount of pair2.counter
-    assert_eq!(
-        order_book.get_orders(&pair2, 50, ..).unwrap(),
-        vec![order2.clone(), order4.clone(), order5.clone()]
-    );
-
-    // Which order can trade 50 pairs2.base for not more than 5 counter tokens.
-    assert_eq!(
-        order_book.get_orders(&pair2, 50, ..=5).unwrap(),
-        vec![order4.clone(), order5.clone()]
-    );
-
-    // Which order can trade 10 pair2.base tokens for exactly 1 pair2.counter
-    // tokens.
-    assert_eq!(
-        order_book.get_orders(&pair2, 10, 1..2).unwrap(),
-        vec![order4.clone()]
-    );
-
-    // Which order can trade 50 pair2.base tokens into less than 3 counter tokens.
-    assert_eq!(order_book.get_orders(&pair2, 50, ..3).unwrap(), vec![]);
-
-    // Which order can trade 50 pair2.base tokens into less than 4 counter tokens.
-    assert_eq!(
-        order_book.get_orders(&pair2, 50, ..4).unwrap(),
-        vec![order5.clone()]
+        orders,
+        vec![
+            p2_50_for_3.clone(),     // rate is 16.6667
+            p2_50_for_5.clone(),     // rate is 10
+            p2_100_for_1000.clone(), // rate is 0.1
+        ]
     );
 }

@@ -8,7 +8,7 @@ use mc_transaction_core::validation::validate_tombstone;
 use mc_transaction_extra::SignedContingentInput;
 use std::{
     collections::HashMap,
-    ops::RangeBounds,
+    ops::{Bound, RangeBounds},
     sync::{Arc, PoisonError, RwLock},
 };
 
@@ -116,24 +116,55 @@ impl OrderBook for InMemoryOrderBook {
     fn get_orders(
         &self,
         pair: &Pair,
-        base_token_quantity: u64,
-        counter_token_quantity: impl RangeBounds<u64>,
+        base_token_quantity: impl RangeBounds<u64>,
+        limit: usize,
     ) -> Result<Vec<Order>, Self::Error> {
         let scis = self.scis.read()?;
         let mut results = Vec::new();
         if let Some(orders) = scis.get(pair) {
             for order in orders.iter() {
-                // Skip orders that require the fulfiller to pay an amount that is outside of
-                // the range `counter_token_quantity`, or that cannot fulfill the order at all.
-                if let Ok(cost) = order.counter_tokens_cost(base_token_quantity) {
-                    if counter_token_quantity.contains(&cost) {
-                        results.push(order.clone());
-                    }
+                if range_overlaps(&base_token_quantity, order.base_range()) {
+                    results.push(order.clone());
                 }
             }
         }
+
+        // TODO use BTreeSet
+        results.sort();
+        if limit > 0 {
+            results.truncate(limit);
+        }
+
         Ok(results)
     }
+}
+
+fn range_overlaps(x: &impl RangeBounds<u64>, y: &impl RangeBounds<u64>) -> bool {
+    let x1 = match x.start_bound() {
+        Bound::Included(start) => *start,
+        Bound::Excluded(start) => start.saturating_add(1),
+        Bound::Unbounded => 0,
+    };
+
+    let x2 = match x.end_bound() {
+        Bound::Included(end) => *end,
+        Bound::Excluded(end) => end.saturating_sub(1),
+        Bound::Unbounded => u64::MAX,
+    };
+
+    let y1 = match y.start_bound() {
+        Bound::Included(start) => *start,
+        Bound::Excluded(start) => start.saturating_add(1),
+        Bound::Unbounded => 0,
+    };
+
+    let y2 = match y.end_bound() {
+        Bound::Included(end) => *end,
+        Bound::Excluded(end) => end.saturating_sub(1),
+        Bound::Unbounded => u64::MAX,
+    };
+
+    x1 <= y2 && y1 <= x2
 }
 
 /// Error data type

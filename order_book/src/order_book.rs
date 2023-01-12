@@ -32,15 +32,20 @@ pub trait OrderBook {
         current_block_index: BlockIndex,
     ) -> Result<Vec<Order>, Self::Error>;
 
-    /// Search for orders that can provide `base_token_quantity` tokens, in
-    /// exchange for being sent `pair.counter_token_id` at a quantity in the
-    /// range `counter_token_quantity` tokens.
-    /// This allows searching for orders that want to obtain a specific number
-    /// of tokens at a given price range.
+    /// Search for orders that can provide `pair.base_token_id in exchange for
+    /// being sent `pair.counter_token_id`. Optionally filtering only for
+    /// orders that can provide some amount in the range `base_token_quantity`.
+    /// Due to partial fill rules, orders returned may not be able to provide
+    /// the entire range. It can also optionally limit the number of orders
+    /// returned. A limit of 0 returns all orders. Orders are returned sorted by
+    /// the more favorable exchange rate (orders giving more base tokens for
+    /// a given amount of counter tokens are returned first). For the exact
+    /// sorting details, see documentation in the `Ord` implementation of
+    /// `Order`.
     fn get_orders(
         &self,
         pair: &Pair,
-        base_token_quantity: u64,
-        counter_token_quantity: impl RangeBounds<u64>,
+        base_token_quantity: impl RangeBounds<u64>,
+        limit: usize,
     ) -> Result<Vec<Order>, Self::Error>;
 }
