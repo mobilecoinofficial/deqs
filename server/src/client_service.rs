@@ -3,8 +3,8 @@
 use crate::Msg;
 use deqs_api::{
     deqs::{
-        GetQuotesRequest, GetQuotesResponse, QuoteStatusCode, SubmitQuoteRequest,
-        SubmitQuoteResponse,
+        GetQuotesRequest, GetQuotesResponse, QuoteStatusCode, SubmitQuotesRequest,
+        SubmitQuotesResponse,
     },
     deqs_grpc::{create_deqs_client_api, DeqsClientApi},
 };
@@ -49,29 +49,69 @@ impl<OB: OrderBook> ClientService<OB> {
         create_deqs_client_api(self)
     }
 
-    fn submit_quote_impl(
-        &self,
-        req: SubmitQuoteRequest,
+    fn submit_quotes_impl(
+        &mut self,
+        req: SubmitQuotesRequest,
         logger: &Logger,
-    ) -> Result<SubmitQuoteResponse, RpcStatus> {
-        let sci: Vec<SignedContingentInput> = req
+    ) -> Result<SubmitQuotesResponse, RpcStatus> {
+        let scis = req
             .get_quotes()
             .iter()
             .map(|sci| SignedContingentInput::try_from(sci))
             .collect::<Result<Vec<_>, _>>()
             .map_err(|err| rpc_invalid_arg_error("quotes", err, logger))?;
-        //        let _order = self.order_book.add_sci()
 
-        let logger = self.logger.clone();
-        let mut msg_bus_tx = self.msg_bus_tx.clone();
+        log::debug!(logger, "Request to submit {} orders", scis.len());
 
-        // //self.tokio_runtime.block_on(async move {
-        // mc_common::logger::log::info!(logger, "tokio log eheh");
-        // msg_bus_tx.blocking_send(Msg::V1).expect("send");
-        // //});
+        let mut status_codes = vec![];
+        let mut error_messages = vec![];
+        let mut orders = vec![];
 
-        // Err(RpcStatus::new(grpcio::RpcStatusCode::DEADLINE_EXCEEDED))
-        Ok(())
+        for sci in scis.into_iter() {
+            match self.order_book.add_sci(sci) {
+                Ok(order) => {
+                    status_codes.push(QuoteStatusCode::CREATED);
+                    error_messages.push("".to_string());
+                    orders.push((&order).into());
+                    match self
+                        .msg_bus_tx
+                        .blocking_send(Msg::SciOrderAdded(order.clone()))
+                    {
+                        Ok(_) => {
+                            log::info!(
+                                logger,
+                                "Order {} added: Max {} of token {} for {} of token {}",
+                                order.id(),
+                                order.base_range().end(),
+                                order.pair().base_token_id,
+                                order.max_counter_tokens(),
+                                order.pair().counter_token_id,
+                            );
+                        }
+                        Err(err) => {
+                            log::error!(
+                                logger,
+                                "Failed to send SCI order added message to message bus: {:?}",
+                                err
+                            );
+                        }
+                    }
+                }
+                Err(err) => {
+                    error_messages.push(err.to_string());
+                    let order_book_error: deqs_order_book::Error = err.into();
+                    status_codes.push((&order_book_error).into());
+                    orders.push(Default::default());
+                }
+            }
+        }
+
+        Ok(SubmitQuotesResponse {
+            status_codes: status_codes.into(),
+            error_messages: error_messages.into(),
+            orders: orders.into(),
+            ..Default::default()
+        })
     }
 
     fn get_quotes_impl(&self, _req: GetQuotesRequest) -> Result<GetQuotesResponse, RpcStatus> {
@@ -79,14 +119,14 @@ impl<OB: OrderBook> ClientService<OB> {
     }
 
     async fn live_updates_impl(
-        mut responses: ServerStreamingSink<SubmitQuoteResponse>,
+        mut responses: ServerStreamingSink<SubmitQuotesResponse>,
         mut msg_bus_rx: Receiver<Msg>,
     ) -> Result<(), grpcio::Error> {
         while let Some(_msg) = msg_bus_rx.recv().await {
             responses
                 .send((
-                    SubmitQuoteResponse {
-                        status_codes: vec![QuoteStatusCode::INVALID].into(),
+                    SubmitQuotesResponse {
+                        status_codes: vec![QuoteStatusCode::CREATED].into(),
                         ..Default::default()
                     },
                     WriteFlags::default(),
@@ -99,17 +139,17 @@ impl<OB: OrderBook> ClientService<OB> {
 }
 
 impl<OB: OrderBook> DeqsClientApi for ClientService<OB> {
-    fn submit_quote(
+    fn submit_quotes(
         &mut self,
         ctx: RpcContext,
-        req: SubmitQuoteRequest,
-        sink: UnarySink<SubmitQuoteResponse>,
+        req: SubmitQuotesRequest,
+        sink: UnarySink<SubmitQuotesResponse>,
     ) {
         let _timer = SVC_COUNTERS.req(&ctx);
         scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
             // Build a prost response, then convert it to rpc/protobuf types and the errors
             // to rpc status codes.
-            send_result(ctx, sink, self.submit_quote_impl(req, logger), logger)
+            send_result(ctx, sink, self.submit_quotes_impl(req, logger), logger)
         })
     }
 
@@ -130,8 +170,8 @@ impl<OB: OrderBook> DeqsClientApi for ClientService<OB> {
     fn live_updates(
         &mut self,
         ctx: RpcContext<'_>,
-        _req: SubmitQuoteRequest,
-        responses: ServerStreamingSink<SubmitQuoteResponse>,
+        _req: SubmitQuotesRequest,
+        responses: ServerStreamingSink<SubmitQuotesResponse>,
     ) {
         let logger = self.logger.clone();
         let receiver = self.msg_bus_tx.subscribe();

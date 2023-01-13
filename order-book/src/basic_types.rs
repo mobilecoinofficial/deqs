@@ -3,7 +3,7 @@
 use mc_crypto_digestible::{Digestible, MerlinTranscript};
 use mc_transaction_extra::SignedContingentInput;
 use mc_transaction_types::TokenId;
-use std::{array::TryFromSliceError, hash::Hash, ops::Deref};
+use std::{array::TryFromSliceError, fmt, hash::Hash, ops::Deref};
 
 /// A single trading pair
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
@@ -39,5 +39,11 @@ impl Deref for OrderId {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl fmt::Display for OrderId {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", hex::encode(&self.0))
     }
 }

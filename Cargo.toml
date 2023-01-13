@@ -6,6 +6,7 @@ members = [
     "mc-test-utils",
     "order-book",
     "server",
+    "test-cli",
 ]
 exclude = [
     "mobilecoin/",

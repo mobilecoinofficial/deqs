@@ -12,30 +12,39 @@ import "external.proto";
 
 service DeqsClientAPI {
     /// This is called to submit a new quote
-    rpc SubmitQuote(SubmitQuoteRequest) returns (SubmitQuoteResponse) {}
+    rpc SubmitQuotes(SubmitQuotesRequest) returns (SubmitQuotesResponse) {}
 
     /// This is called to get the existing quotes
     rpc GetQuotes(GetQuotesRequest) returns (GetQuotesResponse) {}
 
-    rpc LiveUpdates(SubmitQuoteRequest) returns (stream SubmitQuoteResponse);
+    rpc LiveUpdates(SubmitQuotesRequest) returns (stream SubmitQuotesResponse);
 }
 
-message SubmitQuoteRequest {
+message SubmitQuotesRequest {
     /// One or more quotes to submit
     repeated external.SignedContingentInput quotes = 1;
 }
 
-message SubmitQuoteResponse {
+message SubmitQuotesResponse {
     /// The status of each submission
     repeated QuoteStatusCode status_codes = 1;
+
+    /// String errror messages for each case where status code is not CREATED
+    repeated string error_messages = 2;
+
+    /// Orders created. Will contain a valid order only for entries whose status code is CREATED.
+    repeated Order orders = 3;
 }
 
 /// The status that a quote can have upon submission
 ///
 /// (Should there be a status code here for each way a SignedContingentInput can be invalid?)
 enum QuoteStatusCode {
-    VALID = 0;
-    INVALID = 1;
+    CREATED = 0;
+    INVALID_SCI = 1;
+    UNSUPPORTED_SCI = 2;
+    ORDER_ALREADY_EXISTS = 3;
+    OTHER = 4;
 }
 
 message GetQuotesRequest {}
