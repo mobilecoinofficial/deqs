@@ -20,6 +20,7 @@ use postage::{
     prelude::Stream,
     sink::Sink,
 };
+use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 
 /// GRPC Client service
 #[derive(Clone)]
@@ -63,12 +64,17 @@ impl<OB: OrderBook> ClientService<OB> {
 
         log::debug!(logger, "Request to submit {} orders", scis.len());
 
+        let results = scis
+            .into_par_iter()
+            .map(|sci| self.order_book.add_sci(sci))
+            .collect::<Vec<_>>();
+
         let mut status_codes = vec![];
         let mut error_messages = vec![];
         let mut orders = vec![];
 
-        for sci in scis.into_iter() {
-            match self.order_book.add_sci(sci) {
+        for result in results {
+            match result {
                 Ok(order) => {
                     status_codes.push(QuoteStatusCode::CREATED);
                     error_messages.push("".to_string());
