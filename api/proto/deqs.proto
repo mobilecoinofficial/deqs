@@ -17,7 +17,7 @@ service DeqsClientAPI {
     /// This is called to get the existing quotes
     rpc GetQuotes(GetQuotesRequest) returns (GetQuotesResponse) {}
 
-    rpc LiveUpdates(SubmitQuotesRequest) returns (stream SubmitQuotesResponse);
+    rpc LiveUpdates(LiveUpdatesRequest) returns (stream LiveUpdate);
 }
 
 message SubmitQuotesRequest {
@@ -51,6 +51,17 @@ message GetQuotesRequest {}
 
 message GetQuotesResponse {
     repeated external.SignedContingentInput quotes = 1;
+}
+
+message LiveUpdatesRequest {
+
+}
+
+message LiveUpdate {
+    oneof update {
+        Order order_added = 1;
+        OrderId order_removed = 2;
+    }
 }
 
 /// Order Unique Identifier.

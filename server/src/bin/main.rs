@@ -11,6 +11,9 @@ use tokio::time::{sleep, Duration};
 use deqs_server::Msg;
 use postage::broadcast;
 
+/// Maximum number of messages that can be queued in the message bus.
+const MSG_BUS_QUEUE_SIZE: usize = 1000;
+
 #[tokio::main]
 async fn main() {
     let _sentry_guard = mc_common::sentry::init();
@@ -18,14 +21,12 @@ async fn main() {
     let (logger, _global_logger_guard) = mc_common::logger::create_app_logger(o!());
     mc_common::setup_panic_handler();
 
-    let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(1);
+    let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
     let order_book = InMemoryOrderBook::default();
 
-    let rx2 = msg_bus_rx.clone();
-
-    // Alice and Bob will see both messages
-    tokio::task::spawn(print_messages("alice", msg_bus_rx));
-    tokio::task::spawn(print_messages("bob", rx2));
+    // Must drop the default receiver, otherwise we will get stuck once its queue
+    // fills up.
+    drop(msg_bus_rx);
 
     let mut server = Server::new(
         msg_bus_tx,
@@ -53,13 +54,5 @@ async fn main() {
     // Keep the server alive
     loop {
         sleep(Duration::from_secs(1)).await;
-    }
-}
-
-use postage::stream::Stream;
-async fn print_messages(_name: &'static str, mut rx: impl Stream<Item = Msg> + Unpin) {
-    while let Some(_message) = rx.recv().await {
-        //println!("{} got a message: {:?}", name, message);
-        //sleep(Duration::from_secs(5)).await;
     }
 }

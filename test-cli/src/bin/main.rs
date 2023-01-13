@@ -32,7 +32,7 @@ pub enum Command {
         base_amount: u64,
 
         /// Counter token amount
-        #[clap(long, default_value = "100")]
+        #[clap(long, default_value = "1000")]
         counter_amount: u64,
 
         /// Allow partial fills

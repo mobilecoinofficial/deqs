@@ -10,7 +10,4 @@ pub enum Msg {
 
     /// SCI removed from the order book
     SciOrderRemoved(OrderId),
-
-    // TODO
-    V1,
 }

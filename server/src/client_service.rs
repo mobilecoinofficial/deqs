@@ -3,8 +3,8 @@
 use crate::Msg;
 use deqs_api::{
     deqs::{
-        GetQuotesRequest, GetQuotesResponse, QuoteStatusCode, SubmitQuotesRequest,
-        SubmitQuotesResponse,
+        GetQuotesRequest, GetQuotesResponse, LiveUpdate, LiveUpdatesRequest, QuoteStatusCode,
+        SubmitQuotesRequest, SubmitQuotesResponse,
     },
     deqs_grpc::{create_deqs_client_api, DeqsClientApi},
 };
@@ -79,6 +79,7 @@ impl<OB: OrderBook> ClientService<OB> {
                     status_codes.push(QuoteStatusCode::CREATED);
                     error_messages.push("".to_string());
                     orders.push((&order).into());
+
                     match self
                         .msg_bus_tx
                         .blocking_send(Msg::SciOrderAdded(order.clone()))
@@ -125,19 +126,16 @@ impl<OB: OrderBook> ClientService<OB> {
     }
 
     async fn live_updates_impl(
-        mut responses: ServerStreamingSink<SubmitQuotesResponse>,
+        mut responses: ServerStreamingSink<LiveUpdate>,
         mut msg_bus_rx: Receiver<Msg>,
     ) -> Result<(), grpcio::Error> {
-        while let Some(_msg) = msg_bus_rx.recv().await {
-            responses
-                .send((
-                    SubmitQuotesResponse {
-                        status_codes: vec![QuoteStatusCode::CREATED].into(),
-                        ..Default::default()
-                    },
-                    WriteFlags::default(),
-                ))
-                .await?;
+        while let Some(msg) = msg_bus_rx.recv().await {
+            let mut live_update = LiveUpdate::default();
+            match msg {
+                Msg::SciOrderAdded(order) => live_update.set_order_added((&order).into()),
+                Msg::SciOrderRemoved(order) => live_update.set_order_removed((&order).into()),
+            };
+            responses.send((live_update, WriteFlags::default())).await?;
         }
         responses.close().await?;
         Ok(())
@@ -176,8 +174,8 @@ impl<OB: OrderBook> DeqsClientApi for ClientService<OB> {
     fn live_updates(
         &mut self,
         ctx: RpcContext<'_>,
-        _req: SubmitQuotesRequest,
-        responses: ServerStreamingSink<SubmitQuotesResponse>,
+        _req: LiveUpdatesRequest,
+        responses: ServerStreamingSink<LiveUpdate>,
     ) {
         let logger = self.logger.clone();
         let receiver = self.msg_bus_tx.subscribe();
