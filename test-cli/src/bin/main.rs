@@ -2,12 +2,12 @@
 
 use clap::{Parser, Subcommand};
 use deqs_api::{
-    deqs::{QuoteStatusCode, SubmitQuotesRequest},
+    deqs::{QuoteStatusCode, RemoveOrderRequest, SubmitQuotesRequest},
     deqs_grpc::DeqsClientApiClient,
     DeqsClientUri,
 };
 use deqs_mc_test_utils::{create_partial_sci, create_sci};
-use deqs_order_book::Order;
+use deqs_order_book::{Order, OrderId};
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_common::logger::{log, o};
 use mc_transaction_types::TokenId;
@@ -43,6 +43,16 @@ pub enum Command {
         /// Allow partial fills
         #[clap(long)]
         allow_partial_fills: bool,
+    },
+
+    /// Remove an order.
+    RemoveOrder {
+        /// Order id.
+        #[clap(
+            long,
+            value_parser = mc_util_parse::parse_hex::<[u8; 32]>
+        )]
+        order_id: [u8; 32],
     },
 }
 
@@ -150,6 +160,13 @@ fn main() {
                     }
                 }
             }
+        }
+
+        Command::RemoveOrder { order_id } => {
+            let mut req = RemoveOrderRequest::default();
+            req.set_order_id((&OrderId(order_id)).into());
+            let resp = client_api.remove_order(&req).expect("remove order failed");
+            println!("{:#?}", resp);
         }
     }
 }

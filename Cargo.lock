@@ -757,6 +757,7 @@ dependencies = [
  "mc-common",
  "mc-transaction-types",
  "mc-util-grpc",
+ "mc-util-parse",
  "mc-util-uri",
  "rand 0.8.5",
  "rayon",
@@ -2191,6 +2192,15 @@ dependencies = [
  "prometheus",
  "protobuf",
  "serde_json",
+]
+
+[[package]]
+name = "mc-util-parse"
+version = "4.0.1"
+dependencies = [
+ "hex",
+ "itertools",
+ "mc-sgx-css",
 ]
 
 [[package]]

@@ -17,6 +17,7 @@ mc-api = { path = "../mobilecoin/api" }
 mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
 mc-transaction-types = { path = "../mobilecoin/transaction/types" }
 mc-util-grpc = { path = "../mobilecoin/util/grpc" }
+mc-util-parse = { path = "../mobilecoin/util/parse" }
 mc-util-uri = { path = "../mobilecoin/util/uri" }
 
 clap = { version = "4.0", features = ["derive", "env"] }

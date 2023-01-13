@@ -4,13 +4,15 @@ use crate::Msg;
 use deqs_api::{
     deqs::{
         GetQuotesRequest, GetQuotesResponse, LiveUpdate, LiveUpdatesRequest, QuoteStatusCode,
-        SubmitQuotesRequest, SubmitQuotesResponse,
+        RemoveOrderRequest, RemoveOrderResponse, SubmitQuotesRequest, SubmitQuotesResponse,
     },
     deqs_grpc::{create_deqs_client_api, DeqsClientApi},
 };
-use deqs_order_book::{OrderBook, Pair};
+use deqs_order_book::{Error as OrderBookError, OrderBook, OrderId, Pair};
 use futures::{FutureExt, SinkExt};
-use grpcio::{RpcContext, RpcStatus, ServerStreamingSink, Service, UnarySink, WriteFlags};
+use grpcio::{
+    RpcContext, RpcStatus, RpcStatusCode, ServerStreamingSink, Service, UnarySink, WriteFlags,
+};
 use mc_common::logger::{log, scoped_global_logger, Logger};
 use mc_transaction_extra::SignedContingentInput;
 use mc_util_grpc::{rpc_internal_error, rpc_invalid_arg_error, rpc_logger, send_result};
@@ -146,6 +148,45 @@ impl<OB: OrderBook> ClientService<OB> {
         })
     }
 
+    fn remove_order_impl(
+        &mut self,
+        req: RemoveOrderRequest,
+        logger: &Logger,
+    ) -> Result<RemoveOrderResponse, RpcStatus> {
+        let order_id = OrderId::try_from(req.get_order_id())
+            .map_err(|err| rpc_invalid_arg_error("order_id", err, &self.logger))?;
+
+        match self
+            .order_book
+            .remove_order_by_id(&order_id)
+            .map_err(|err| err.into())
+        {
+            Ok(order) => {
+                log::info!(self.logger, "Order {} removed", order.id());
+                if let Err(err) = self
+                    .msg_bus_tx
+                    .blocking_send(Msg::SciOrderRemoved(order_id))
+                {
+                    log::error!(
+                        logger,
+                        "Failed to send SCI order {} removed message to message bus: {:?}",
+                        order.id(),
+                        err
+                    );
+                }
+
+                let mut resp = RemoveOrderResponse::default();
+                resp.set_order((&order).into());
+                Ok(resp)
+            }
+            Err(OrderBookError::OrderNotFound) => Err(RpcStatus::new(RpcStatusCode::NOT_FOUND)),
+            Err(err) => {
+                log::error!(logger, "Failed to remove order {}: {:?}", order_id, err);
+                Err(rpc_internal_error("remove_order", err, &self.logger))
+            }
+        }
+    }
+
     async fn live_updates_impl(
         mut responses: ServerStreamingSink<LiveUpdate>,
         mut msg_bus_rx: Receiver<Msg>,
@@ -172,8 +213,6 @@ impl<OB: OrderBook> DeqsClientApi for ClientService<OB> {
     ) {
         let _timer = SVC_COUNTERS.req(&ctx);
         scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
-            // Build a prost response, then convert it to rpc/protobuf types and the errors
-            // to rpc status codes.
             send_result(ctx, sink, self.submit_quotes_impl(req, logger), logger)
         })
     }
@@ -186,9 +225,19 @@ impl<OB: OrderBook> DeqsClientApi for ClientService<OB> {
     ) {
         let _timer = SVC_COUNTERS.req(&ctx);
         scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
-            // Build a prost response, then convert it to rpc/protobuf types and the errors
-            // to rpc status codes.
             send_result(ctx, sink, self.get_quotes_impl(req, logger), logger)
+        })
+    }
+
+    fn remove_order(
+        &mut self,
+        ctx: RpcContext,
+        req: RemoveOrderRequest,
+        sink: UnarySink<RemoveOrderResponse>,
+    ) {
+        let _timer = SVC_COUNTERS.req(&ctx);
+        scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
+            send_result(ctx, sink, self.remove_order_impl(req, logger), logger)
         })
     }
 
