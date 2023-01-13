@@ -8,12 +8,12 @@ use deqs_api::{
     },
     deqs_grpc::{create_deqs_client_api, DeqsClientApi},
 };
-use deqs_order_book::OrderBook;
-use futures::{FutureExt, SinkExt, TryFutureExt};
+use deqs_order_book::{OrderBook, Pair};
+use futures::{FutureExt, SinkExt};
 use grpcio::{RpcContext, RpcStatus, ServerStreamingSink, Service, UnarySink, WriteFlags};
 use mc_common::logger::{log, scoped_global_logger, Logger};
 use mc_transaction_extra::SignedContingentInput;
-use mc_util_grpc::{rpc_invalid_arg_error, rpc_logger, send_result};
+use mc_util_grpc::{rpc_internal_error, rpc_invalid_arg_error, rpc_logger, send_result};
 use mc_util_metrics::SVC_COUNTERS;
 use postage::{
     broadcast::{Receiver, Sender},
@@ -121,8 +121,29 @@ impl<OB: OrderBook> ClientService<OB> {
         })
     }
 
-    fn get_quotes_impl(&self, _req: GetQuotesRequest) -> Result<GetQuotesResponse, RpcStatus> {
-        todo!()
+    fn get_quotes_impl(
+        &self,
+        req: GetQuotesRequest,
+        logger: &Logger,
+    ) -> Result<GetQuotesResponse, RpcStatus> {
+        let orders = self
+            .order_book
+            .get_orders(
+                &Pair::from(req.get_pair()),
+                req.base_range_min..=req.base_range_max,
+                req.limit as usize,
+            )
+            .map_err(|err| rpc_internal_error("get_quotes", err, logger))?;
+        log::debug!(
+            logger,
+            "Request to get {:?} orders returning {} orders",
+            req,
+            orders.len()
+        );
+        Ok(GetQuotesResponse {
+            orders: orders.into_iter().map(|order| (&order).into()).collect(),
+            ..Default::default()
+        })
     }
 
     async fn live_updates_impl(
@@ -167,7 +188,7 @@ impl<OB: OrderBook> DeqsClientApi for ClientService<OB> {
         scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
             // Build a prost response, then convert it to rpc/protobuf types and the errors
             // to rpc status codes.
-            send_result(ctx, sink, self.get_quotes_impl(req), logger)
+            send_result(ctx, sink, self.get_quotes_impl(req, logger), logger)
         })
     }
 
@@ -177,13 +198,17 @@ impl<OB: OrderBook> DeqsClientApi for ClientService<OB> {
         _req: LiveUpdatesRequest,
         responses: ServerStreamingSink<LiveUpdate>,
     ) {
-        let logger = self.logger.clone();
         let receiver = self.msg_bus_tx.subscribe();
 
-        let future = Self::live_updates_impl(responses, receiver)
-            .map_err(move |err: grpcio::Error| log::error!(&logger, "failed to reply: {}", err))
-            // TODO: Do stuff with the error
-            .map(|_| ());
-        ctx.spawn(future)
+        scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
+            let logger = logger.clone();
+
+            let future = Self::live_updates_impl(responses, receiver).map(move |future_result| {
+                if let Err(err) = future_result {
+                    log::error!(logger, "live_updates_impl failed: {:?}", err);
+                }
+            });
+            ctx.spawn(future)
+        })
     }
 }

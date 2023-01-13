@@ -47,10 +47,20 @@ enum QuoteStatusCode {
     OTHER = 4;
 }
 
-message GetQuotesRequest {}
+message GetQuotesRequest {
+    /// Pair we want to get quotes for.
+    Pair pair = 1;
+
+    /// Range of base tokens we are interested in. Orders that have an overlapping range will be returned.
+    uint64 base_range_min = 2;
+    uint64 base_range_max = 3;
+
+    /// Maximum number of orders to return.
+    uint64 limit = 4;
+}
 
 message GetQuotesResponse {
-    repeated external.SignedContingentInput quotes = 1;
+    repeated Order orders = 1;
 }
 
 message LiveUpdatesRequest {

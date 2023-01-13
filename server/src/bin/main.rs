@@ -2,14 +2,11 @@
 
 use clap::Parser;
 use deqs_order_book::InMemoryOrderBook;
-use deqs_server::{Server, ServerConfig};
+use deqs_server::{Msg, Server, ServerConfig};
 use mc_common::logger::o;
 use mc_util_grpc::AdminServer;
+use postage::{broadcast, prelude::Stream};
 use std::sync::Arc;
-use tokio::time::{sleep, Duration};
-
-use deqs_server::Msg;
-use postage::broadcast;
 
 /// Maximum number of messages that can be queued in the message bus.
 const MSG_BUS_QUEUE_SIZE: usize = 1000;
@@ -21,12 +18,8 @@ async fn main() {
     let (logger, _global_logger_guard) = mc_common::logger::create_app_logger(o!());
     mc_common::setup_panic_handler();
 
-    let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
+    let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
     let order_book = InMemoryOrderBook::default();
-
-    // Must drop the default receiver, otherwise we will get stuck once its queue
-    // fills up.
-    drop(msg_bus_rx);
 
     let mut server = Server::new(
         msg_bus_tx,
@@ -51,8 +44,10 @@ async fn main() {
         .expect("Failed starting admin server")
     });
 
-    // Keep the server alive
+    // Keep the server alive by just reading messages from the message bus.
+    // This allows us to ensure we always have at least 1 receiver on the message
+    // bus, which will prevent sends from failing.
     loop {
-        sleep(Duration::from_secs(1)).await;
+        let _ = msg_bus_rx.recv().await;
     }
 }
