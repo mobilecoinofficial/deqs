@@ -752,6 +752,7 @@ dependencies = [
  "displaydoc",
  "futures",
  "grpcio",
+ "hex",
  "mc-api",
  "mc-common",
  "mc-transaction-types",

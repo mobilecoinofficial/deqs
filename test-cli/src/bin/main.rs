@@ -1,8 +1,13 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use clap::{Parser, Subcommand};
-use deqs_api::{deqs::SubmitQuotesRequest, deqs_grpc::DeqsClientApiClient, DeqsClientUri};
+use deqs_api::{
+    deqs::{QuoteStatusCode, SubmitQuotesRequest},
+    deqs_grpc::DeqsClientApiClient,
+    DeqsClientUri,
+};
 use deqs_mc_test_utils::{create_partial_sci, create_sci};
+use deqs_order_book::Order;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_common::logger::{log, o};
 use mc_transaction_types::TokenId;
@@ -131,6 +136,20 @@ fn main() {
             };
             let resp = client_api.submit_quotes(&req).expect("submit quote failed");
             println!("{:#?}", resp);
+            println!();
+            for (i, (status_code, order)) in
+                resp.status_codes.iter().zip(resp.orders.iter()).enumerate()
+            {
+                match status_code {
+                    QuoteStatusCode::CREATED => {
+                        let order = Order::try_from(order).expect("invalid order");
+                        println!("{}. {}", i, hex::encode(**order.id()));
+                    }
+                    err => {
+                        println!("{}. {:?}", i, err);
+                    }
+                }
+            }
         }
     }
 }
