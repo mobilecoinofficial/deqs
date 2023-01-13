@@ -3,7 +3,6 @@
 // API for decentralized quoting service (DEQS)
 
 syntax = "proto3";
-import "google/protobuf/timestamp.proto";
 
 package deqs;
 option java_package = "com.mobilecoin.api";
@@ -69,5 +68,5 @@ message Order {
     uint64 base_range_min = 4;
     uint64 base_range_max = 5;
     uint64 max_counter_tokens = 6;
-    google.protobuf.Timestamp timestamp = 7;
+    uint64 timestamp = 7;
 }

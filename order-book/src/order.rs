@@ -142,7 +142,28 @@ impl Order {
         })
     }
 
-    /// Get underlying SCI.
+    /// Create a new order by specifying the exact value for each field.
+    pub fn new_from_fields(
+        sci: SignedContingentInput,
+        id: OrderId,
+        pair: Pair,
+        base_range: RangeInclusive<u64>,
+        max_counter_tokens: u64,
+        timestamp: u64,
+    ) -> Self {
+        Self {
+            sci,
+            id,
+            pair,
+            base_range,
+            max_counter_tokens,
+            timestamp,
+        }
+    }
+
+
+
+   /// Get underlying SCI.
     pub fn sci(&self) -> &SignedContingentInput {
         &self.sci
     }
@@ -174,6 +195,11 @@ impl Order {
     /// the available base tokens
     pub fn max_counter_tokens(&self) -> u64 {
         self.max_counter_tokens
+    }
+
+    /// Get timestamp.
+    pub fn timestamp(&self) -> u64 {
+        self.timestamp
     }
 
     // Get the number of counter tokens we will need to provide in order to consume

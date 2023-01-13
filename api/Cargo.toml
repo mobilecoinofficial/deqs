@@ -8,7 +8,9 @@ links = "deqs-api"
 
 [dependencies]
 deqs-order-book = { path = "../order-book" }
+
 mc-api = { path = "../mobilecoin/api" }
+mc-transaction-extra = { path = "../mobilecoin/transaction/extra" }
 mc-transaction-types = { path = "../mobilecoin/transaction/types" }
 mc-util-uri = { path = "../mobilecoin/util/uri" }
 
@@ -16,6 +18,10 @@ futures = "0.3"
 grpcio = "0.11.0"
 protobuf = "2.27.1"
 rand = "0.8" # TODO something needs to enable the default features on rand, and since we don't have any dependency of mc-api doing that we need to do it here for now
+
+[dev-dependencies]
+deqs-mc-test-utils  = { path = "../mc-test-utils" }
+
 
 [build-dependencies]
 mc-util-build-grpc = { path = "../mobilecoin/util/build/grpc" }

@@ -2,12 +2,12 @@
 
 //! Convert to/from Order.
 
+use std::ops::RangeInclusive;
+
 use crate::deqs as api;
-use deqs_order_book::Order;
-//use mc_api::ConversionError;
-
-const NANOS_PER_SEC: u32 = 1_000_000_000;
-
+use deqs_order_book::{Order, OrderId, Pair};
+use mc_api::ConversionError;
+use mc_transaction_extra::SignedContingentInput;
 
 /// Convert Rust Order to Protobuf Order.
 impl From<&Order> for api::Order {
@@ -19,66 +19,58 @@ impl From<&Order> for api::Order {
         order.set_base_range_min(*src.base_range().start());
         order.set_base_range_max(*src.base_range().end());
         order.set_max_counter_tokens(src.max_counter_tokens());
-
-        let seconds = src.timestamp().checked_div(NANOS_PER_SEC).unwrap();
+        order.set_timestamp(src.timestamp());
 
         order
     }
 }
 
-// /// Convert api::Order --> Order.
-// impl TryFrom<&api::Order> for Order {
-//     type Error = ConversionError;
+/// Convert api::Order --> Order.
+impl TryFrom<&api::Order> for Order {
+    type Error = ConversionError;
 
-//     fn try_from(source: &api::Order) -> Result<Self, Self::Error> {
-//         let bytes: &[u8] = source.get_data();
-//         Ok(Order::try_from(bytes)?)
-//     }
-// }
+    fn try_from(source: &api::Order) -> Result<Self, Self::Error> {
+        let sci = SignedContingentInput::try_from(source.get_sci())?;
+        let id = OrderId::try_from(source.get_id())?;
+        let pair = Pair::try_from(source.get_pair())?;
+        let base_range =
+            RangeInclusive::new(source.get_base_range_min(), source.get_base_range_max());
+        let max_counter_tokens = source.get_max_counter_tokens();
+        let timestamp = source.get_timestamp();
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+        Ok(Self::new_from_fields(
+            sci,
+            id,
+            pair,
+            base_range,
+            max_counter_tokens,
+            timestamp,
+        ))
+    }
+}
 
-//     #[test]
-//     // Order --> api::Order
-//     fn test_order_from() {
-//         let source: Order = Order([4; 32]);
-//         let converted = api::Order::from(&source);
-//         assert_eq!(converted.data, source.to_vec());
-//     }
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use deqs_mc_test_utils::create_sci;
+    use mc_transaction_types::TokenId;
+    use rand::{rngs::StdRng, SeedableRng};
 
-//     #[test]
-//     // api::Order --> Order
-//     fn test_order_try_from() {
-//         let mut source = api::Order::new();
-//         source.set_data(Order([5; 32]).to_vec());
+    #[test]
+    // Order --> api::Order --> Order
+    fn test_order_identity() {
+        let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+        let sci = create_sci(
+            TokenId::from(43432),
+            TokenId::from(6886868),
+            10,
+            30,
+            &mut rng,
+        );
+        let source = Order::try_from(sci).unwrap();
 
-//         // try_from should succeed.
-//         let order = Order::try_from(&source).unwrap();
-
-//         // order should have the correct value.
-//         assert_eq!(order, Order([5; 32]));
-//     }
-
-//     #[test]
-//     // `Order::try_from` should return ConversionError if the source contains
-// the     // wrong number of bytes.
-//     fn test_order_try_from_conversion_errors() {
-//         // Helper function asserts that a ConversionError::ArrayCastError is
-// produced.         fn expects_array_cast_error(bytes: &[u8]) {
-//             let mut source = api::Order::new();
-//             source.set_data(bytes.to_vec());
-//             match Order::try_from(&source).unwrap_err() {
-//                 ConversionError::ArrayCastError => {} // Expected outcome.
-//                 _ => panic!(),
-//             }
-//         }
-
-//         // Too many bytes should produce an ArrayCastError.
-//         expects_array_cast_error(&[11u8; 119]);
-
-//         // Too few bytes should produce an ArrayCastError.
-//         expects_array_cast_error(&[11u8; 3]);
-//     }
-// }
+        let converted = api::Order::from(&source);
+        let recovererd = Order::try_from(&converted).unwrap();
+        assert_eq!(source, recovererd);
+    }
+}

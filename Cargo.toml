@@ -3,6 +3,7 @@ cargo-features = ["named-profiles"]
 [workspace]
 members = [
     "api",
+    "mc-test-utils",
     "order-book",
     "server",
 ]

@@ -32,7 +32,7 @@ mod tests {
 
     #[test]
     // Pair --> api::Pair --> Pair
-    fn test_pair_from() {
+    fn test_pair_identity() {
         let source: Pair = Pair {
             base_token_id: TokenId::from(10203040),
             counter_token_id: TokenId::from(40506070),
