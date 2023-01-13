@@ -60,6 +60,6 @@ use postage::stream::Stream;
 async fn print_messages(name: &'static str, mut rx: impl Stream<Item = Msg> + Unpin) {
     while let Some(message) = rx.recv().await {
         println!("{} got a message: {:?}", name, message);
-        sleep(Duration::from_secs(5)).await;
+        //sleep(Duration::from_secs(5)).await;
     }
 }
