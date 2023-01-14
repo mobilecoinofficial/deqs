@@ -125,9 +125,14 @@ impl<OB: OrderBook> ClientService<OB> {
 
     fn get_quotes_impl(
         &self,
-        req: GetQuotesRequest,
+        mut req: GetQuotesRequest,
         logger: &Logger,
     ) -> Result<GetQuotesResponse, RpcStatus> {
+        // If no range is specified, adjust so that it covers the entire range.
+        if req.base_range_min == 0 && req.base_range_max == 0 {
+            req.base_range_max = u64::MAX;
+        }
+
         let orders = self
             .order_book
             .get_orders(
@@ -260,4 +265,252 @@ impl<OB: OrderBook> DeqsClientApi for ClientService<OB> {
             ctx.spawn(future)
         })
     }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use deqs_api::{deqs_grpc::DeqsClientApiClient, DeqsClientUri};
+    use deqs_mc_test_utils::create_sci;
+    use deqs_order_book::{InMemoryOrderBook, Order};
+    use grpcio::{ChannelBuilder, EnvBuilder, Server, ServerBuilder};
+    use mc_common::logger::test_with_logger;
+    use mc_transaction_types::TokenId;
+    use mc_util_grpc::{ConnectionUriGrpcioChannel, ConnectionUriGrpcioServer};
+    use postage::broadcast;
+    use rand::{rngs::StdRng, SeedableRng};
+    use std::{str::FromStr, sync::Arc};
+
+    fn create_test_client_and_server<OB: OrderBook>(
+        order_book: &OB,
+        logger: &Logger,
+    ) -> (DeqsClientApiClient, Server, Receiver<Msg>) {
+        let server_env = Arc::new(EnvBuilder::new().build());
+        let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(1000);
+
+        let client_service =
+            ClientService::new(msg_bus_tx, order_book.clone(), logger.clone()).into_service();
+        let server_builder = ServerBuilder::new(server_env)
+            .register_service(client_service)
+            .bind_using_uri(
+                &DeqsClientUri::from_str("insecure-deqs://127.0.0.1:0").unwrap(),
+                logger.clone(),
+            );
+        let mut server = server_builder.build().expect("build server");
+        server.start();
+
+        let client_env = Arc::new(EnvBuilder::new().build());
+        let ch = ChannelBuilder::default_channel_builder(client_env).connect_to_uri(
+            &DeqsClientUri::from_str(&format!(
+                "insecure-deqs://127.0.0.1:{}",
+                server.bind_addrs().next().unwrap().1
+            ))
+            .unwrap(),
+            &logger,
+        );
+        let client_api = DeqsClientApiClient::new(ch);
+
+        (client_api, server, msg_bus_rx)
+    }
+
+    #[test_with_logger]
+    fn submit_quotes_add_orders(logger: Logger) {
+        let pair = Pair {
+            base_token_id: TokenId::from(1),
+            counter_token_id: TokenId::from(2),
+        };
+        let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+        let order_book = InMemoryOrderBook::default();
+        let (client_api, _server, _msg_bus_rx) =
+            create_test_client_and_server(&order_book, &logger);
+
+        let scis = (0..10)
+            .map(|_| create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng))
+            .map(|sci| mc_api::external::SignedContingentInput::from(&sci))
+            .collect::<Vec<_>>();
+
+        let req = SubmitQuotesRequest {
+            quotes: scis.clone().into(),
+            ..Default::default()
+        };
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+
+        assert_eq!(
+            resp.get_status_codes(),
+            vec![QuoteStatusCode::CREATED; scis.len()]
+        );
+        assert_eq!(resp.get_error_messages(), vec![""; scis.len()]);
+        let mut orders = resp
+            .get_orders()
+            .iter()
+            .map(|o| Order::try_from(o).unwrap())
+            .collect::<Vec<_>>();
+
+        let mut orders2 = order_book
+            .get_orders(&pair, .., 0)
+            .unwrap()
+            .into_iter()
+            .rev() // Orders returned in newest to oldest order
+            .collect::<Vec<_>>();
+
+        // Since orders are added in parallel, the exact order at which they get added
+        // is not determinstic.
+        orders.sort();
+        orders2.sort();
+
+        assert_eq!(orders2, orders);
+    }
+
+    #[test_with_logger]
+    fn submit_quotes_refuses_duplicate_order(logger: Logger) {
+        let pair = Pair {
+            base_token_id: TokenId::from(1),
+            counter_token_id: TokenId::from(2),
+        };
+        let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+        let order_book = InMemoryOrderBook::default();
+        let (client_api, _server, _msg_bus_rx) =
+            create_test_client_and_server(&order_book, &logger);
+
+        let sci = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
+        let req = SubmitQuotesRequest {
+            quotes: vec![(&sci).into()].into(),
+            ..Default::default()
+        };
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+        assert_eq!(resp.status_codes, vec![QuoteStatusCode::CREATED]);
+
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+        assert_eq!(
+            resp.status_codes,
+            vec![QuoteStatusCode::ORDER_ALREADY_EXISTS]
+        );
+    }
+
+    #[test_with_logger]
+    fn get_quotes_filter_correctly(logger: Logger) {
+        let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+        let order_book = InMemoryOrderBook::default();
+        let (client_api, _server, _msg_bus_rx) =
+            create_test_client_and_server(&order_book, &logger);
+
+        let sci1 = create_sci(TokenId::from(1), TokenId::from(2), 10, 20, &mut rng);
+        let sci2 = create_sci(TokenId::from(1), TokenId::from(2), 10, 50, &mut rng);
+        let sci3 = create_sci(TokenId::from(3), TokenId::from(4), 10, 20, &mut rng);
+        let sci4 = create_sci(TokenId::from(3), TokenId::from(4), 12, 50, &mut rng);
+
+        let scis = [&sci1, &sci2, &sci3, &sci4]
+            .into_iter()
+            .map(|sci| mc_api::external::SignedContingentInput::from(sci))
+            .collect::<Vec<_>>();
+
+        let req = SubmitQuotesRequest {
+            quotes: scis.clone().into(),
+            ..Default::default()
+        };
+        client_api.submit_quotes(&req).expect("submit quote failed");
+
+        // Correct pair is return without any extra filtering
+        let pair = deqs_api::deqs::Pair {
+            base_token_id: 3,
+            counter_token_id: 4,
+            ..Default::default()
+        };
+
+        let mut req = GetQuotesRequest::default();
+        req.set_pair(pair);
+        let resp = client_api.get_quotes(&req).expect("get quotes failed");
+        let received_scis = resp
+            .get_orders()
+            .iter()
+            .map(|order| SignedContingentInput::try_from(order.get_sci()).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(received_scis, vec![sci3.clone(), sci4.clone()]);
+
+        // Limit is respected
+        req.set_limit(1);
+        let resp = client_api.get_quotes(&req).expect("get quotes failed");
+        let received_scis = resp
+            .get_orders()
+            .iter()
+            .map(|order| SignedContingentInput::try_from(order.get_sci()).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(received_scis, vec![sci3.clone()]);
+
+        // Base range is respected
+        req.set_limit(u64::MAX);
+        req.set_base_range_max(10);
+        let resp = client_api.get_quotes(&req).expect("get quotes failed");
+        let received_scis = resp
+            .get_orders()
+            .iter()
+            .map(|order| SignedContingentInput::try_from(order.get_sci()).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(received_scis, vec![sci3.clone()]);
+
+        req.set_base_range_min(11);
+        req.set_base_range_max(12);
+        let resp = client_api.get_quotes(&req).expect("get quotes failed");
+        let received_scis = resp
+            .get_orders()
+            .iter()
+            .map(|order| SignedContingentInput::try_from(order.get_sci()).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(received_scis, vec![sci4.clone()]);
+
+        req.set_base_range_min(10);
+        req.set_base_range_max(12);
+        let resp = client_api.get_quotes(&req).expect("get quotes failed");
+        let received_scis = resp
+            .get_orders()
+            .iter()
+            .map(|order| SignedContingentInput::try_from(order.get_sci()).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(received_scis, vec![sci3, sci4]);
+    }
+
+    #[test_with_logger]
+    fn remove_order_works(logger: Logger) {
+        let pair = Pair {
+            base_token_id: TokenId::from(1),
+            counter_token_id: TokenId::from(2),
+        };
+        let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+        let order_book = InMemoryOrderBook::default();
+        let (client_api, _server, _msg_bus_rx) =
+            create_test_client_and_server(&order_book, &logger);
+
+        let sci = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
+        let req = SubmitQuotesRequest {
+            quotes: vec![(&sci).into()].into(),
+            ..Default::default()
+        };
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+        assert_eq!(resp.status_codes, vec![QuoteStatusCode::CREATED]);
+
+        // Order is present
+        let orders = order_book.get_orders(&pair, .., 0).unwrap();
+        assert_eq!(orders.len(), 1);
+
+        // Remove it.
+        let order_id = deqs_api::deqs::OrderId::from(orders[0].id());
+        let mut req = RemoveOrderRequest::default();
+        req.set_order_id(order_id);
+
+        let resp = client_api.remove_order(&req).expect("remove order failed");
+        assert_eq!(resp.get_order(), &(&orders[0]).into());
+
+        // Try again, should fail.
+        assert!(
+            matches!(client_api.remove_order(&req), Err(grpcio::Error::RpcFailure(status)) if status.code() == grpcio::RpcStatusCode::NOT_FOUND)
+        );
+
+        // Invalid order id should fail.
+        let req = RemoveOrderRequest::default();
+        assert!(
+            matches!(client_api.remove_order(&req), Err(grpcio::Error::RpcFailure(status)) if status.code() == grpcio::RpcStatusCode::INVALID_ARGUMENT)
+        );
+    }
+
+    // TODO add test for streaming
 }
