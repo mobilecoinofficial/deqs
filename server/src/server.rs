@@ -74,7 +74,7 @@ impl Server {
 
         log::info!(
             self.logger,
-            "Ingest GRPC API listening on {}",
+            "Deqs Client GRPC API listening on {}",
             self.client_listen_uri.addr(),
         );
 
