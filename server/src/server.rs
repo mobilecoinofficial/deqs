@@ -60,7 +60,7 @@ impl Server {
 
         let grpc_env = Arc::new(
             grpcio::EnvBuilder::new()
-                .name_prefix("Ingest-RPC".to_string())
+                .name_prefix("Deqs-Client-RPC".to_string())
                 .build(),
         );
 
