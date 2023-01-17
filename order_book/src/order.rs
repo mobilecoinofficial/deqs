@@ -265,8 +265,8 @@ impl Ord for Order {
         // (self_base / self_counter) > (other_base / other_counter)
         // Since we want to avoid division, we multiply both sides by the denominators
         // and get: self_base * other_counter > other_base * self_counter
-        let self_rate = other.max_base_tokens() as u64 * self.max_counter_tokens() as u64;
-        let other_rate = self.max_base_tokens() as u64 * other.max_counter_tokens() as u64;
+        let self_rate = other.max_base_tokens() as u128 * self.max_counter_tokens() as u128;
+        let other_rate = self.max_base_tokens() as u128 * other.max_counter_tokens() as u128;
 
         let k1 = (&self.pair, self_rate, &self.timestamp, &self.id);
         let k2 = (&other.pair, other_rate, &other.timestamp, &other.id);
