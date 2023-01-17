@@ -78,7 +78,8 @@ jobs:
           submodules: recursive
       - uses: actions-rs/toolchain@v1
         with:
-          toolchain: stable
+          toolchain: nightly
+          override: true
           profile: minimal
       - uses: actions-rs/install@v0.1
         with:
