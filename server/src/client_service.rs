@@ -60,7 +60,7 @@ impl<OB: OrderBook> ClientService<OB> {
         let scis = req
             .get_quotes()
             .iter()
-            .map(|sci| SignedContingentInput::try_from(sci))
+            .map(SignedContingentInput::try_from)
             .collect::<Result<Vec<_>, _>>()
             .map_err(|err| rpc_invalid_arg_error("quotes", err, logger))?;
 
@@ -116,7 +116,7 @@ impl<OB: OrderBook> ClientService<OB> {
         }
 
         Ok(SubmitQuotesResponse {
-            status_codes: status_codes.into(),
+            status_codes,
             error_messages: error_messages.into(),
             orders: orders.into(),
             ..Default::default()
