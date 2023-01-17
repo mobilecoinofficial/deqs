@@ -10,7 +10,7 @@ option go_package = "mobilecoin/api";
 
 import "external.proto";
 
-service DeqsAPI {
+service DeqsClientAPI {
     /// This is called to submit a new quote
     rpc SubmitQuote(SubmitQuoteRequest) returns (SubmitQuoteResponse) {}
     /// This is called to get the existing quotes
