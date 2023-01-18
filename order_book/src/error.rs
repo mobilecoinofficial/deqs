@@ -13,7 +13,7 @@ pub enum Error {
     /// Unsupported SCI: {0}
     UnsupportedSci(String),
 
-    /// Order already exists in bookl
+    /// Order already exists in book
     OrderAlreadyExists,
 
     /// Order not found
