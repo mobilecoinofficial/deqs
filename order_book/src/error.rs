@@ -19,8 +19,8 @@ pub enum Error {
     /// Order not found
     OrderNotFound,
 
-    /// Order cannot fulfil the desired amount ({0}) of base tokens
-    CannotFulfilBaseTokens(u64),
+    /// Order cannot fulfill the desired amount ({0}) of base tokens
+    InsufficientBaseTokens(u64),
 
     /// Implementation specific error: {0}
     ImplementationSpecific(String),
