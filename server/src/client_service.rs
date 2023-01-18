@@ -273,13 +273,18 @@ mod tests {
     use deqs_api::{deqs_grpc::DeqsClientApiClient, DeqsClientUri};
     use deqs_mc_test_utils::create_sci;
     use deqs_order_book::{InMemoryOrderBook, Order};
+    use futures::{executor::block_on, StreamExt};
     use grpcio::{ChannelBuilder, EnvBuilder, Server, ServerBuilder};
     use mc_common::logger::test_with_logger;
     use mc_transaction_types::TokenId;
     use mc_util_grpc::{ConnectionUriGrpcioChannel, ConnectionUriGrpcioServer};
     use postage::broadcast;
     use rand::{rngs::StdRng, SeedableRng};
-    use std::{str::FromStr, sync::Arc};
+    use std::{
+        str::FromStr,
+        sync::{mpsc::channel, Arc},
+        thread,
+    };
 
     fn create_test_client_and_server<OB: OrderBook>(
         order_book: &OB,
@@ -512,5 +517,65 @@ mod tests {
         );
     }
 
-    // TODO add test for streaming
+    #[test_with_logger]
+    fn streaming_works(logger: Logger) {
+        let pair = Pair {
+            base_token_id: TokenId::from(1),
+            counter_token_id: TokenId::from(2),
+        };
+        let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+        let order_book = InMemoryOrderBook::default();
+        let (client_api, _server, _msg_bus_rx) =
+            create_test_client_and_server(&order_book, &logger);
+
+        let (tx, rx) = channel();
+
+        let thread_client_api = client_api.clone();
+        let _join_handle = thread::spawn(move || {
+            let req = LiveUpdatesRequest {
+                ..Default::default()
+            };
+            let mut stream = thread_client_api
+                .live_updates(&req)
+                .expect("stream quotes failed");
+
+            block_on(async {
+                while let Some(resp) = stream.next().await {
+                    match resp {
+                        Ok(resp) => {
+                            tx.send(resp).expect("send failed");
+                        }
+                        Err(_) => {
+                            break;
+                        }
+                    }
+                }
+            });
+        });
+
+        // Initially, the receiver should be empty.
+        assert!(rx.try_recv().is_err());
+
+        let sci = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
+        let req = SubmitQuotesRequest {
+            quotes: vec![(&sci).into()].into(),
+            ..Default::default()
+        };
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+        assert_eq!(resp.status_codes, vec![QuoteStatusCode::CREATED]);
+        let added_order = &resp.get_orders()[0];
+
+        // We should now see our quote arrive in the stream.
+        let resp = rx.recv().expect("recv failed");
+        assert_eq!(resp.get_order_added(), added_order);
+
+        // Remove the order, we should see a live update.
+        let mut req = RemoveOrderRequest::default();
+        req.set_order_id(added_order.get_id().clone());
+
+        let _resp = client_api.remove_order(&req).expect("remove order failed");
+
+        let resp = rx.recv().expect("recv failed");
+        assert_eq!(resp.get_order_removed(), added_order.get_id());
+    }
 }
