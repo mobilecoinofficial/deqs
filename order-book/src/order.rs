@@ -161,9 +161,7 @@ impl Order {
         }
     }
 
-
-
-   /// Get underlying SCI.
+    /// Get underlying SCI.
     pub fn sci(&self) -> &SignedContingentInput {
         &self.sci
     }

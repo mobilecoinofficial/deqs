@@ -23,6 +23,7 @@ use postage::{
     sink::Sink,
 };
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 /// GRPC Client service
 #[derive(Clone)]
@@ -57,6 +58,16 @@ impl<OB: OrderBook> ClientService<OB> {
         req: SubmitQuotesRequest,
         logger: &Logger,
     ) -> Result<SubmitQuotesResponse, RpcStatus> {
+        // Capture timestamp before we do anything, this both ensures orders are created
+        // with the time we actually began processing the request, and that all orders
+        // are created with the same time so ordering is determinstic.
+        let timestamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|err| rpc_internal_error("submit_quotes", err, logger))?
+            .as_nanos()
+            .try_into()
+            .map_err(|err| rpc_internal_error("submit_quotes", err, logger))?;
+
         let scis = req
             .get_quotes()
             .iter()
@@ -68,7 +79,7 @@ impl<OB: OrderBook> ClientService<OB> {
 
         let results = scis
             .into_par_iter()
-            .map(|sci| self.order_book.add_sci(sci))
+            .map(|sci| self.order_book.add_sci(sci, Some(timestamp)))
             .collect::<Vec<_>>();
 
         let mut status_codes = vec![];
