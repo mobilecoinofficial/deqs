@@ -14,8 +14,17 @@ pub trait OrderBook {
     /// Error data type
     type Error: Debug + Display + Eq + Into<Error>;
 
-    /// Add an SCI to the order book
-    fn add_sci(&self, sci: SignedContingentInput) -> Result<Order, Self::Error>;
+    /// Add an SCI to the order book.
+    ///
+    /// # Arguments
+    /// * `sci` - The SCI to add.
+    /// * `timestamp` - The timestamp of the block containing the SCI. If not
+    ///   provided, the current system time is used.
+    fn add_sci(
+        &self,
+        sci: SignedContingentInput,
+        timestamp: Option<u64>,
+    ) -> Result<Order, Self::Error>;
 
     /// Remove a single order from the book, identified by its id.
     /// Returns the removed order if it was found

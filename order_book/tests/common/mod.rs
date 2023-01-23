@@ -162,14 +162,14 @@ pub fn basic_happy_flow(order_book: &impl OrderBook) {
 
     // Adding an order should work
     let sci = create_sci(&pair, 10, 20, &mut rng);
-    let order = order_book.add_sci(sci).unwrap();
+    let order = order_book.add_sci(sci, None).unwrap();
 
     let orders = order_book.get_orders(&pair, .., 0).unwrap();
     assert_eq!(orders, vec![order.clone()]);
 
     // Adding a second order should work
     let sci = create_sci(&pair, 10, 200, &mut rng);
-    let order2 = order_book.add_sci(sci).unwrap();
+    let order2 = order_book.add_sci(sci, None).unwrap();
 
     let orders = order_book.get_orders(&pair, .., 0).unwrap();
     assert_eq!(orders, vec![order.clone(), order2.clone()]);
@@ -207,7 +207,7 @@ pub fn basic_happy_flow(order_book: &impl OrderBook) {
 
     // Removing orders by tombstone block should work
     let sci = create_sci(&pair, 10, 20, &mut rng);
-    let order1 = order_book.add_sci(sci).unwrap();
+    let order1 = order_book.add_sci(sci, None).unwrap();
     let order1_tombstone = order
         .sci()
         .tx_in
@@ -219,7 +219,7 @@ pub fn basic_happy_flow(order_book: &impl OrderBook) {
     let mut sci_builder = create_sci_builder(&pair, 10, 20, &mut rng);
     sci_builder.set_tombstone_block(order1_tombstone - 1);
     let sci2 = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
-    let order2 = order_book.add_sci(sci2).unwrap();
+    let order2 = order_book.add_sci(sci2, None).unwrap();
 
     assert_eq!(
         order_book
@@ -267,7 +267,7 @@ pub fn cannot_add_invalid_sci(order_book: &impl OrderBook) {
     let sci = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
 
     assert_eq!(
-        order_book.add_sci(sci).unwrap_err().into(),
+        order_book.add_sci(sci, None).unwrap_err().into(),
         Error::UnsupportedSci("Unsupported number of required/partial outputs 2/0".into())
     );
 
@@ -276,7 +276,7 @@ pub fn cannot_add_invalid_sci(order_book: &impl OrderBook) {
     sci.mlsag.responses.pop();
 
     assert_eq!(
-        order_book.add_sci(sci).unwrap_err().into(),
+        order_book.add_sci(sci, None).unwrap_err().into(),
         Error::Sci(SignedContingentInputError::RingSignature(
             RingSignatureError::LengthMismatch(22, 21),
         ))
@@ -294,27 +294,27 @@ pub fn get_orders_filtering_works(order_book: &impl OrderBook) {
 
     // Offer for trading 100 pair1.base tokens into 1000 pair1.counter tokens
     let sci = create_sci(&pair1, 100, 1000, &mut rng);
-    let p1_100_for_1000 = order_book.add_sci(sci).unwrap();
+    let p1_100_for_1000 = order_book.add_sci(sci, None).unwrap();
 
     // Offer for partially trading up to 100 pair2.base tokens into 1000
     // pair2.counter tokens
     let sci = create_partial_sci(&pair2, 100, 1, 0, 1000, &mut rng);
-    let p2_100_for_1000 = order_book.add_sci(sci).unwrap();
+    let p2_100_for_1000 = order_book.add_sci(sci, None).unwrap();
 
     // Offer for partially trading 5 pair2.base tokens into 50 pair2.counter
     // tokens
     let sci = create_partial_sci(&pair2, 5, 1, 0, 50, &mut rng);
-    let p2_5_for_50 = order_book.add_sci(sci).unwrap();
+    let p2_5_for_50 = order_book.add_sci(sci, None).unwrap();
 
     // Offer for partially trading 50 pair2.base tokens into 5 pair2.counter
     // tokens
     let sci = create_partial_sci(&pair2, 50, 1, 0, 5, &mut rng);
-    let p2_50_for_5 = order_book.add_sci(sci).unwrap();
+    let p2_50_for_5 = order_book.add_sci(sci, None).unwrap();
 
     // Offer for exactly trading 50 pair2.base tokens into 3 pair2.counter
     // tokens
     let sci = create_sci(&pair2, 50, 3, &mut rng);
-    let p2_50_for_3 = order_book.add_sci(sci).unwrap();
+    let p2_50_for_3 = order_book.add_sci(sci, None).unwrap();
 
     // Get all orders at any quantity.
     let orders = order_book.get_orders(&pair1, .., 0).unwrap();

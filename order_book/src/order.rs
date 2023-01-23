@@ -36,124 +36,23 @@ pub struct Order {
 }
 
 impl Order {
-    /// Get underlying SCI.
-    pub fn sci(&self) -> &SignedContingentInput {
-        &self.sci
-    }
-
-    /// Get unique identifier.
-    pub fn id(&self) -> &OrderId {
-        &self.id
-    }
-
-    /// Get the pair being traded by this order.
-    pub fn pair(&self) -> &Pair {
-        &self.pair
-    }
-
-    /// Get the range of base tokens offered by this order (the minimum and
-    /// maximum amount of base token that can be obtained by fulfiling the
-    /// order).
-    pub fn base_range(&self) -> &RangeInclusive<u64> {
-        &self.base_range
-    }
-
-    /// Get the maximum amount of base tokens that can be provided by this
-    /// order.
-    pub fn max_base_tokens(&self) -> u64 {
-        *self.base_range.end()
-    }
-
-    /// Get the maximum amount of counter tokens required to completely use all
-    /// the available base tokens
-    pub fn max_counter_tokens(&self) -> u64 {
-        self.max_counter_tokens
-    }
-
-    // Get the number of counter tokens we will need to provide in order to consume
-    // this SCI and receive a total of base_tokens back.
-    pub fn counter_tokens_cost(&self, base_tokens: u64) -> Result<u64, Error> {
-        if !self.base_range.contains(&base_tokens) {
-            return Err(Error::CannotFulfilBaseTokens(base_tokens));
-        }
-
-        // TODO: This is making strong assumptions about the structure of the SCI and
-        // doesn't currently take into account the scenario where we would also
-        // want a fee output to pay the DEQS.
-        let input_rules = if let Some(input_rules) = self.sci.tx_in.input_rules.as_ref() {
-            input_rules
+    /// Create a new order from SCI and timestamp.
+    ///
+    /// # Arguments
+    /// * `sci` - The SCI to add.
+    /// * `timestamp` - The timestamp of the block containing the SCI. If not
+    ///   provided, the system time is used.
+    pub fn new(sci: SignedContingentInput, timestamp: Option<u64>) -> Result<Self, Error> {
+        let timestamp = if let Some(timestamp) = timestamp {
+            timestamp
         } else {
-            return Err(Error::UnsupportedSci("Missing input rules".into()));
+            SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|_| Error::Time)?
+                .as_nanos()
+                .try_into()
+                .map_err(|_| Error::Time)?
         };
-
-        match (
-            input_rules.required_outputs.len(),
-            input_rules.partial_fill_outputs.len(),
-        ) {
-            (0, 0) => Err(Error::UnsupportedSci("No required/partial outputs".into())),
-
-            (1, 0) => {
-                // Single required non-partial output. This order can only execute if are taking
-                // the entire amount.
-                // The assert here makes sense since we should only get here if base_tokens is a
-                // range containing only self.sci.pseudo_output_amount.value
-                assert!(base_tokens == self.sci.pseudo_output_amount.value);
-
-                // In a non-partial swap, the fulfiller need to provide the amount specified in
-                // the (only, for now) required output.
-                Ok(self.sci.required_output_amounts[0].value)
-            }
-
-            (num_required_outputs @ (0 | 1), 1) => {
-                // Single partial output or a single partial output + change amount.
-                // The fact that the required output is treated as change has been verified when
-                // the Order was created.
-
-                // The amount we are taking must be above the minimum fill value. It is expected
-                // to be, since we checked base_range at the beginning.
-                assert!(base_tokens >= input_rules.min_partial_fill_value);
-
-                // The amount we are taking must be below the maximum available. It is expected
-                // to be, since we checked base_range at the beginning.
-                let mut max_available_amount = self.sci.pseudo_output_amount.value;
-                if num_required_outputs == 1 {
-                    assert!(max_available_amount > self.sci.required_output_amounts[0].value);
-                    max_available_amount -= self.sci.required_output_amounts[0].value;
-                };
-                assert!(base_tokens <= max_available_amount);
-
-                // The ratio being filled
-                let fill_fraction_num: u128 = base_tokens as u128;
-                let fill_fractions_denom = self.sci.pseudo_output_amount.value as u128;
-
-                // Calculate the number of counter tokens we need to return as change to the
-                // offerer of the SCI. It is calculated as a fraction of the partial fill
-                // output.
-                let (amount, _) = input_rules.partial_fill_outputs[0].reveal_amount()?;
-                let num_128 = amount.value as u128 * fill_fraction_num;
-                // Divide and round down
-                Ok((num_128 / fill_fractions_denom) as u64)
-            }
-
-            _ => Err(Error::UnsupportedSci(format!(
-                "Unsupported number of required/partial outputs {}/{}",
-                input_rules.required_outputs.len(),
-                input_rules.partial_fill_outputs.len()
-            ))),
-        }
-    }
-}
-
-impl TryFrom<SignedContingentInput> for Order {
-    type Error = Error;
-
-    fn try_from(sci: SignedContingentInput) -> Result<Self, Self::Error> {
-        let timestamp = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| Error::Time)?
-            .as_nanos()
-            .try_into()
-            .map_err(|_| Error::Time)?;
 
         sci.validate()?;
 
@@ -241,6 +140,121 @@ impl TryFrom<SignedContingentInput> for Order {
             max_counter_tokens,
             timestamp,
         })
+    }
+
+    /// Get underlying SCI.
+    pub fn sci(&self) -> &SignedContingentInput {
+        &self.sci
+    }
+
+    /// Get unique identifier.
+    pub fn id(&self) -> &OrderId {
+        &self.id
+    }
+
+    /// Get the pair being traded by this order.
+    pub fn pair(&self) -> &Pair {
+        &self.pair
+    }
+
+    /// Get the range of base tokens offered by this order (the minimum and
+    /// maximum amount of base token that can be obtained by fulfiling the
+    /// order).
+    pub fn base_range(&self) -> &RangeInclusive<u64> {
+        &self.base_range
+    }
+
+    /// Get the maximum amount of base tokens that can be provided by this
+    /// order.
+    pub fn max_base_tokens(&self) -> u64 {
+        *self.base_range.end()
+    }
+
+    /// Get the maximum amount of counter tokens required to completely use all
+    /// the available base tokens
+    pub fn max_counter_tokens(&self) -> u64 {
+        self.max_counter_tokens
+    }
+
+    // Get the number of counter tokens we will need to provide in order to consume
+    // this SCI and receive a total of base_tokens back.
+    pub fn counter_tokens_cost(&self, base_tokens: u64) -> Result<u64, Error> {
+        if !self.base_range.contains(&base_tokens) {
+            return Err(Error::InsufficientBaseTokens(base_tokens));
+        }
+
+        // TODO: This is making strong assumptions about the structure of the SCI and
+        // doesn't currently take into account the scenario where we would also
+        // want a fee output to pay the DEQS.
+        let input_rules = if let Some(input_rules) = self.sci.tx_in.input_rules.as_ref() {
+            input_rules
+        } else {
+            return Err(Error::UnsupportedSci("Missing input rules".into()));
+        };
+
+        match (
+            input_rules.required_outputs.len(),
+            input_rules.partial_fill_outputs.len(),
+        ) {
+            (0, 0) => Err(Error::UnsupportedSci("No required/partial outputs".into())),
+
+            (1, 0) => {
+                // Single required non-partial output. This order can only execute if are taking
+                // the entire amount.
+                // The assert here makes sense since we should only get here if base_tokens is a
+                // range containing only self.sci.pseudo_output_amount.value
+                assert!(base_tokens == self.sci.pseudo_output_amount.value);
+
+                // In a non-partial swap, the fulfiller need to provide the amount specified in
+                // the (only, for now) required output.
+                Ok(self.sci.required_output_amounts[0].value)
+            }
+
+            (num_required_outputs @ (0 | 1), 1) => {
+                // Single partial output or a single partial output + change amount.
+                // The fact that the required output is treated as change has been verified when
+                // the Order was created.
+
+                // The amount we are taking must be above the minimum fill value. It is expected
+                // to be, since we checked base_range at the beginning.
+                assert!(base_tokens >= input_rules.min_partial_fill_value);
+
+                // The amount we are taking must be below the maximum available. It is expected
+                // to be, since we checked base_range at the beginning.
+                let mut max_available_amount = self.sci.pseudo_output_amount.value;
+                if num_required_outputs == 1 {
+                    assert!(max_available_amount > self.sci.required_output_amounts[0].value);
+                    max_available_amount -= self.sci.required_output_amounts[0].value;
+                };
+                assert!(base_tokens <= max_available_amount);
+
+                // The ratio being filled
+                let fill_fraction_num: u128 = base_tokens as u128;
+                let fill_fractions_denom = self.sci.pseudo_output_amount.value as u128;
+
+                // Calculate the number of counter tokens we need to return as change to the
+                // offerer of the SCI. It is calculated as a fraction of the partial fill
+                // output.
+                let (amount, _) = input_rules.partial_fill_outputs[0].reveal_amount()?;
+                let num_128 = amount.value as u128 * fill_fraction_num;
+                // Divide and round down
+                Ok((num_128 / fill_fractions_denom) as u64)
+            }
+
+            _ => Err(Error::UnsupportedSci(format!(
+                "Unsupported number of required/partial outputs {}/{}",
+                input_rules.required_outputs.len(),
+                input_rules.partial_fill_outputs.len()
+            ))),
+        }
+    }
+}
+
+impl TryFrom<SignedContingentInput> for Order {
+    type Error = Error;
+
+    fn try_from(sci: SignedContingentInput) -> Result<Self, Self::Error> {
+        Self::new(sci, None)
     }
 }
 

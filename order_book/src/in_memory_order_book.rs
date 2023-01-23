@@ -31,9 +31,13 @@ impl Default for InMemoryOrderBook {
 impl OrderBook for InMemoryOrderBook {
     type Error = Error;
 
-    fn add_sci(&self, sci: SignedContingentInput) -> Result<Order, Self::Error> {
+    fn add_sci(
+        &self,
+        sci: SignedContingentInput,
+        timestamp: Option<u64>,
+    ) -> Result<Order, Self::Error> {
         // Convert SCI into an order. This also validates it.
-        let order = Order::try_from(sci)?;
+        let order = Order::new(sci, timestamp)?;
 
         // Try adding to order book.
         let mut scis = self.scis.write()?;
