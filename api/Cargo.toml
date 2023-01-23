@@ -7,7 +7,7 @@ edition = "2021"
 links = "deqs-api"
 
 [dependencies]
-deqs-order-book = { path = "../order-book" }
+deqs-quote-book = { path = "../quote-book" }
 
 mc-api = { path = "../mobilecoin/api" }
 mc-transaction-extra = { path = "../mobilecoin/transaction/extra" }

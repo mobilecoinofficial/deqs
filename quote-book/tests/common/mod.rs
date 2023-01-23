@@ -5,7 +5,7 @@
 // this file are unused if they are not called by each and every test file :/
 #![allow(dead_code)]
 
-use deqs_order_book::{Error, OrderBook, Pair};
+use deqs_quote_book::{Error, Pair, QuoteBook};
 use mc_account_keys::AccountKey;
 use mc_crypto_ring_signature::Error as RingSignatureError;
 use mc_crypto_ring_signature_signer::NoKeysRingSigner;
@@ -82,60 +82,60 @@ pub fn create_partial_sci(
     )
 }
 
-/// Test order book basic happy flow
-pub fn basic_happy_flow(order_book: &impl OrderBook) {
+/// Test quote book basic happy flow
+pub fn basic_happy_flow(quote_book: &impl QuoteBook) {
     let pair = pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
-    // Adding an order should work
+    // Adding an quote should work
     let sci = create_sci(&pair, 10, 20, &mut rng);
-    let order = order_book.add_sci(sci, None).unwrap();
+    let quote = quote_book.add_sci(sci, None).unwrap();
 
-    let orders = order_book.get_orders(&pair, .., 0).unwrap();
-    assert_eq!(orders, vec![order.clone()]);
+    let quotes = quote_book.get_quotes(&pair, .., 0).unwrap();
+    assert_eq!(quotes, vec![quote.clone()]);
 
-    // Adding a second order should work
+    // Adding a second quote should work
     let sci = create_sci(&pair, 10, 200, &mut rng);
-    let order2 = order_book.add_sci(sci, None).unwrap();
+    let quote2 = quote_book.add_sci(sci, None).unwrap();
 
-    let orders = order_book.get_orders(&pair, .., 0).unwrap();
-    assert_eq!(orders, vec![order.clone(), order2.clone()]);
+    let quotes = quote_book.get_quotes(&pair, .., 0).unwrap();
+    assert_eq!(quotes, vec![quote.clone(), quote2.clone()]);
 
-    // Removing the order by its id should work
-    assert_eq!(order, order_book.remove_order_by_id(order.id()).unwrap());
+    // Removing the quote by its id should work
+    assert_eq!(quote, quote_book.remove_quote_by_id(quote.id()).unwrap());
 
-    let orders = order_book.get_orders(&pair, .., 0).unwrap();
-    assert_eq!(orders, vec![order2.clone()]);
+    let quotes = quote_book.get_quotes(&pair, .., 0).unwrap();
+    assert_eq!(quotes, vec![quote2.clone()]);
 
-    // Can't remove the order again
+    // Can't remove the quote again
     assert_eq!(
-        order_book
-            .remove_order_by_id(order.id())
+        quote_book
+            .remove_quote_by_id(quote.id())
             .unwrap_err()
             .into(),
-        Error::OrderNotFound
+        Error::QuoteNotFound
     );
     assert_eq!(
-        order_book
-            .remove_orders_by_key_image(&order.sci().key_image())
+        quote_book
+            .remove_quotes_by_key_image(&quote.sci().key_image())
             .unwrap(),
         vec![],
     );
 
-    // Removing orders by key image should work
+    // Removing quotes by key image should work
     assert_eq!(
-        vec![order2.clone()],
-        order_book
-            .remove_orders_by_key_image(&order2.sci().key_image())
+        vec![quote2.clone()],
+        quote_book
+            .remove_quotes_by_key_image(&quote2.sci().key_image())
             .unwrap()
     );
-    let orders = order_book.get_orders(&pair, .., 0).unwrap();
-    assert_eq!(orders, vec![]);
+    let quotes = quote_book.get_quotes(&pair, .., 0).unwrap();
+    assert_eq!(quotes, vec![]);
 
-    // Removing orders by tombstone block should work
+    // Removing quotes by tombstone block should work
     let sci = create_sci(&pair, 10, 20, &mut rng);
-    let order1 = order_book.add_sci(sci, None).unwrap();
-    let order1_tombstone = order
+    let quote1 = quote_book.add_sci(sci, None).unwrap();
+    let quote1_tombstone = quote
         .sci()
         .tx_in
         .input_rules
@@ -144,39 +144,39 @@ pub fn basic_happy_flow(order_book: &impl OrderBook) {
         .max_tombstone_block;
 
     let mut sci_builder = create_sci_builder(&pair, 10, 20, &mut rng);
-    sci_builder.set_tombstone_block(order1_tombstone - 1);
+    sci_builder.set_tombstone_block(quote1_tombstone - 1);
     let sci2 = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
-    let order2 = order_book.add_sci(sci2, None).unwrap();
+    let quote2 = quote_book.add_sci(sci2, None).unwrap();
 
     assert_eq!(
-        order_book
-            .remove_orders_by_tombstone_block(order1_tombstone - 1)
+        quote_book
+            .remove_quotes_by_tombstone_block(quote1_tombstone - 1)
             .unwrap(),
-        vec![order2],
+        vec![quote2],
     );
 
     assert_eq!(
-        order_book
-            .remove_orders_by_tombstone_block(order1_tombstone - 1)
+        quote_book
+            .remove_quotes_by_tombstone_block(quote1_tombstone - 1)
             .unwrap(),
         vec![],
     );
     assert_eq!(
-        order_book
-            .remove_orders_by_tombstone_block(order1_tombstone)
+        quote_book
+            .remove_quotes_by_tombstone_block(quote1_tombstone)
             .unwrap(),
-        vec![order1],
+        vec![quote1],
     );
     assert_eq!(
-        order_book
-            .remove_orders_by_tombstone_block(order1_tombstone)
+        quote_book
+            .remove_quotes_by_tombstone_block(quote1_tombstone)
             .unwrap(),
         vec![],
     );
 }
 
 /// Test some invalid SCI scenarios
-pub fn cannot_add_invalid_sci(order_book: &impl OrderBook) {
+pub fn cannot_add_invalid_sci(quote_book: &impl QuoteBook) {
     let pair = pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
@@ -194,7 +194,7 @@ pub fn cannot_add_invalid_sci(order_book: &impl OrderBook) {
     let sci = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
 
     assert_eq!(
-        order_book.add_sci(sci, None).unwrap_err().into(),
+        quote_book.add_sci(sci, None).unwrap_err().into(),
         Error::UnsupportedSci("Unsupported number of required/partial outputs 2/0".into())
     );
 
@@ -203,15 +203,15 @@ pub fn cannot_add_invalid_sci(order_book: &impl OrderBook) {
     sci.mlsag.responses.pop();
 
     assert_eq!(
-        order_book.add_sci(sci, None).unwrap_err().into(),
+        quote_book.add_sci(sci, None).unwrap_err().into(),
         Error::Sci(SignedContingentInputError::RingSignature(
             RingSignatureError::LengthMismatch(22, 21),
         ))
     );
 }
 
-/// Test that get_orders filter correctly.
-pub fn get_orders_filtering_works(order_book: &impl OrderBook) {
+/// Test that get_quotes filter correctly.
+pub fn get_quotes_filtering_works(quote_book: &impl QuoteBook) {
     let pair1 = pair();
     let pair2 = Pair {
         base_token_id: TokenId::from(10),
@@ -221,35 +221,35 @@ pub fn get_orders_filtering_works(order_book: &impl OrderBook) {
 
     // Offer for trading 100 pair1.base tokens into 1000 pair1.counter tokens
     let sci = create_sci(&pair1, 100, 1000, &mut rng);
-    let p1_100_for_1000 = order_book.add_sci(sci, None).unwrap();
+    let p1_100_for_1000 = quote_book.add_sci(sci, None).unwrap();
 
     // Offer for partially trading up to 100 pair2.base tokens into 1000
     // pair2.counter tokens
     let sci = create_partial_sci(&pair2, 100, 1, 0, 1000, &mut rng);
-    let p2_100_for_1000 = order_book.add_sci(sci, None).unwrap();
+    let p2_100_for_1000 = quote_book.add_sci(sci, None).unwrap();
 
     // Offer for partially trading 5 pair2.base tokens into 50 pair2.counter
     // tokens
     let sci = create_partial_sci(&pair2, 5, 1, 0, 50, &mut rng);
-    let p2_5_for_50 = order_book.add_sci(sci, None).unwrap();
+    let p2_5_for_50 = quote_book.add_sci(sci, None).unwrap();
 
     // Offer for partially trading 50 pair2.base tokens into 5 pair2.counter
     // tokens
     let sci = create_partial_sci(&pair2, 50, 1, 0, 5, &mut rng);
-    let p2_50_for_5 = order_book.add_sci(sci, None).unwrap();
+    let p2_50_for_5 = quote_book.add_sci(sci, None).unwrap();
 
     // Offer for exactly trading 50 pair2.base tokens into 3 pair2.counter
     // tokens
     let sci = create_sci(&pair2, 50, 3, &mut rng);
-    let p2_50_for_3 = order_book.add_sci(sci, None).unwrap();
+    let p2_50_for_3 = quote_book.add_sci(sci, None).unwrap();
 
-    // Get all orders at any quantity.
-    let orders = order_book.get_orders(&pair1, .., 0).unwrap();
-    assert_eq!(orders, vec![p1_100_for_1000.clone()]);
+    // Get all quotes at any quantity.
+    let quotes = quote_book.get_quotes(&pair1, .., 0).unwrap();
+    assert_eq!(quotes, vec![p1_100_for_1000.clone()]);
 
-    let orders = order_book.get_orders(&pair2, .., 0).unwrap();
+    let quotes = quote_book.get_quotes(&pair2, .., 0).unwrap();
     assert_eq!(
-        orders,
+        quotes,
         vec![
             p2_50_for_3.clone(),     // rate is 16.6667
             p2_50_for_5.clone(),     // rate is 10
@@ -258,24 +258,24 @@ pub fn get_orders_filtering_works(order_book: &impl OrderBook) {
         ]
     );
 
-    // Get all orders but limit to the first 2
-    let orders = order_book.get_orders(&pair1, .., 2).unwrap();
-    assert_eq!(orders, vec![p1_100_for_1000.clone()]);
+    // Get all quotes but limit to the first 2
+    let quotes = quote_book.get_quotes(&pair1, .., 2).unwrap();
+    assert_eq!(quotes, vec![p1_100_for_1000.clone()]);
 
-    let orders = order_book.get_orders(&pair2, .., 2).unwrap();
-    assert_eq!(orders, vec![p2_50_for_3.clone(), p2_50_for_5.clone(),]);
+    let quotes = quote_book.get_quotes(&pair2, .., 2).unwrap();
+    assert_eq!(quotes, vec![p2_50_for_3.clone(), p2_50_for_5.clone(),]);
 
-    // Get all orders that can provide an amount that is not available.
-    let orders = order_book.get_orders(&pair1, 10000.., 2).unwrap();
-    assert_eq!(orders, vec![]);
+    // Get all quotes that can provide an amount that is not available.
+    let quotes = quote_book.get_quotes(&pair1, 10000.., 2).unwrap();
+    assert_eq!(quotes, vec![]);
 
-    let orders = order_book.get_orders(&pair2, 10000.., 2).unwrap();
-    assert_eq!(orders, vec![]);
+    let quotes = quote_book.get_quotes(&pair2, 10000.., 2).unwrap();
+    assert_eq!(quotes, vec![]);
 
-    // Get all orders that can provide a subset of the amount requested.
-    let orders = order_book.get_orders(&pair2, 50.., 0).unwrap();
+    // Get all quotes that can provide a subset of the amount requested.
+    let quotes = quote_book.get_quotes(&pair2, 50.., 0).unwrap();
     assert_eq!(
-        orders,
+        quotes,
         vec![
             p2_50_for_3.clone(),     // rate is 16.6667
             p2_50_for_5.clone(),     // rate is 10
@@ -283,17 +283,17 @@ pub fn get_orders_filtering_works(order_book: &impl OrderBook) {
         ]
     );
 
-    let orders = order_book.get_orders(&pair2, 51.., 0).unwrap();
+    let quotes = quote_book.get_quotes(&pair2, 51.., 0).unwrap();
     assert_eq!(
-        orders,
+        quotes,
         vec![
             p2_100_for_1000.clone(), // rate is 0.1
         ]
     );
 
-    let orders = order_book.get_orders(&pair2, 50..70, 0).unwrap();
+    let quotes = quote_book.get_quotes(&pair2, 50..70, 0).unwrap();
     assert_eq!(
-        orders,
+        quotes,
         vec![
             p2_50_for_3.clone(),     // rate is 16.6667
             p2_50_for_5.clone(),     // rate is 10

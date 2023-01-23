@@ -1,7 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use clap::Parser;
-use deqs_order_book::InMemoryOrderBook;
+use deqs_quote_book::InMemoryQuoteBook;
 use deqs_server::{Msg, Server, ServerConfig};
 use mc_common::logger::o;
 use mc_util_grpc::AdminServer;
@@ -19,11 +19,11 @@ async fn main() {
     mc_common::setup_panic_handler();
 
     let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
-    let order_book = InMemoryOrderBook::default();
+    let quote_book = InMemoryQuoteBook::default();
 
     let mut server = Server::new(
         msg_bus_tx,
-        order_book,
+        quote_book,
         config.client_listen_uri.clone(),
         logger.clone(),
     );
