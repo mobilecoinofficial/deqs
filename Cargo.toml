@@ -4,7 +4,7 @@ cargo-features = ["named-profiles"]
 members = [
     "api",
     "mc-test-utils",
-    "order-book",
+    "quote-book",
     "server",
     "test-cli",
 ]

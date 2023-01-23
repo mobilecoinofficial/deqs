@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{Error, OrderId, Pair};
+use crate::{Error, Pair, QuoteId};
 use mc_transaction_extra::SignedContingentInput;
 use mc_transaction_types::TokenId;
 use std::{
@@ -9,34 +9,34 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-/// A single "order" in the book. This is a wrapper around an SCI and some
+/// A single "quote" in the book. This is a wrapper around an SCI and some
 /// auxiliary data
 #[derive(Clone, Debug, Eq, PartialEq)]
-pub struct Order {
+pub struct Quote {
     /// SCI
     sci: SignedContingentInput,
 
     /// Unique identifier
-    id: OrderId,
+    id: QuoteId,
 
     /// The pair being traded.
     pair: Pair,
 
-    /// The the range of base tokens offered by this order (the minimum and
+    /// The the range of base tokens offered by this quote (the minimum and
     /// maximum amount of base token that can be obtained by fulfiling the
-    /// order)
+    /// quote)
     base_range: RangeInclusive<u64>,
 
     /// The number of counter tokens needed to trade the max amount of base
     /// tokens (which can be obtained from base_range).
     max_counter_tokens: u64,
 
-    /// Timestamp at which the order arrived, in nanoseconds since the Epoch.
+    /// Timestamp at which the quote arrived, in nanoseconds since the Epoch.
     timestamp: u64,
 }
 
-impl Order {
-    /// Create a new order from SCI and timestamp.
+impl Quote {
+    /// Create a new quote from SCI and timestamp.
     ///
     /// # Arguments
     /// * `sci` - The SCI to add.
@@ -125,7 +125,7 @@ impl Order {
             }
         };
 
-        let id = OrderId::from(&sci);
+        let id = QuoteId::from(&sci);
 
         let pair = Pair {
             base_token_id,
@@ -142,10 +142,10 @@ impl Order {
         })
     }
 
-    /// Create a new order by specifying the exact value for each field.
+    /// Create a new quote by specifying the exact value for each field.
     pub fn new_from_fields(
         sci: SignedContingentInput,
-        id: OrderId,
+        id: QuoteId,
         pair: Pair,
         base_range: RangeInclusive<u64>,
         max_counter_tokens: u64,
@@ -167,24 +167,24 @@ impl Order {
     }
 
     /// Get unique identifier.
-    pub fn id(&self) -> &OrderId {
+    pub fn id(&self) -> &QuoteId {
         &self.id
     }
 
-    /// Get the pair being traded by this order.
+    /// Get the pair being traded by this quote.
     pub fn pair(&self) -> &Pair {
         &self.pair
     }
 
-    /// Get the range of base tokens offered by this order (the minimum and
+    /// Get the range of base tokens offered by this quote (the minimum and
     /// maximum amount of base token that can be obtained by fulfiling the
-    /// order).
+    /// quote).
     pub fn base_range(&self) -> &RangeInclusive<u64> {
         &self.base_range
     }
 
     /// Get the maximum amount of base tokens that can be provided by this
-    /// order.
+    /// quote.
     pub fn max_base_tokens(&self) -> u64 {
         *self.base_range.end()
     }
@@ -200,7 +200,7 @@ impl Order {
         self.timestamp
     }
 
-    // Get the number of counter tokens we will need to provide in order to consume
+    // Get the number of counter tokens we will need to provide in quote to consume
     // this SCI and receive a total of base_tokens back.
     pub fn counter_tokens_cost(&self, base_tokens: u64) -> Result<u64, Error> {
         if !self.base_range.contains(&base_tokens) {
@@ -223,7 +223,7 @@ impl Order {
             (0, 0) => Err(Error::UnsupportedSci("No required/partial outputs".into())),
 
             (1, 0) => {
-                // Single required non-partial output. This order can only execute if are taking
+                // Single required non-partial output. This quote can only execute if are taking
                 // the entire amount.
                 // The assert here makes sense since we should only get here if base_tokens is a
                 // range containing only self.sci.pseudo_output_amount.value
@@ -237,7 +237,7 @@ impl Order {
             (num_required_outputs @ (0 | 1), 1) => {
                 // Single partial output or a single partial output + change amount.
                 // The fact that the required output is treated as change has been verified when
-                // the Order was created.
+                // the Quote was created.
 
                 // The amount we are taking must be above the minimum fill value. It is expected
                 // to be, since we checked base_range at the beginning.
@@ -274,7 +274,7 @@ impl Order {
     }
 }
 
-impl TryFrom<SignedContingentInput> for Order {
+impl TryFrom<SignedContingentInput> for Quote {
     type Error = Error;
 
     fn try_from(sci: SignedContingentInput) -> Result<Self, Self::Error> {
@@ -282,7 +282,7 @@ impl TryFrom<SignedContingentInput> for Order {
     }
 }
 
-impl Deref for Order {
+impl Deref for Quote {
     type Target = SignedContingentInput;
 
     fn deref(&self) -> &Self::Target {
@@ -290,14 +290,14 @@ impl Deref for Order {
     }
 }
 
-impl Ord for Order {
+impl Ord for Quote {
     fn cmp(&self, other: &Self) -> Ordering {
-        // We sort orders by the following, in this order:
-        // 1) The pair (so that orders of the same pair are grouped together)
-        // 2) The ratio of base to counter, putting orders with a more favorable
+        // We sort quotes by the following, in this quote:
+        // 1) The pair (so that quotes of the same pair are grouped together)
+        // 2) The ratio of base to counter, putting quotes with a more favorable
         // exchange rate (to the fulfiller) first.
-        // 3) Timestamp (so that older orders are filled first)
-        // 4) Order id (in case of orders where all the above were identical)
+        // 3) Timestamp (so that older quotes are filled first)
+        // 4) Quote id (in case of quotes where all the above were identical)
 
         // The rate is calculated as base / counter. We want to sort by:
         // (self_base / self_counter) > (other_base / other_counter)
@@ -313,7 +313,7 @@ impl Ord for Order {
     }
 }
 
-impl PartialOrd for Order {
+impl PartialOrd for Quote {
     fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
         Some(self.cmp(other))
     }
