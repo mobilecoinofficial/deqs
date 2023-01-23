@@ -66,10 +66,10 @@ impl Server {
 
         let server_builder = grpcio::ServerBuilder::new(grpc_env)
             .register_service(health_service)
-            .register_service(client_service);
+            .register_service(client_service)
+            .bind_using_uri(&self.client_listen_uri, self.logger.clone());
 
-        let mut server =
-            server_builder.build_using_uri(&self.client_listen_uri, self.logger.clone())?;
+        let mut server = server_builder.build()?;
         server.start();
 
         log::info!(
