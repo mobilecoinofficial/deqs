@@ -5,7 +5,7 @@ use deqs_quote_book::InMemoryQuoteBook;
 use deqs_server::{Msg, Server, ServerConfig};
 use libp2p::{
     futures::StreamExt,
-    identity, ping,
+    identity, mdns, ping,
     swarm::{SwarmBuilder, SwarmEvent},
     tokio_development_transport, Multiaddr, NetworkBehaviour, PeerId,
 };
@@ -14,14 +14,40 @@ use mc_common::logger::{log, o};
 use mc_util_grpc::AdminServer;
 use postage::{broadcast, prelude::Stream};
 use std::sync::Arc;
+use void::Void;
 
 /// Maximum number of messages that can be queued in the message bus.
 const MSG_BUS_QUEUE_SIZE: usize = 1000;
 
-#[derive(NetworkBehaviour, Default)]
+#[derive(NetworkBehaviour)]
+#[behaviour(out_event = "OutEvent")]
 struct Behaviour {
     keep_alive: keep_alive::Behaviour,
     ping: ping::Behaviour,
+    mdns: mdns::TokioMdns,
+}
+
+#[allow(clippy::large_enum_variant)]
+#[derive(Debug)]
+enum OutEvent {
+    Mdns(mdns::MdnsEvent),
+    Ping(ping::Event),
+    Void(Void),
+}
+impl From<mdns::MdnsEvent> for OutEvent {
+    fn from(event: mdns::MdnsEvent) -> Self {
+        OutEvent::Mdns(event)
+    }
+}
+impl From<ping::Event> for OutEvent {
+    fn from(event: ping::Event) -> Self {
+        OutEvent::Ping(event)
+    }
+}
+impl From<Void> for OutEvent {
+    fn from(event: Void) -> Self {
+        OutEvent::Void(event)
+    }
 }
 
 #[tokio::main]
@@ -47,7 +73,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     .multiplex(mplex::MplexConfig::new())
     //     .boxed();
 
-    let behaviour = Behaviour::default();
+    let behaviour = Behaviour {
+        keep_alive: keep_alive::Behaviour::default(),
+        ping: ping::Behaviour::default(),
+        mdns: mdns::TokioMdns::new(mdns::MdnsConfig::default())?,
+    };
     let mut swarm = SwarmBuilder::new(
         tokio_development_transport(local_key)?,
         behaviour,
@@ -63,12 +93,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         swarm.dial(remote)?;
         log::info!(&logger, "p2p: Dialed {}", peer);
     }
+    let logger2 = logger.clone();
     tokio::spawn(async move {
         println!("in swarm loop");
         loop {
             match swarm.select_next_some().await {
                 SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
-                SwarmEvent::Behaviour(event) => println!("{:?}", event),
+                SwarmEvent::Behaviour(OutEvent::Mdns(mdns::MdnsEvent::Discovered(peers))) => {
+                    for (peer, addr) in peers {
+                        log::info!(&logger2, "discovered {peer} {addr}");
+                        swarm.dial(addr).expect("dial failed");
+                    }
+                }
+                SwarmEvent::Behaviour(OutEvent::Mdns(mdns::MdnsEvent::Expired(expired))) => {
+                    for (peer, addr) in expired {
+                        log::info!(&logger2, "expired {peer} {addr}");
+                        let _ = swarm.disconnect_peer_id(peer); // this panics?
+                    }
+                }
+                SwarmEvent::Behaviour(event) => log::info!(&logger2, "{:?}", event),
                 _ => {}
             }
         }
