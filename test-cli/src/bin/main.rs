@@ -2,12 +2,12 @@
 
 use clap::{Parser, Subcommand};
 use deqs_api::{
-    deqs::{QuoteStatusCode, RemoveOrderRequest, SubmitQuotesRequest},
+    deqs::{QuoteStatusCode, RemoveQuoteRequest, SubmitQuotesRequest},
     deqs_grpc::DeqsClientApiClient,
     DeqsClientUri,
 };
 use deqs_mc_test_utils::{create_partial_sci, create_sci};
-use deqs_order_book::{Order, OrderId};
+use deqs_quote_book::{Quote, QuoteId};
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_common::logger::{log, o};
 use mc_transaction_types::TokenId;
@@ -45,14 +45,14 @@ pub enum Command {
         allow_partial_fills: bool,
     },
 
-    /// Remove an order.
-    RemoveOrder {
-        /// Order id.
+    /// Remove an quote.
+    RemoveQuote {
+        /// Quote id.
         #[clap(
             long,
             value_parser = mc_util_parse::parse_hex::<[u8; 32]>
         )]
-        order_id: [u8; 32],
+        quote_id: [u8; 32],
     },
 }
 
@@ -147,13 +147,13 @@ fn main() {
             let resp = client_api.submit_quotes(&req).expect("submit quote failed");
             println!("{:#?}", resp);
             println!();
-            for (i, (status_code, order)) in
-                resp.status_codes.iter().zip(resp.orders.iter()).enumerate()
+            for (i, (status_code, quote)) in
+                resp.status_codes.iter().zip(resp.quotes.iter()).enumerate()
             {
                 match status_code {
                     QuoteStatusCode::CREATED => {
-                        let order = Order::try_from(order).expect("invalid order");
-                        println!("{}. {}", i, hex::encode(**order.id()));
+                        let quote = Quote::try_from(quote).expect("invalid quote");
+                        println!("{}. {}", i, hex::encode(**quote.id()));
                     }
                     err => {
                         println!("{}. {:?}", i, err);
@@ -162,10 +162,10 @@ fn main() {
             }
         }
 
-        Command::RemoveOrder { order_id } => {
-            let mut req = RemoveOrderRequest::default();
-            req.set_order_id((&OrderId(order_id)).into());
-            let resp = client_api.remove_order(&req).expect("remove order failed");
+        Command::RemoveQuote { quote_id } => {
+            let mut req = RemoveQuoteRequest::default();
+            req.set_quote_id((&QuoteId(quote_id)).into());
+            let resp = client_api.remove_quote(&req).expect("remove quote failed");
             println!("{:#?}", resp);
         }
     }

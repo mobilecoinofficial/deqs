@@ -2,7 +2,7 @@
 
 use crate::{ClientService, Error, Msg};
 use deqs_api::DeqsClientUri;
-use deqs_order_book::OrderBook;
+use deqs_quote_book::QuoteBook;
 use futures::executor::block_on;
 use mc_common::logger::{log, Logger};
 use mc_util_grpc::ConnectionUriGrpcioServer;
@@ -11,12 +11,12 @@ use postage::broadcast::Sender;
 use std::sync::Arc;
 
 /// DEQS server
-pub struct Server<OB: OrderBook> {
+pub struct Server<OB: QuoteBook> {
     /// Message bus sender.
     msg_bus_tx: Sender<Msg>,
 
-    /// Order book.
-    order_book: OB,
+    /// Quote book.
+    quote_book: OB,
 
     /// Client listen URI.
     client_listen_uri: DeqsClientUri,
@@ -28,16 +28,16 @@ pub struct Server<OB: OrderBook> {
     server: Option<grpcio::Server>,
 }
 
-impl<OB: OrderBook> Server<OB> {
+impl<OB: QuoteBook> Server<OB> {
     pub fn new(
         msg_bus_tx: Sender<Msg>,
-        order_book: OB,
+        quote_book: OB,
         client_listen_uri: DeqsClientUri,
         logger: Logger,
     ) -> Self {
         Self {
             msg_bus_tx,
-            order_book,
+            quote_book,
             client_listen_uri,
             logger,
             server: None,
@@ -73,7 +73,7 @@ impl<OB: OrderBook> Server<OB> {
 
         let client_service = ClientService::new(
             self.msg_bus_tx.clone(),
-            self.order_book.clone(),
+            self.quote_book.clone(),
             self.logger.clone(),
         )
         .into_service();
@@ -112,7 +112,7 @@ impl<OB: OrderBook> Server<OB> {
     }
 }
 
-impl<OB: OrderBook> Drop for Server<OB> {
+impl<OB: QuoteBook> Drop for Server<OB> {
     fn drop(&mut self) {
         self.stop();
     }

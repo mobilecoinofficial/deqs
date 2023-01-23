@@ -14,7 +14,7 @@ path = "src/bin/main.rs"
 
 [dependencies]
 deqs-api = { path = "../api" }
-deqs-order-book = { path = "../order-book" }
+deqs-quote-book = { path = "../quote-book" }
 
 mc-api = { path = "../mobilecoin/api" }
 mc-common = { path = "../mobilecoin/common", features = ["loggers"] }

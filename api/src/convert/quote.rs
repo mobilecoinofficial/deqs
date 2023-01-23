@@ -1,37 +1,37 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-//! Convert to/from Order.
+//! Convert to/from Quote.
 
 use std::ops::RangeInclusive;
 
 use crate::deqs as api;
-use deqs_order_book::{Order, OrderId, Pair};
+use deqs_quote_book::{Pair, Quote, QuoteId};
 use mc_api::ConversionError;
 use mc_transaction_extra::SignedContingentInput;
 
-/// Convert Rust Order to Protobuf Order.
-impl From<&Order> for api::Order {
-    fn from(src: &Order) -> Self {
-        let mut order = api::Order::new();
-        order.set_sci(src.sci().into());
-        order.set_id(src.id().into());
-        order.set_pair(src.pair().into());
-        order.set_base_range_min(*src.base_range().start());
-        order.set_base_range_max(*src.base_range().end());
-        order.set_max_counter_tokens(src.max_counter_tokens());
-        order.set_timestamp(src.timestamp());
+/// Convert Rust Quote to Protobuf Quote.
+impl From<&Quote> for api::Quote {
+    fn from(src: &Quote) -> Self {
+        let mut quote = api::Quote::new();
+        quote.set_sci(src.sci().into());
+        quote.set_id(src.id().into());
+        quote.set_pair(src.pair().into());
+        quote.set_base_range_min(*src.base_range().start());
+        quote.set_base_range_max(*src.base_range().end());
+        quote.set_max_counter_tokens(src.max_counter_tokens());
+        quote.set_timestamp(src.timestamp());
 
-        order
+        quote
     }
 }
 
-/// Convert api::Order --> Order.
-impl TryFrom<&api::Order> for Order {
+/// Convert api::Quote --> Quote.
+impl TryFrom<&api::Quote> for Quote {
     type Error = ConversionError;
 
-    fn try_from(source: &api::Order) -> Result<Self, Self::Error> {
+    fn try_from(source: &api::Quote) -> Result<Self, Self::Error> {
         let sci = SignedContingentInput::try_from(source.get_sci())?;
-        let id = OrderId::try_from(source.get_id())?;
+        let id = QuoteId::try_from(source.get_id())?;
         let pair = Pair::try_from(source.get_pair())?;
         let base_range =
             RangeInclusive::new(source.get_base_range_min(), source.get_base_range_max());
@@ -57,8 +57,8 @@ mod tests {
     use rand::{rngs::StdRng, SeedableRng};
 
     #[test]
-    // Order --> api::Order --> Order
-    fn test_order_identity() {
+    // Quote --> api::Quote --> Quote
+    fn test_quote_identity() {
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
         let sci = create_sci(
             TokenId::from(43432),
@@ -67,10 +67,10 @@ mod tests {
             30,
             &mut rng,
         );
-        let source = Order::try_from(sci).unwrap();
+        let source = Quote::try_from(sci).unwrap();
 
-        let converted = api::Order::from(&source);
-        let recovererd = Order::try_from(&converted).unwrap();
+        let converted = api::Quote::from(&source);
+        let recovererd = Quote::try_from(&converted).unwrap();
         assert_eq!(source, recovererd);
     }
 }
