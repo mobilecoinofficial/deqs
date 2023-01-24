@@ -378,7 +378,7 @@ mod tests {
     }
 
     #[test_with_logger]
-    fn submit_quotes_refuses_duplicate_order(logger: Logger) {
+    fn submit_quotes_refuses_identical_duplicate_request(logger: Logger) {
         let pair = Pair {
             base_token_id: TokenId::from(1),
             counter_token_id: TokenId::from(2),
@@ -400,6 +400,45 @@ mod tests {
         assert_eq!(
             resp.status_codes,
             vec![QuoteStatusCode::ORDER_ALREADY_EXISTS]
+        );
+    }
+
+    #[test_with_logger]
+    fn submit_quotes_doesnt_add_duplicate_orders(logger: Logger) {
+        let pair = Pair {
+            base_token_id: TokenId::from(1),
+            counter_token_id: TokenId::from(2),
+        };
+        let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+        let order_book = InMemoryOrderBook::default();
+        let (client_api, _server, _msg_bus_rx) =
+            create_test_client_and_server(&order_book, &logger);
+
+        let sci1 = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
+        let sci2 = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
+        let sci3 = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
+        let req = SubmitQuotesRequest {
+            quotes: vec![(&sci1).into(), (&sci2).into()].into(),
+            ..Default::default()
+        };
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+        assert_eq!(
+            resp.status_codes,
+            vec![QuoteStatusCode::CREATED, QuoteStatusCode::CREATED]
+        );
+
+        let req = SubmitQuotesRequest {
+            quotes: vec![(&sci1).into(), (&sci3).into(), (&sci2).into()].into(),
+            ..Default::default()
+        };
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+        assert_eq!(
+            resp.status_codes,
+            vec![
+                QuoteStatusCode::ORDER_ALREADY_EXISTS,
+                QuoteStatusCode::CREATED,
+                QuoteStatusCode::ORDER_ALREADY_EXISTS
+            ]
         );
     }
 
