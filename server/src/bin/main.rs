@@ -23,7 +23,9 @@ async fn main() {
     let quote_book = InMemoryQuoteBook::default();
     // Open the ledger db
     let ledger_db = LedgerDB::open(&config.ledger_db).expect("Could not open ledger db");
-    let num_blocks = ledger_db.num_blocks().expect("Could not compute num_blocks");
+    let num_blocks = ledger_db
+        .num_blocks()
+        .expect("Could not compute num_blocks");
     assert_ne!(0, num_blocks);
 
     let mut server = Server::new(
