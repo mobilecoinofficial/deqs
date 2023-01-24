@@ -33,7 +33,7 @@ message SubmitQuotesResponse {
     /// The status of each submission
     repeated QuoteStatusCode status_codes = 1;
 
-    /// String errror messages for each case where status code is not CREATED
+    /// String error messages for each case where status code is not CREATED
     repeated string error_messages = 2;
 
     /// Orders created. Will contain a valid order only for entries whose status code is CREATED.

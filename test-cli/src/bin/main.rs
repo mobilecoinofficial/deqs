@@ -100,7 +100,7 @@ fn main() {
             log::info!(&logger, "Generating {} SCIs...", num_quotes);
 
             // We can't share our rng with the Rayon threads, but we still want a
-            // determinstic way to generate SCIs. This little hack allows us to
+            // deterministic way to generate SCIs. This little hack allows us to
             // do that by generating a unique seed for each SCI we will be generating.
             let rng_seeds = (0..num_quotes)
                 .map(|_| {
