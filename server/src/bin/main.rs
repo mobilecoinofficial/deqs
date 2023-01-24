@@ -6,6 +6,7 @@ use deqs_server::{Msg, Server, ServerConfig};
 use libp2p::{
     futures::StreamExt,
     identity,
+    identify,
     kad::{
         record::{store::MemoryStore, Key},
         Kademlia, KademliaConfig, KademliaEvent, QueryResult,
@@ -19,7 +20,7 @@ use mc_common::logger::{log, o};
 use mc_util_grpc::AdminServer;
 use postage::{broadcast, prelude::Stream};
 use std::{str::FromStr, sync::Arc};
-use tokio::time::Duration;
+use tokio::{io::AsyncBufReadExt, time::Duration};
 use void::Void;
 
 /// Maximum number of messages that can be queued in the message bus.
@@ -41,6 +42,7 @@ enum OutEvent {
     Ping(ping::Event),
     Void(Void),
     Kademlia(KademliaEvent),
+    Identify(identify::Event),
 }
 impl From<mdns::MdnsEvent> for OutEvent {
     fn from(event: mdns::MdnsEvent) -> Self {
@@ -62,6 +64,11 @@ impl From<KademliaEvent> for OutEvent {
         OutEvent::Kademlia(event)
     }
 }
+impl From<identify::Event> for OutEvent {
+    fn from(event: identify::Event) -> Self {
+        OutEvent::Identify(event)
+    }
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -69,6 +76,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let config = ServerConfig::parse();
     let (logger, _global_logger_guard) = mc_common::logger::create_app_logger(o!());
     mc_common::setup_panic_handler();
+
+    let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
 
     let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
     let quote_book = InMemoryQuoteBook::default();
@@ -122,45 +131,78 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         println!("in swarm loop");
         loop {
-            match swarm.select_next_some().await {
-                SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
-                SwarmEvent::Behaviour(OutEvent::Mdns(mdns::MdnsEvent::Discovered(peers))) => {
-                    for (peer, addr) in peers {
-                        log::info!(&logger2, "discovered {peer} {addr}");
-                        swarm.dial(addr).expect("dial failed");
-                    }
+            tokio::select! {
+                line = stdin.next_line() => {
+                println!("reading done: {:?}", line);
+                        swarm.behaviour_mut().kademlia.get_providers(key.clone());
                 }
-                SwarmEvent::Behaviour(OutEvent::Mdns(mdns::MdnsEvent::Expired(expired))) => {
-                    for (peer, addr) in expired {
-                        log::info!(&logger2, "expired {peer} {addr}");
-                        let _ = swarm.disconnect_peer_id(peer); // this panics?
-                    }
-                }
-                SwarmEvent::Behaviour(OutEvent::Ping(ping)) => {
-                    log::info!(&logger2, "ping {:?}", ping);
-                    swarm.behaviour_mut().kademlia.get_providers(key.clone());
-                }
-                SwarmEvent::Behaviour(OutEvent::Kademlia(
-                    KademliaEvent::OutboundQueryCompleted { result, .. },
-                )) => match result {
-                    QueryResult::GetProviders(Ok(ok)) => {
-                        for peer in ok.providers {
-                            let addrs = swarm.behaviour_mut().kademlia.addresses_of_peer(&peer);
-                            log::info!(
-                                &logger2,
-                                "Peer {:?} provides key {:?}: {:?}",
-                                peer,
-                                std::str::from_utf8(ok.key.as_ref()).unwrap(),
-                                addrs,
-                            );
+                sel = swarm.select_next_some() => match sel {
+                    SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
+                    SwarmEvent::Behaviour(OutEvent::Mdns(mdns::MdnsEvent::Discovered(peers))) => {
+                        for (peer, addr) in peers {
+                            log::info!(&logger2, "discovered {peer} {addr}");
+                            swarm.dial(addr).expect("dial failed");
                         }
                     }
-                    evt => {
-                        log::info!(&logger2, "Kademlia event: {:?}", evt);
+                    SwarmEvent::Behaviour(OutEvent::Mdns(mdns::MdnsEvent::Expired(expired))) => {
+                        for (peer, addr) in expired {
+                            log::info!(&logger2, "expired {peer} {addr}");
+                            let _ = swarm.disconnect_peer_id(peer); // this panics?
+                        }
                     }
-                },
-                SwarmEvent::Behaviour(event) => log::info!(&logger2, "{:?}", event),
-                _ => {}
+                    SwarmEvent::Behaviour(OutEvent::Ping(ping)) => {
+                        log::info!(&logger2, "ping {:?}", ping);
+                    }
+                    SwarmEvent::Behaviour(OutEvent::Kademlia(
+                        KademliaEvent::OutboundQueryCompleted { result, .. },
+                    )) => match result {
+                        QueryResult::GetProviders(Ok(ok)) => {
+                            for peer in ok.providers {
+                                let addrs = swarm.behaviour_mut().kademlia.addresses_of_peer(&peer);
+                                log::info!(
+                                    &logger2,
+                                    "Peer {:?} provides key {:?}: {:?}",
+                                    peer,
+                                    std::str::from_utf8(ok.key.as_ref()).unwrap(),
+                                    addrs,
+                                );
+                            }
+                        }
+                        evt => {
+                            log::info!(&logger2, "Kademlia event: {:?}", evt);
+                        }
+                    },
+
+                    SwarmEvent::Behaviour(OutEvent::Identify(e)) => {
+                        log::info!(&logger2, "IdentifyEvent: {:?}", e);
+    
+                        if let identify::Event::Received {
+                            peer_id,
+                            info:
+                                identify::Info {
+                                    listen_addrs,
+                                    protocols,
+                                    ..
+                                },
+                        } = e
+                        {
+                            if protocols
+                                .iter()
+                                .any(|p| p.as_bytes() == libp2p::kad::protocol::DEFAULT_PROTO_NAME)
+                            {
+                                for addr in listen_addrs {
+                                    swarm
+                                        .behaviour_mut()
+                                        .kademlia
+                                        .add_address(&peer_id, addr);
+                                }
+                            }
+                        }
+                    }
+
+                    SwarmEvent::Behaviour(event) => log::info!(&logger2, "{:?}", event),
+                    _ => {}
+                }
             }
         }
     });
