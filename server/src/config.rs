@@ -22,4 +22,8 @@ pub struct ServerConfig {
     /// TODO
     #[clap(long = "peer", env = "MC_PEER")]
     pub peers: Vec<String>,
+
+    /// TODO
+    #[clap(long = "peer-id", env = "MC_PEER_ID")]
+    pub peer_ids: Vec<String>,
 }
