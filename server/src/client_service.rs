@@ -404,13 +404,13 @@ mod tests {
     }
 
     #[test_with_logger]
-    fn submit_quotes_doesnt_add_duplicate_orders(logger: Logger) {
+    fn submit_quotes_doesnt_add_duplicate_quotes(logger: Logger) {
         let pair = Pair {
             base_token_id: TokenId::from(1),
             counter_token_id: TokenId::from(2),
         };
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let order_book = InMemoryOrderBook::default();
+        let quote_book = InMemoryQuoteBook::default();
         let (client_api, _server, _msg_bus_rx) =
             create_test_client_and_server(&order_book, &logger);
 
@@ -435,9 +435,9 @@ mod tests {
         assert_eq!(
             resp.status_codes,
             vec![
-                QuoteStatusCode::ORDER_ALREADY_EXISTS,
+                QuoteStatusCode::QUOTE_ALREADY_EXISTS,
                 QuoteStatusCode::CREATED,
-                QuoteStatusCode::ORDER_ALREADY_EXISTS
+                QuoteStatusCode::QUOTE_ALREADY_EXISTS
             ]
         );
     }
