@@ -412,7 +412,7 @@ mod tests {
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
         let quote_book = InMemoryQuoteBook::default();
         let (client_api, _server, _msg_bus_rx) =
-            create_test_client_and_server(&order_book, &logger);
+            create_test_client_and_server(&quote_book, &logger);
 
         let sci1 = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
         let sci2 = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
