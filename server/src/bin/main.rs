@@ -4,7 +4,8 @@ use clap::Parser;
 use deqs_quote_book::InMemoryQuoteBook;
 use deqs_server::{Msg, Server, ServerConfig};
 use libp2p::{
-    core::upgrade,
+    core::{upgrade, upgrade::SelectUpgrade},
+    dns,
     futures::StreamExt,
     gossipsub::{
         Gossipsub, GossipsubEvent, GossipsubMessage, IdentTopic as Topic, MessageAuthenticity,
@@ -15,10 +16,11 @@ use libp2p::{
         record::{store::MemoryStore, Key},
         Kademlia, KademliaConfig, KademliaEvent, QueryResult,
     },
-    mdns, mplex, noise, ping,
+    mdns, mplex,
+    multiaddr::Protocol,
+    noise, ping,
     swarm::{SwarmBuilder, SwarmEvent},
-    tcp::{GenTcpConfig, TokioTcpTransport},
-    Multiaddr, NetworkBehaviour, PeerId, Transport,
+    tcp, websocket, yamux, NetworkBehaviour, PeerId, Transport,
 };
 use libp2p_swarm::{keep_alive, NetworkBehaviour};
 use mc_common::logger::{log, o};
@@ -27,7 +29,6 @@ use postage::{broadcast, prelude::Stream};
 use std::{
     collections::hash_map::DefaultHasher,
     hash::{Hash, Hasher},
-    str::FromStr,
     sync::Arc,
 };
 use tokio::{io::AsyncBufReadExt, time::Duration};
@@ -41,7 +42,7 @@ const MSG_BUS_QUEUE_SIZE: usize = 1000;
 struct Behaviour {
     keep_alive: keep_alive::Behaviour,
     ping: ping::Behaviour,
-    mdns: mdns::TokioMdns,
+    //mdns: mdns::TokioMdns,
     kademlia: Kademlia<MemoryStore>,
     gossipsub: Gossipsub,
 }
@@ -132,13 +133,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     cfg.set_query_timeout(Duration::from_secs(5 * 60));
     let store = MemoryStore::new(local_peer_id);
     let mut kademlia = Kademlia::with_config(local_peer_id, store, cfg);
-    for (peer, peer_id) in config.peers.iter().zip(config.peer_ids.iter()) {
-        let remote: Multiaddr = peer.parse()?;
-        //swarm.dial(remote)?;
-        kademlia.add_address(&PeerId::from_str(peer_id)?, remote);
-        gossipsub.add_explicit_peer(&PeerId::from_str(peer_id)?);
-        log::info!(&logger, "p2p: Dialed {}", peer);
-    }
+
     let key = Key::new(&"keh");
     kademlia
         .start_providing(key.clone())
@@ -150,32 +145,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let behaviour = Behaviour {
         keep_alive: keep_alive::Behaviour::default(),
         ping: ping::Behaviour::default(),
-        mdns: mdns::TokioMdns::new(mdns::MdnsConfig::default())?,
+        //mdns: mdns::TokioMdns::new(mdns::MdnsConfig::default())?,
         kademlia,
         gossipsub,
     };
 
-    let transport = TokioTcpTransport::new(GenTcpConfig::default().nodelay(true))
-        .upgrade(upgrade::Version::V1)
-        .authenticate(
-            noise::NoiseAuthenticated::xx(&local_key)
-                .expect("Signing libp2p-noise static DH keypair failed."),
-        )
-        .multiplex(mplex::MplexConfig::new())
-        .boxed();
-
-    //let transport = tokio_development_transport(local_key)?;
+    let transport = {
+        let dns_tcp = dns::TokioDnsConfig::system(tcp::TokioTcpTransport::new(
+            tcp::GenTcpConfig::new().nodelay(true),
+        ))?;
+        let ws_dns_tcp = websocket::WsConfig::new(dns::TokioDnsConfig::system(
+            tcp::TokioTcpTransport::new(tcp::GenTcpConfig::new().nodelay(true)),
+        )?);
+        dns_tcp.or_transport(ws_dns_tcp)
+    }
+    .upgrade(upgrade::Version::V1)
+    .authenticate(
+        noise::NoiseAuthenticated::xx(&local_key)
+            .expect("Signing libp2p-noise static DH keypair failed."),
+    )
+    .multiplex(SelectUpgrade::new(
+        yamux::YamuxConfig::default(),
+        mplex::MplexConfig::default(),
+    ))
+    .timeout(std::time::Duration::from_secs(20))
+    .boxed();
 
     let mut swarm = SwarmBuilder::new(transport, behaviour, local_peer_id)
         .executor(Box::new(|fut| {
             tokio::spawn(fut);
         }))
         .build();
+
+    for orig_peer_addr in config.p2p_bootstrap_peers.iter() {
+        let mut peer_addr = orig_peer_addr.clone();
+        match peer_addr.pop() {
+            Some(Protocol::P2p(peer_id)) => {
+                let peer_id = PeerId::from_multihash(peer_id).expect("Can't parse peer id");
+                swarm
+                    .behaviour_mut()
+                    .kademlia
+                    .add_address(&peer_id, peer_addr.clone());
+                //swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+                swarm.dial(peer_addr)?;
+                log::info!(&logger, "p2p: Dialed {}", orig_peer_addr);
+            }
+            other => {
+                panic!("Invalid peer address {:?}, expected last component to be p2p multihash and instead got {:?}", orig_peer_addr, other);
+            }
+        }
+    }
+
     swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
     let logger2 = logger.clone();
     tokio::spawn(async move {
         println!("in swarm loop");
-        let mut x = 0;
         loop {
             tokio::select! {
                 line = stdin.next_line() => {
@@ -186,6 +210,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             swarm.behaviour_mut().kademlia.get_providers(key.clone());
                         }
                         "gos" => {
+                            use rand::Rng;
+                            let x = rand::thread_rng().gen_range(0..100000000);
                             if let Err(e) = swarm
                                 .behaviour_mut()
                                 .gossipsub
@@ -193,7 +219,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             {
                                 println!("Publish error: {:?}", e);
                             }
-                            x += 1;
                         }
                         l => {
                             println!("???? {:?}", l);

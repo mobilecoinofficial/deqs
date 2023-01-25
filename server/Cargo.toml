@@ -36,6 +36,7 @@ serde_json = "1.0"
 tokio = { version = "1", features = ["rt", "rt-multi-thread", "macros", "time", "sync", "io-std"] }
 void = "1"
 
+rand = "0.8"
 
 [dev-dependencies]
 deqs-mc-test-utils = { path = "../mc-test-utils" }
