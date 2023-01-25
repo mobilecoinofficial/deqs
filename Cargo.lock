@@ -1131,6 +1131,7 @@ dependencies = [
  "futures",
  "grpcio",
  "hex",
+ "libp2p",
  "mc-api",
  "mc-common",
  "mc-transaction-types",

@@ -19,7 +19,7 @@ use libp2p::{
     mdns, mplex,
     multiaddr::Protocol,
     noise, ping,
-    swarm::{SwarmBuilder, SwarmEvent},
+    swarm::{AddressScore, SwarmBuilder, SwarmEvent},
     tcp, websocket, yamux, NetworkBehaviour, PeerId, Transport,
 };
 use libp2p_swarm::{keep_alive, NetworkBehaviour};
@@ -41,10 +41,11 @@ const MSG_BUS_QUEUE_SIZE: usize = 1000;
 #[behaviour(out_event = "OutEvent")]
 struct Behaviour {
     keep_alive: keep_alive::Behaviour,
-    ping: ping::Behaviour,
+    //ping: ping::Behaviour,
     //mdns: mdns::TokioMdns,
     kademlia: Kademlia<MemoryStore>,
     gossipsub: Gossipsub,
+    identify: identify::Behaviour,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -100,7 +101,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
     let quote_book = InMemoryQuoteBook::default();
 
-    let local_key = identity::Keypair::generate_ed25519();
+    let local_key = match config.p2p_keypair_path {
+        Some(ref path) => {
+            let bytes = std::fs::read(path)?;
+            identity::Keypair::from_protobuf_encoding(&bytes)?
+        }
+        None => identity::Keypair::generate_ed25519(),
+    };
     let local_peer_id = PeerId::from(local_key.public());
     log::info!(logger, "p2p: local peer id: {:?}", local_peer_id);
 
@@ -131,6 +138,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a Kademlia behaviour.
     let mut cfg = KademliaConfig::default();
     cfg.set_query_timeout(Duration::from_secs(5 * 60));
+    //cfg.set_provider_publication_interval(Some(Duration::from_secs(1)));
     let store = MemoryStore::new(local_peer_id);
     let mut kademlia = Kademlia::with_config(local_peer_id, store, cfg);
 
@@ -142,12 +150,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // subscribes to our topic
     gossipsub.subscribe(&topic).unwrap();
 
+    let identify = identify::Behaviour::new(identify::Config::new("1".into(), local_key.public()));
+
     let behaviour = Behaviour {
         keep_alive: keep_alive::Behaviour::default(),
-        ping: ping::Behaviour::default(),
+        //ping: ping::Behaviour::default(),
         //mdns: mdns::TokioMdns::new(mdns::MdnsConfig::default())?,
         kademlia,
         gossipsub,
+        identify,
     };
 
     let transport = {
@@ -196,7 +207,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse()?)?;
+    swarm.listen_on(
+        config
+            .p2p_listen
+            .clone()
+            .unwrap_or_else(|| "/ip4/0.0.0.0/tcp/0".parse().unwrap()),
+    )?;
+
+    if let Some(addr) = config.p2p_external_address.as_ref() {
+        swarm.add_external_address(addr.clone(), AddressScore::Infinite);
+    }
+
     let logger2 = logger.clone();
     tokio::spawn(async move {
         println!("in swarm loop");
@@ -219,6 +240,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             {
                                 println!("Publish error: {:?}", e);
                             }
+                        }
+                        "b" => {
+                            println!("{:?}", swarm.behaviour_mut().kademlia.bootstrap());
                         }
                         l => {
                             println!("???? {:?}", l);
@@ -255,6 +279,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     std::str::from_utf8(ok.key.as_ref()).unwrap(),
                                     addrs,
                                 );
+                                for addr in addrs {
+                                    log::crit!(&logger2, "DIAL: {:?}", swarm.dial(addr));
+                                }
                             }
                         }
                         evt => {
