@@ -10,12 +10,9 @@ use mc_account_keys::AccountKey;
 use mc_crypto_ring_signature::Error as RingSignatureError;
 use mc_crypto_ring_signature_signer::NoKeysRingSigner;
 use mc_fog_report_validation_test_utils::MockFogResolver;
-use mc_transaction_builder::{
-    test_utils::get_input_credentials, EmptyMemoBuilder, ReservedSubaddresses,
-    SignedContingentInputBuilder,
-};
+use mc_transaction_builder::SignedContingentInputBuilder;
 use mc_transaction_extra::{SignedContingentInput, SignedContingentInputError};
-use mc_transaction_types::{Amount, BlockVersion, TokenId};
+use mc_transaction_types::{Amount, TokenId};
 use rand::{rngs::StdRng, SeedableRng};
 use rand_core::{CryptoRng, RngCore};
 
@@ -36,38 +33,13 @@ pub fn create_sci_builder(
     counter_amount: u64,
     rng: &mut (impl RngCore + CryptoRng),
 ) -> SignedContingentInputBuilder<MockFogResolver> {
-    let block_version = BlockVersion::MAX;
-    let fog_resolver = MockFogResolver::default();
-
-    let offerer_account = AccountKey::random(rng);
-
-    let offered_input_credentials = get_input_credentials(
-        block_version,
-        Amount::new(base_amount, pair.base_token_id),
-        &offerer_account,
-        &fog_resolver,
+    deqs_mc_test_utils::create_sci_builder(
+        pair.base_token_id,
+        pair.counter_token_id,
+        base_amount,
+        counter_amount,
         rng,
-    );
-
-    let mut builder = SignedContingentInputBuilder::new(
-        block_version,
-        offered_input_credentials,
-        fog_resolver.clone(),
-        EmptyMemoBuilder::default(),
     )
-    .unwrap();
-
-    builder
-        .add_required_output(
-            Amount::new(counter_amount, pair.counter_token_id),
-            &offerer_account.default_subaddress(),
-            rng,
-        )
-        .unwrap();
-
-    builder.set_tombstone_block(2000);
-
-    builder
 }
 
 /// Create an SCI that offers some amount of a given token in exchange for a
@@ -79,14 +51,13 @@ pub fn create_sci(
     counter_amount: u64,
     rng: &mut (impl RngCore + CryptoRng),
 ) -> SignedContingentInput {
-    let builder = create_sci_builder(pair, base_amount, counter_amount, rng);
-
-    let sci = builder.build(&NoKeysRingSigner {}, rng).unwrap();
-
-    // The contingent input should have a valid signature.
-    sci.validate().unwrap();
-
-    sci
+    deqs_mc_test_utils::create_sci(
+        pair.base_token_id,
+        pair.counter_token_id,
+        base_amount,
+        counter_amount,
+        rng,
+    )
 }
 
 /// Create a partial fill SCI that offers between required_base_change_amount
@@ -100,59 +71,15 @@ pub fn create_partial_sci(
     counter_amount: u64,
     rng: &mut (impl RngCore + CryptoRng),
 ) -> SignedContingentInput {
-    let block_version = BlockVersion::MAX;
-    let fog_resolver = MockFogResolver::default();
-
-    let offerer_account = AccountKey::random(rng);
-
-    let offered_input_credentials = get_input_credentials(
-        block_version,
-        Amount::new(base_amount_offered, pair.base_token_id),
-        &offerer_account,
-        &fog_resolver,
+    deqs_mc_test_utils::create_partial_sci(
+        pair.base_token_id,
+        pair.counter_token_id,
+        base_amount_offered,
+        min_base_fill_amount,
+        required_base_change_amount,
+        counter_amount,
         rng,
-    );
-
-    let mut builder = SignedContingentInputBuilder::new(
-        block_version,
-        offered_input_credentials,
-        fog_resolver.clone(),
-        EmptyMemoBuilder::default(),
     )
-    .unwrap();
-
-    builder
-        .add_partial_fill_change_output(
-            Amount::new(base_amount_offered, pair.base_token_id),
-            &ReservedSubaddresses::from(&offerer_account),
-            rng,
-        )
-        .unwrap();
-
-    if required_base_change_amount > 0 {
-        builder
-            .add_required_change_output(
-                Amount::new(required_base_change_amount, pair.base_token_id),
-                &ReservedSubaddresses::from(&offerer_account),
-                rng,
-            )
-            .unwrap();
-    }
-
-    // Originator requests an output worth counter_amount to themselves
-    builder
-        .add_partial_fill_output(
-            Amount::new(counter_amount, pair.counter_token_id),
-            &offerer_account.default_subaddress(),
-            rng,
-        )
-        .unwrap();
-
-    builder.set_min_partial_fill_value(min_base_fill_amount);
-
-    let sci = builder.build(&NoKeysRingSigner {}, rng).unwrap();
-    sci.validate().unwrap();
-    sci
 }
 
 /// Test order book basic happy flow

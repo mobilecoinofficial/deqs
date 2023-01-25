@@ -10,9 +10,9 @@ use std::{
 };
 
 /// Order book functionality for a single trading pair
-pub trait OrderBook {
+pub trait OrderBook: Clone + Send + Sync + 'static {
     /// Error data type
-    type Error: Debug + Display + Eq + Into<Error>;
+    type Error: Debug + Display + Eq + Send + Sync + Into<Error>;
 
     /// Add an SCI to the order book.
     ///

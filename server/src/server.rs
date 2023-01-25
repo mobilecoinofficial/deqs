@@ -1,15 +1,23 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{ClientService, Error};
+use crate::{ClientService, Error, Msg};
 use deqs_api::DeqsClientUri;
+use deqs_order_book::OrderBook;
 use futures::executor::block_on;
 use mc_common::logger::{log, Logger};
 use mc_util_grpc::ConnectionUriGrpcioServer;
 use mc_util_uri::ConnectionUri;
+use postage::broadcast::Sender;
 use std::sync::Arc;
 
 /// DEQS server
-pub struct Server {
+pub struct Server<OB: OrderBook> {
+    /// Message bus sender.
+    msg_bus_tx: Sender<Msg>,
+
+    /// Order book.
+    order_book: OB,
+
     /// Client listen URI.
     client_listen_uri: DeqsClientUri,
 
@@ -20,9 +28,16 @@ pub struct Server {
     server: Option<grpcio::Server>,
 }
 
-impl Server {
-    pub fn new(client_listen_uri: DeqsClientUri, logger: Logger) -> Self {
+impl<OB: OrderBook> Server<OB> {
+    pub fn new(
+        msg_bus_tx: Sender<Msg>,
+        order_book: OB,
+        client_listen_uri: DeqsClientUri,
+        logger: Logger,
+    ) -> Self {
         Self {
+            msg_bus_tx,
+            order_book,
             client_listen_uri,
             logger,
             server: None,
@@ -56,7 +71,12 @@ impl Server {
         let health_service =
             mc_util_grpc::HealthService::new(None, self.logger.clone()).into_service();
 
-        let client_service = ClientService::new(self.logger.clone()).into_service();
+        let client_service = ClientService::new(
+            self.msg_bus_tx.clone(),
+            self.order_book.clone(),
+            self.logger.clone(),
+        )
+        .into_service();
 
         let grpc_env = Arc::new(
             grpcio::EnvBuilder::new()
@@ -92,7 +112,7 @@ impl Server {
     }
 }
 
-impl Drop for Server {
+impl<OB: OrderBook> Drop for Server<OB> {
     fn drop(&mut self) {
         self.stop();
     }

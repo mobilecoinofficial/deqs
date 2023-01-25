@@ -97,6 +97,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b34d609dfbaf33d6889b2b7106d3ca345eacad44200913df5ba02bfd31d2ba9"
 
 [[package]]
+name = "atomic"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b88d82667eca772c4aa12f0f1348b3ae643424c8876448f3f7bd5787032e234c"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
 name = "atomic-polyfill"
 version = "0.1.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -491,6 +500,40 @@ dependencies = [
 ]
 
 [[package]]
+name = "crossbeam-deque"
+version = "0.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "715e8152b692bba2d374b53d4875445368fdf21a94751410af607a5ac677d1fc"
+dependencies = [
+ "cfg-if",
+ "crossbeam-epoch",
+ "crossbeam-utils",
+]
+
+[[package]]
+name = "crossbeam-epoch"
+version = "0.9.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "01a9af1f4c2ef74bb8aa1f7e19706bc72d03598c8a570bb5de72243c7a9d9d5a"
+dependencies = [
+ "autocfg",
+ "cfg-if",
+ "crossbeam-utils",
+ "memoffset",
+ "scopeguard",
+]
+
+[[package]]
+name = "crossbeam-queue"
+version = "0.3.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1cfb3ea8a53f37c40dea2c7bedcbd88bdfae54f5e2175d6ecaff1c988353add"
+dependencies = [
+ "cfg-if",
+ "crossbeam-utils",
+]
+
+[[package]]
 name = "crossbeam-utils"
 version = "0.8.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -626,9 +669,13 @@ name = "deqs-api"
 version = "1.3.0-pre0"
 dependencies = [
  "cargo-emit",
+ "deqs-mc-test-utils",
+ "deqs-order-book",
  "futures",
  "grpcio",
  "mc-api",
+ "mc-transaction-extra",
+ "mc-transaction-types",
  "mc-util-build-grpc",
  "mc-util-build-script",
  "mc-util-uri",
@@ -637,11 +684,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "deqs-mc-test-utils"
+version = "1.3.0-pre0"
+dependencies = [
+ "mc-account-keys",
+ "mc-crypto-ring-signature-signer",
+ "mc-fog-report-validation-test-utils",
+ "mc-transaction-builder",
+ "mc-transaction-extra",
+ "mc-transaction-types",
+ "rand_core 0.6.4",
+]
+
+[[package]]
 name = "deqs-order-book"
 version = "1.3.0-pre0"
 dependencies = [
  "assert_matches",
+ "deqs-mc-test-utils",
  "displaydoc",
+ "hex",
  "mc-account-keys",
  "mc-blockchain-types",
  "mc-crypto-digestible",
@@ -652,8 +714,6 @@ dependencies = [
  "mc-transaction-core",
  "mc-transaction-extra",
  "mc-transaction-types",
- "mc-util-from-random",
- "mc-util-test-helper",
  "rand 0.8.5",
  "rand_core 0.6.4",
 ]
@@ -664,13 +724,46 @@ version = "1.3.0-pre0"
 dependencies = [
  "clap 4.0.26",
  "deqs-api",
+ "deqs-mc-test-utils",
+ "deqs-order-book",
  "displaydoc",
  "futures",
  "grpcio",
+ "mc-api",
  "mc-common",
+ "mc-transaction-extra",
+ "mc-transaction-types",
  "mc-util-grpc",
  "mc-util-metrics",
  "mc-util-uri",
+ "postage",
+ "rand 0.8.5",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
+name = "deqs-test-cli"
+version = "1.3.0-pre0"
+dependencies = [
+ "clap 4.0.26",
+ "deqs-api",
+ "deqs-mc-test-utils",
+ "deqs-order-book",
+ "displaydoc",
+ "futures",
+ "grpcio",
+ "hex",
+ "mc-api",
+ "mc-common",
+ "mc-transaction-types",
+ "mc-util-grpc",
+ "mc-util-parse",
+ "mc-util-uri",
+ "rand 0.8.5",
+ "rayon",
  "serde",
  "serde_json",
 ]
@@ -2105,6 +2198,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "mc-util-parse"
+version = "4.0.1"
+dependencies = [
+ "hex",
+ "itertools",
+ "mc-sgx-css",
+]
+
+[[package]]
 name = "mc-util-repr-bytes"
 version = "4.0.1"
 dependencies = [
@@ -2122,17 +2224,6 @@ dependencies = [
  "serde",
  "serde_cbor",
  "serde_with",
-]
-
-[[package]]
-name = "mc-util-test-helper"
-version = "4.0.1"
-dependencies = [
- "clap 4.0.26",
- "lazy_static",
- "mc-account-keys",
- "rand 0.8.5",
- "rand_hc 0.3.1",
 ]
 
 [[package]]
@@ -2178,6 +2269,15 @@ name = "memchr"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2dffe52ecf27772e601905b7522cb4ef790d2cc203488bbd0e2fe85fcb74566d"
+
+[[package]]
+name = "memoffset"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5de893c32cde5f383baa4c04c5d6dbdd735cfd4a794b0debdb2bb1b421da5ff4"
+dependencies = [
+ "autocfg",
+]
 
 [[package]]
 name = "merlin"
@@ -2399,6 +2499,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "478c572c3d73181ff3c2539045f6eb99e5491218eae919370993b890cdbdd98e"
 
 [[package]]
+name = "pin-project"
+version = "1.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ad29a609b6bcd67fee905812e544992d216af9d755757c05ed2d0e15a74c6ecc"
+dependencies = [
+ "pin-project-internal",
+]
+
+[[package]]
+name = "pin-project-internal"
+version = "1.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "069bdb1e05adc7a8990dce9cc75370895fbe4e3d58b9b73bf1aee56359344a55"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2417,6 +2537,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1df8c4ec4b0627e53bdf214615ad287367e482558cf84b109250b37464dc03ae"
 
 [[package]]
+name = "pollster"
+version = "0.2.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5da3b0203fd7ee5720aa0b5e790b591aa5d3f41c3ed2c34a3a393382198af2f7"
+
+[[package]]
 name = "polyval"
 version = "0.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2426,6 +2552,22 @@ dependencies = [
  "cpufeatures",
  "opaque-debug",
  "universal-hash",
+]
+
+[[package]]
+name = "postage"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af3fb618632874fb76937c2361a7f22afd393c982a2165595407edc75b06d3c1"
+dependencies = [
+ "atomic",
+ "crossbeam-queue",
+ "log",
+ "parking_lot 0.12.1",
+ "pin-project",
+ "pollster",
+ "static_assertions",
+ "thiserror",
 ]
 
 [[package]]
@@ -2642,6 +2784,28 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d51e9f596de227fda2ea6c84607f5558e196eeaf43c986b724ba4fb8fdf497e7"
 dependencies = [
  "rand_core 0.6.4",
+]
+
+[[package]]
+name = "rayon"
+version = "1.6.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6db3a213adf02b3bcfd2d3846bb41cb22857d131789e01df434fb7e7bc0759b7"
+dependencies = [
+ "either",
+ "rayon-core",
+]
+
+[[package]]
+name = "rayon-core"
+version = "1.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "cac410af5d00ab6884528b4ab69d1e8e146e8d471201800fa1b4524126de6ad3"
+dependencies = [
+ "crossbeam-channel",
+ "crossbeam-deque",
+ "crossbeam-utils",
+ "num_cpus",
 ]
 
 [[package]]
@@ -3480,7 +3644,19 @@ dependencies = [
  "num_cpus",
  "pin-project-lite",
  "socket2",
+ "tokio-macros",
  "windows-sys",
+]
+
+[[package]]
+name = "tokio-macros"
+version = "1.8.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d266c00fde287f55d3f1c3e96c500c362a2b8c695076ec180f27918820bc6df8"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]

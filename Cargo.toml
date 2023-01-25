@@ -3,8 +3,10 @@ cargo-features = ["named-profiles"]
 [workspace]
 members = [
     "api",
-    "order_book",
+    "mc-test-utils",
+    "order-book",
     "server",
+    "test-cli",
 ]
 exclude = [
     "mobilecoin/",

@@ -12,31 +12,103 @@ import "external.proto";
 
 service DeqsClientAPI {
     /// This is called to submit a new quote
-    rpc SubmitQuote(SubmitQuoteRequest) returns (SubmitQuoteResponse) {}
+    rpc SubmitQuotes(SubmitQuotesRequest) returns (SubmitQuotesResponse) {}
+
     /// This is called to get the existing quotes
     rpc GetQuotes(GetQuotesRequest) returns (GetQuotesResponse) {}
+
+    /// Remove an order from the order book
+    rpc RemoveOrder(RemoveOrderRequest) returns (RemoveOrderResponse) {}
+
+    /// Subscribe for live updates to the order book
+    rpc LiveUpdates(LiveUpdatesRequest) returns (stream LiveUpdate);
 }
 
-message SubmitQuoteRequest {
+message SubmitQuotesRequest {
     /// One or more quotes to submit
     repeated external.SignedContingentInput quotes = 1;
 }
 
-message SubmitQuoteResponse {
+message SubmitQuotesResponse {
     /// The status of each submission
     repeated QuoteStatusCode status_codes = 1;
+
+    /// String error messages for each case where status code is not CREATED
+    repeated string error_messages = 2;
+
+    /// Orders created. Will contain a valid order only for entries whose status code is CREATED.
+    repeated Order orders = 3;
 }
 
 /// The status that a quote can have upon submission
 ///
 /// (Should there be a status code here for each way a SignedContingentInput can be invalid?)
 enum QuoteStatusCode {
-    VALID = 0;
-    INVALID = 1;
+    CREATED = 0;
+    INVALID_SCI = 1;
+    UNSUPPORTED_SCI = 2;
+    ORDER_ALREADY_EXISTS = 3;
+    OTHER = 4;
 }
 
-message GetQuotesRequest {}
+message GetQuotesRequest {
+    /// Pair we want to get quotes for.
+    Pair pair = 1;
+
+    /// Range of base tokens we are interested in. Orders that have an overlapping range will be returned.
+    uint64 base_range_min = 2;
+    uint64 base_range_max = 3;
+
+    /// Maximum number of orders to return.
+    uint64 limit = 4;
+}
 
 message GetQuotesResponse {
-    repeated external.SignedContingentInput quotes = 1;
+    repeated Order orders = 1;
+}
+
+message RemoveOrderRequest {
+    OrderId order_id = 1;
+}
+
+message RemoveOrderResponse {
+    Order order = 1;
+}
+
+message LiveUpdatesRequest {
+
+}
+
+message LiveUpdate {
+    oneof update {
+        Order order_added = 1;
+        OrderId order_removed = 2;
+    }
+}
+
+/// Order Unique Identifier.
+message OrderId {
+    bytes data = 1;
+}
+
+/// Single trading pair.
+message Pair {
+    /// The token id being offered "for sale".
+    uint64 base_token_id = 1;
+
+    /// The token id that needs to be paid to satisfy the offering.
+    /// (The SCI is "priced" with this token id)
+    uint64 counter_token_id = 2;
+}
+
+/// A single order in the order book.
+/// See deqs_order_book::Order
+message Order {
+    external.SignedContingentInput sci = 1;
+    OrderId id = 2;
+    Pair pair = 3;
+    uint64 base_range_min = 4;
+    uint64 base_range_max = 5;
+    uint64 max_counter_tokens = 6;
+    uint64 timestamp = 7;
 }

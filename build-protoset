@@ -1,0 +1,1 @@
+protoc --proto_path=./api/proto --proto_path=mobilecoin/api/proto --descriptor_set_out=deqs.protoset --include_imports api/proto/deqs.proto

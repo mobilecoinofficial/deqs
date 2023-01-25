@@ -1,18 +1,32 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use clap::Parser;
-use deqs_server::{Server, ServerConfig};
+use deqs_order_book::InMemoryOrderBook;
+use deqs_server::{Msg, Server, ServerConfig};
 use mc_common::logger::o;
 use mc_util_grpc::AdminServer;
-use std::{sync::Arc, thread::sleep, time::Duration};
+use postage::{broadcast, prelude::Stream};
+use std::sync::Arc;
 
-fn main() {
+/// Maximum number of messages that can be queued in the message bus.
+const MSG_BUS_QUEUE_SIZE: usize = 1000;
+
+#[tokio::main]
+async fn main() {
     let _sentry_guard = mc_common::sentry::init();
     let config = ServerConfig::parse();
     let (logger, _global_logger_guard) = mc_common::logger::create_app_logger(o!());
     mc_common::setup_panic_handler();
 
-    let mut server = Server::new(config.client_listen_uri.clone(), logger.clone());
+    let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
+    let order_book = InMemoryOrderBook::default();
+
+    let mut server = Server::new(
+        msg_bus_tx,
+        order_book,
+        config.client_listen_uri.clone(),
+        logger.clone(),
+    );
     server.start().expect("Failed starting client GRPC server");
 
     let config_json = serde_json::to_string(&config).expect("failed to serialize config to JSON");
@@ -30,8 +44,10 @@ fn main() {
         .expect("Failed starting admin server")
     });
 
-    // Keep the server alive
+    // Keep the server alive by just reading messages from the message bus.
+    // This allows us to ensure we always have at least 1 receiver on the message
+    // bus, which will prevent sends from failing.
     loop {
-        sleep(Duration::from_secs(1));
+        let _ = msg_bus_rx.recv().await;
     }
 }
