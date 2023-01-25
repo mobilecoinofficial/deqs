@@ -137,6 +137,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create a Kademlia behaviour.
     let mut cfg = KademliaConfig::default();
+    cfg.set_provider_publication_interval(Some(Duration::from_secs(10)));
     cfg.set_query_timeout(Duration::from_secs(5 * 60));
     //cfg.set_provider_publication_interval(Some(Duration::from_secs(1)));
     let store = MemoryStore::new(local_peer_id);
