@@ -21,6 +21,7 @@ async fn main() {
 
     let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
     let quote_book = InMemoryQuoteBook::default();
+
     // Open the ledger db
     let ledger_db = LedgerDB::open(&config.ledger_db).expect("Could not open ledger db");
     let num_blocks = ledger_db
