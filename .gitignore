@@ -66,3 +66,6 @@ __pycache__/
 
 # css files (should not be committed)
 *.css
+
+# Protoset file (should not be committed)
+deqs.protoset
