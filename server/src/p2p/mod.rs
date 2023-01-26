@@ -26,6 +26,7 @@ use mc_common::logger::{log, Logger};
 use tokio::{io::AsyncBufReadExt, task::JoinHandle};
 
 const BROADCAST_TOPIC: &str = "BROADCAST";
+const KAD_PEER_KEY: &str = "mc/deqs/kad/peer";
 
 pub struct P2P {
     pub join_handle: JoinHandle<()>,
@@ -42,56 +43,24 @@ impl P2P {
         let local_peer_id = PeerId::from(local_key.public());
         log::info!(logger, "p2p: local peer id: {:?}", local_peer_id);
 
-        let behaviour = Behaviour::new(&local_key, local_peer_id)?;
-        let key = Key::new(&"keh");
-
         let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
 
         ///////////////////////
         let topic = IdentTopic::new(BROADCAST_TOPIC);
         ////////////////////////////////
 
+        let behaviour = Behaviour::new(&local_key, local_peer_id)?;
+        let key = Key::new(&KAD_PEER_KEY);
         let transport = Self::create_transport(&local_key)?;
-
         let mut swarm = SwarmBuilder::new(transport, behaviour, local_peer_id)
             .executor(Box::new(|fut| {
                 tokio::spawn(fut);
             }))
             .build();
 
-        // First, we add the addresses of the bootstrap nodes to our view of the DHT
-        for orig_peer_addr in bootstrap_peers.iter() {
-            let mut peer_addr = orig_peer_addr.clone();
-            match peer_addr.pop() {
-                Some(Protocol::P2p(peer_id)) => {
-                    let peer_id = PeerId::from_multihash(peer_id).expect("Can't parse peer id");
-                    swarm
-                        .behaviour_mut()
-                        .kademlia
-                        .add_address(&peer_id, peer_addr.clone());
-                    //swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
-                    swarm.dial(peer_addr)?;
-                    log::info!(&logger, "p2p: Dialed {}", orig_peer_addr);
-                }
-                other => {
-                    panic!("Invalid peer address {:?}, expected last component to be p2p multihash and instead got {:?}", orig_peer_addr, other);
-                }
-            }
-        }
-
-        // Next, we add our own info to the DHT. This will then automatically be
-        // shared with the other peers on the DHT. This operation will
-        // fail if we are a bootstrap peer.
-        if !bootstrap_peers.is_empty() {
-            swarm
-                .behaviour_mut()
-                .kademlia
-                .bootstrap()
-                .map_err(|err| Error::Bootstrap(err.to_string()))?;
-        }
+        Self::bootstrap(&mut swarm, bootstrap_peers, &logger)?;
 
         swarm.listen_on(listen_addr)?;
-
         if let Some(addr) = external_addr {
             swarm.add_external_address(addr.clone(), AddressScore::Infinite);
         }
@@ -140,6 +109,51 @@ impl P2P {
         });
 
         Ok(Self { join_handle })
+    }
+
+    fn bootstrap(
+        swarm: &mut Swarm<Behaviour>,
+        bootstrap_peers: &[Multiaddr],
+        logger: &Logger,
+    ) -> Result<(), Error> {
+        // First, we add the addresses of the bootstrap nodes to our view of the DHT
+        for orig_peer_addr in bootstrap_peers.iter() {
+            let mut peer_addr = orig_peer_addr.clone();
+            match peer_addr.pop() {
+                Some(Protocol::P2p(peer_id)) => {
+                    let peer_id = PeerId::from_multihash(peer_id)
+                        .map_err(|err| Error::Multihash(format!("{:?}", err)))?;
+
+                    swarm
+                        .behaviour_mut()
+                        .kademlia
+                        .add_address(&peer_id, peer_addr.clone());
+                    //swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
+
+                    swarm.dial(peer_addr)?;
+                    log::info!(logger, "p2p: Dialed {}", orig_peer_addr);
+                }
+                other => {
+                    return Err(Error::InvalidPeerAddress(
+                        orig_peer_addr.clone(),
+                        format!("{:?}", other),
+                    ));
+                }
+            }
+        }
+
+        // Next, we add our own info to the DHT. This will then automatically be
+        // shared with the other peers on the DHT. This operation will
+        // fail if we are a bootstrap peer.
+        if !bootstrap_peers.is_empty() {
+            swarm
+                .behaviour_mut()
+                .kademlia
+                .bootstrap()
+                .map_err(|err| Error::Bootstrap(err.to_string()))?;
+        }
+
+        Ok(())
     }
 
     fn handle_swarm_event<TErr>(
@@ -218,7 +232,7 @@ impl P2P {
             dns_tcp.or_transport(ws_dns_tcp)
         }
         .upgrade(upgrade::Version::V1)
-        .authenticate(noise::NoiseAuthenticated::xx(&local_key)?)
+        .authenticate(noise::NoiseAuthenticated::xx(local_key)?)
         .multiplex(SelectUpgrade::new(
             yamux::YamuxConfig::default(),
             mplex::MplexConfig::default(),

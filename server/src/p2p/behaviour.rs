@@ -57,9 +57,9 @@ pub struct Behaviour {
 
 impl Behaviour {
     pub fn new(local_key: &identity::Keypair, local_peer_id: PeerId) -> Result<Self, Error> {
-        let gossipsub = Self::create_gossipsub(&local_key)?;
+        let gossipsub = Self::create_gossipsub(local_key)?;
         let kademlia = Self::create_kademlia(local_peer_id);
-        let identify = Self::create_identify(&local_key);
+        let identify = Self::create_identify(local_key);
 
         Ok(Self {
             keep_alive: keep_alive::Behaviour::default(),
@@ -91,11 +91,11 @@ impl Behaviour {
             .build()
             .map_err(Error::GossipsubBuild)?;
 
-        Ok(Gossipsub::new(
+        Gossipsub::new(
             MessageAuthenticity::Signed(local_key.clone()),
             gossipsub_config,
         )
-        .map_err(Error::GossipsubNew)?)
+        .map_err(Error::GossipsubNew)
     }
 
     fn create_kademlia(local_peer_id: PeerId) -> Kademlia<MemoryStore> {

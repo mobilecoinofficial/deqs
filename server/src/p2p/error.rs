@@ -1,7 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use displaydoc::Display;
-use libp2p::{noise::NoiseError, TransportError};
+use libp2p::{noise::NoiseError, Multiaddr, TransportError};
 use libp2p_swarm::DialError;
 use std::io::Error as IoError;
 
@@ -28,6 +28,14 @@ pub enum Error {
 
     /// Transport: {0}
     Transport(TransportError<IoError>),
+
+    /// Multihash: {0}
+    Multihash(String),
+
+    /** Invalid peer address {0}, expected last component to be p2p multihash
+     * and instead got {1}
+     */
+    InvalidPeerAddress(Multiaddr, String),
 }
 
 impl From<IoError> for Error {
