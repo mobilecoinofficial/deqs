@@ -11,5 +11,5 @@ pub use client_service::ClientService;
 pub use config::ServerConfig;
 pub use error::Error;
 pub use msg::Msg;
-pub use p2p::P2P;
+pub use p2p::{P2P, Error as P2PError};
 pub use server::Server;
