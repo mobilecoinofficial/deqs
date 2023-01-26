@@ -2,12 +2,13 @@
 
 use clap::Parser;
 use deqs_quote_book::InMemoryQuoteBook;
-use deqs_server::{Msg, Server, ServerConfig, P2P};
+use deqs_server::{Msg, Server, ServerConfig};
 use libp2p::identity;
 use mc_common::logger::o;
 use mc_util_grpc::AdminServer;
 use postage::{broadcast, prelude::Stream};
 use std::sync::Arc;
+use tokio::sync::mpsc;
 
 /// Maximum number of messages that can be queued in the message bus.
 const MSG_BUS_QUEUE_SIZE: usize = 1000;
@@ -30,17 +31,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None => identity::Keypair::generate_ed25519(),
     };
 
-    let _p2p = P2P::new(
+    // let _p2p = P2P::new(
+    //     local_key,
+    //     &config.p2p_bootstrap_peers,
+    //     config
+    //         .p2p_listen
+    //         .clone()
+    //         .unwrap_or_else(|| "/ip4/0.0.0.0/tcp/0".parse().unwrap()),
+    //     config.p2p_external_address.as_ref(),
+    //     logger.clone(),
+    // )
+    // .unwrap();
+
+    let (notification_tx, _notification_rx) = mpsc::unbounded_channel();
+    let (instruction_tx, instruction_rx) = mpsc::unbounded_channel();
+    let behaviour = deqs_p2p::Behaviour::new(&local_key)?;
+    let mut network_builder = deqs_p2p::NetworkBuilder::new(
         local_key,
-        &config.p2p_bootstrap_peers,
-        config
-            .p2p_listen
-            .clone()
-            .unwrap_or_else(|| "/ip4/0.0.0.0/tcp/0".parse().unwrap()),
-        config.p2p_external_address.as_ref(),
+        instruction_rx,
+        notification_tx,
+        behaviour,
         logger.clone(),
-    )
-    .unwrap();
+    )?;
+    if let Some(ref listen_addr) = config.p2p_listen {
+        network_builder = network_builder.listen_address(listen_addr.clone());
+    }
+    if let Some(ref external_addr) = config.p2p_external_address {
+        network_builder = network_builder.external_addresses(vec![external_addr.clone()]);
+    }
+    let network = network_builder.build()?;
+    let p2p_bootstrap_peers = config.p2p_bootstrap_peers.clone();
+    tokio::spawn(async move {
+        network
+            .run(&p2p_bootstrap_peers)
+            .await
+            .expect("network run")
+    });
+
+    tokio::spawn(async move {
+        use tokio::io::AsyncBufReadExt;
+        let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
+
+        loop {
+            let line = stdin.next_line().await.unwrap().unwrap();
+            match line.as_str() {
+                "peers" => {
+                    instruction_tx
+                        .send(deqs_p2p::Instruction::PeerList)
+                        .unwrap();
+                }
+                line => {
+                    println!("Unknown command: {}", line);
+                }
+            }
+        }
+    });
 
     let mut server = Server::new(
         msg_bus_tx,

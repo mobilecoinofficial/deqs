@@ -1,7 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use displaydoc::Display;
-use libp2p::{noise::NoiseError, Multiaddr, TransportError};
+use libp2p::{multiaddr::Error as MultiaddrError, noise::NoiseError, Multiaddr, TransportError};
 use libp2p_swarm::DialError;
 use std::io::Error as IoError;
 
@@ -36,6 +36,9 @@ pub enum Error {
      * and instead got {1}
      */
     InvalidPeerAddress(Multiaddr, String),
+
+    /// Multiaddr: {0}
+    Multiaddr(MultiaddrError),
 }
 
 impl From<IoError> for Error {
@@ -59,6 +62,12 @@ impl From<DialError> for Error {
 impl From<TransportError<IoError>> for Error {
     fn from(e: TransportError<IoError>) -> Self {
         Self::Transport(e)
+    }
+}
+
+impl From<MultiaddrError> for Error {
+    fn from(e: MultiaddrError) -> Self {
+        Self::Multiaddr(e)
     }
 }
 

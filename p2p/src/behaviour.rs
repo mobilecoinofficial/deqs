@@ -56,9 +56,9 @@ pub struct Behaviour {
 }
 
 impl Behaviour {
-    pub fn new(local_key: &identity::Keypair, local_peer_id: PeerId) -> Result<Self, Error> {
+    pub fn new(local_key: &identity::Keypair) -> Result<Self, Error> {
         let gossipsub = Self::create_gossipsub(local_key)?;
-        let kademlia = Self::create_kademlia(local_peer_id);
+        let kademlia = Self::create_kademlia(PeerId::from(local_key.public()));
         let identify = Self::create_identify(local_key);
 
         Ok(Self {

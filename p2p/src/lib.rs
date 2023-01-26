@@ -1,13 +1,19 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 //! Peer to peer networking.
+//! This is based on https://github.com/libp2p/rust-libp2p/pull/3150/files
 
 mod behaviour;
 mod error;
+mod network;
+mod network_builder;
+mod traits;
 
 pub use behaviour::{Behaviour, OutEvent};
 pub use error::Error;
-
+pub use network::{Instruction, Network, Notification};
+pub use network_builder::NetworkBuilder;
+pub use traits::{EventHandler, InstructionHandler};
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport, upgrade, upgrade::SelectUpgrade},
     dns,
@@ -49,7 +55,7 @@ impl P2P {
         let topic = IdentTopic::new(BROADCAST_TOPIC);
         ////////////////////////////////
 
-        let behaviour = Behaviour::new(&local_key, local_peer_id)?;
+        let behaviour = Behaviour::new(&local_key)?;
         let key = Key::new(&KAD_PEER_KEY);
         let transport = Self::create_transport(&local_key)?;
         let mut swarm = SwarmBuilder::new(transport, behaviour, local_peer_id)
@@ -128,8 +134,8 @@ impl P2P {
                         .behaviour_mut()
                         .kademlia
                         .add_address(&peer_id, peer_addr.clone());
-                    //swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id);
 
+                    // Connect to the peer
                     swarm.dial(peer_addr)?;
                     log::info!(logger, "p2p: Dialed {}", orig_peer_addr);
                 }
