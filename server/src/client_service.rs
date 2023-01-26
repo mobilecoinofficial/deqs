@@ -4,11 +4,11 @@ use crate::Msg;
 use deqs_api::{
     deqs::{
         GetQuotesRequest, GetQuotesResponse, LiveUpdate, LiveUpdatesRequest, QuoteStatusCode,
-        RemoveOrderRequest, RemoveOrderResponse, SubmitQuotesRequest, SubmitQuotesResponse,
+        RemoveQuoteRequest, RemoveQuoteResponse, SubmitQuotesRequest, SubmitQuotesResponse,
     },
     deqs_grpc::{create_deqs_client_api, DeqsClientApi},
 };
-use deqs_order_book::{Error as OrderBookError, OrderBook, OrderId, Pair};
+use deqs_quote_book::{Error as QuoteBookError, Pair, QuoteBook, QuoteId};
 use futures::{FutureExt, SinkExt};
 use grpcio::{
     RpcContext, RpcStatus, RpcStatusCode, ServerStreamingSink, Service, UnarySink, WriteFlags,
@@ -27,23 +27,23 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 /// GRPC Client service
 #[derive(Clone)]
-pub struct ClientService<OB: OrderBook> {
+pub struct ClientService<OB: QuoteBook> {
     /// Message bus sender.
     msg_bus_tx: Sender<Msg>,
 
-    /// Order book.
-    order_book: OB,
+    /// Quote book.
+    quote_book: OB,
 
     /// Logger.
     logger: Logger,
 }
 
-impl<OB: OrderBook> ClientService<OB> {
+impl<OB: QuoteBook> ClientService<OB> {
     /// Create a new ClientService
-    pub fn new(msg_bus_tx: Sender<Msg>, order_book: OB, logger: Logger) -> Self {
+    pub fn new(msg_bus_tx: Sender<Msg>, quote_book: OB, logger: Logger) -> Self {
         Self {
             msg_bus_tx,
-            order_book,
+            quote_book,
             logger,
         }
     }
@@ -58,8 +58,8 @@ impl<OB: OrderBook> ClientService<OB> {
         req: SubmitQuotesRequest,
         logger: &Logger,
     ) -> Result<SubmitQuotesResponse, RpcStatus> {
-        // Capture timestamp before we do anything, this both ensures orders are created
-        // with the time we actually began processing the request, and that all orders
+        // Capture timestamp before we do anything, this both ensures quotes are created
+        // with the time we actually began processing the request, and that all quotes
         // are created with the same time so ordering is determinstic.
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -75,43 +75,43 @@ impl<OB: OrderBook> ClientService<OB> {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|err| rpc_invalid_arg_error("quotes", err, logger))?;
 
-        log::debug!(logger, "Request to submit {} orders", scis.len());
+        log::debug!(logger, "Request to submit {} quotes", scis.len());
 
         let results = scis
             .into_par_iter()
-            .map(|sci| self.order_book.add_sci(sci, Some(timestamp)))
+            .map(|sci| self.quote_book.add_sci(sci, Some(timestamp)))
             .collect::<Vec<_>>();
 
         let mut status_codes = vec![];
         let mut error_messages = vec![];
-        let mut orders = vec![];
+        let mut quotes = vec![];
 
         for result in results {
             match result {
-                Ok(order) => {
+                Ok(quote) => {
                     status_codes.push(QuoteStatusCode::CREATED);
                     error_messages.push("".to_string());
-                    orders.push((&order).into());
+                    quotes.push((&quote).into());
 
                     match self
                         .msg_bus_tx
-                        .blocking_send(Msg::SciOrderAdded(order.clone()))
+                        .blocking_send(Msg::SciQuoteAdded(quote.clone()))
                     {
                         Ok(_) => {
                             log::info!(
                                 logger,
-                                "Order {} added: Max {} of token {} for {} of token {}",
-                                order.id(),
-                                order.base_range().end(),
-                                order.pair().base_token_id,
-                                order.max_counter_tokens(),
-                                order.pair().counter_token_id,
+                                "Quote {} added: Max {} of token {} for {} of token {}",
+                                quote.id(),
+                                quote.base_range().end(),
+                                quote.pair().base_token_id,
+                                quote.max_counter_tokens(),
+                                quote.pair().counter_token_id,
                             );
                         }
                         Err(err) => {
                             log::error!(
                                 logger,
-                                "Failed to send SCI order added message to message bus: {:?}",
+                                "Failed to send SCI quote added message to message bus: {:?}",
                                 err
                             );
                         }
@@ -119,9 +119,9 @@ impl<OB: OrderBook> ClientService<OB> {
                 }
                 Err(err) => {
                     error_messages.push(err.to_string());
-                    let order_book_error: deqs_order_book::Error = err.into();
-                    status_codes.push((&order_book_error).into());
-                    orders.push(Default::default());
+                    let quote_book_error: deqs_quote_book::Error = err.into();
+                    status_codes.push((&quote_book_error).into());
+                    quotes.push(Default::default());
                 }
             }
         }
@@ -129,7 +129,7 @@ impl<OB: OrderBook> ClientService<OB> {
         Ok(SubmitQuotesResponse {
             status_codes,
             error_messages: error_messages.into(),
-            orders: orders.into(),
+            quotes: quotes.into(),
             ..Default::default()
         })
     }
@@ -144,9 +144,9 @@ impl<OB: OrderBook> ClientService<OB> {
             req.base_range_max = u64::MAX;
         }
 
-        let orders = self
-            .order_book
-            .get_orders(
+        let quotes = self
+            .quote_book
+            .get_quotes(
                 &Pair::from(req.get_pair()),
                 req.base_range_min..=req.base_range_max,
                 req.limit as usize,
@@ -154,51 +154,51 @@ impl<OB: OrderBook> ClientService<OB> {
             .map_err(|err| rpc_internal_error("get_quotes", err, logger))?;
         log::debug!(
             logger,
-            "Request to get {:?} orders returning {} orders",
+            "Request to get {:?} quotes returning {} quotes",
             req,
-            orders.len()
+            quotes.len()
         );
         Ok(GetQuotesResponse {
-            orders: orders.into_iter().map(|order| (&order).into()).collect(),
+            quotes: quotes.into_iter().map(|quote| (&quote).into()).collect(),
             ..Default::default()
         })
     }
 
-    fn remove_order_impl(
+    fn remove_quote_impl(
         &mut self,
-        req: RemoveOrderRequest,
+        req: RemoveQuoteRequest,
         logger: &Logger,
-    ) -> Result<RemoveOrderResponse, RpcStatus> {
-        let order_id = OrderId::try_from(req.get_order_id())
-            .map_err(|err| rpc_invalid_arg_error("order_id", err, &self.logger))?;
+    ) -> Result<RemoveQuoteResponse, RpcStatus> {
+        let quote_id = QuoteId::try_from(req.get_quote_id())
+            .map_err(|err| rpc_invalid_arg_error("quote_id", err, &self.logger))?;
 
         match self
-            .order_book
-            .remove_order_by_id(&order_id)
+            .quote_book
+            .remove_quote_by_id(&quote_id)
             .map_err(|err| err.into())
         {
-            Ok(order) => {
-                log::info!(self.logger, "Order {} removed", order.id());
+            Ok(quote) => {
+                log::info!(self.logger, "Quote {} removed", quote.id());
                 if let Err(err) = self
                     .msg_bus_tx
-                    .blocking_send(Msg::SciOrderRemoved(order_id))
+                    .blocking_send(Msg::SciQuoteRemoved(quote_id))
                 {
                     log::error!(
                         logger,
-                        "Failed to send SCI order {} removed message to message bus: {:?}",
-                        order.id(),
+                        "Failed to send SCI quote {} removed message to message bus: {:?}",
+                        quote.id(),
                         err
                     );
                 }
 
-                let mut resp = RemoveOrderResponse::default();
-                resp.set_order((&order).into());
+                let mut resp = RemoveQuoteResponse::default();
+                resp.set_quote((&quote).into());
                 Ok(resp)
             }
-            Err(OrderBookError::OrderNotFound) => Err(RpcStatus::new(RpcStatusCode::NOT_FOUND)),
+            Err(QuoteBookError::QuoteNotFound) => Err(RpcStatus::new(RpcStatusCode::NOT_FOUND)),
             Err(err) => {
-                log::error!(logger, "Failed to remove order {}: {:?}", order_id, err);
-                Err(rpc_internal_error("remove_order", err, &self.logger))
+                log::error!(logger, "Failed to remove quote {}: {:?}", quote_id, err);
+                Err(rpc_internal_error("remove_quote", err, &self.logger))
             }
         }
     }
@@ -210,8 +210,8 @@ impl<OB: OrderBook> ClientService<OB> {
         while let Some(msg) = msg_bus_rx.recv().await {
             let mut live_update = LiveUpdate::default();
             match msg {
-                Msg::SciOrderAdded(order) => live_update.set_order_added((&order).into()),
-                Msg::SciOrderRemoved(order) => live_update.set_order_removed((&order).into()),
+                Msg::SciQuoteAdded(quote) => live_update.set_quote_added((&quote).into()),
+                Msg::SciQuoteRemoved(quote) => live_update.set_quote_removed((&quote).into()),
             };
             responses.send((live_update, WriteFlags::default())).await?;
         }
@@ -220,7 +220,7 @@ impl<OB: OrderBook> ClientService<OB> {
     }
 }
 
-impl<OB: OrderBook> DeqsClientApi for ClientService<OB> {
+impl<OB: QuoteBook> DeqsClientApi for ClientService<OB> {
     fn submit_quotes(
         &mut self,
         ctx: RpcContext,
@@ -245,15 +245,15 @@ impl<OB: OrderBook> DeqsClientApi for ClientService<OB> {
         })
     }
 
-    fn remove_order(
+    fn remove_quote(
         &mut self,
         ctx: RpcContext,
-        req: RemoveOrderRequest,
-        sink: UnarySink<RemoveOrderResponse>,
+        req: RemoveQuoteRequest,
+        sink: UnarySink<RemoveQuoteResponse>,
     ) {
         let _timer = SVC_COUNTERS.req(&ctx);
         scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
-            send_result(ctx, sink, self.remove_order_impl(req, logger), logger)
+            send_result(ctx, sink, self.remove_quote_impl(req, logger), logger)
         })
     }
 
@@ -283,7 +283,7 @@ mod tests {
     use super::*;
     use deqs_api::{deqs_grpc::DeqsClientApiClient, DeqsClientUri};
     use deqs_mc_test_utils::create_sci;
-    use deqs_order_book::{InMemoryOrderBook, Order};
+    use deqs_quote_book::{InMemoryQuoteBook, Quote};
     use futures::{executor::block_on, StreamExt};
     use grpcio::{ChannelBuilder, EnvBuilder, Server, ServerBuilder};
     use mc_common::logger::test_with_logger;
@@ -297,15 +297,15 @@ mod tests {
         thread,
     };
 
-    fn create_test_client_and_server<OB: OrderBook>(
-        order_book: &OB,
+    fn create_test_client_and_server<OB: QuoteBook>(
+        quote_book: &OB,
         logger: &Logger,
     ) -> (DeqsClientApiClient, Server, Receiver<Msg>) {
         let server_env = Arc::new(EnvBuilder::new().build());
         let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(1000);
 
         let client_service =
-            ClientService::new(msg_bus_tx, order_book.clone(), logger.clone()).into_service();
+            ClientService::new(msg_bus_tx, quote_book.clone(), logger.clone()).into_service();
         let server_builder = ServerBuilder::new(server_env)
             .register_service(client_service)
             .bind_using_uri(
@@ -330,15 +330,15 @@ mod tests {
     }
 
     #[test_with_logger]
-    fn submit_quotes_add_orders(logger: Logger) {
+    fn submit_quotes_add_quotes(logger: Logger) {
         let pair = Pair {
             base_token_id: TokenId::from(1),
             counter_token_id: TokenId::from(2),
         };
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let order_book = InMemoryOrderBook::default();
+        let quote_book = InMemoryQuoteBook::default();
         let (client_api, _server, _msg_bus_rx) =
-            create_test_client_and_server(&order_book, &logger);
+            create_test_client_and_server(&quote_book, &logger);
 
         let scis = (0..10)
             .map(|_| create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng))
@@ -356,25 +356,25 @@ mod tests {
             vec![QuoteStatusCode::CREATED; scis.len()]
         );
         assert_eq!(resp.get_error_messages(), vec![""; scis.len()]);
-        let mut orders = resp
-            .get_orders()
+        let mut quotes = resp
+            .get_quotes()
             .iter()
-            .map(|o| Order::try_from(o).unwrap())
+            .map(|o| Quote::try_from(o).unwrap())
             .collect::<Vec<_>>();
 
-        let mut orders2 = order_book
-            .get_orders(&pair, .., 0)
+        let mut quotes2 = quote_book
+            .get_quotes(&pair, .., 0)
             .unwrap()
             .into_iter()
-            .rev() // Orders returned in newest to oldest order
+            .rev() // Quotes returned in newest to oldest quote
             .collect::<Vec<_>>();
 
-        // Since orders are added in parallel, the exact order at which they get added
+        // Since quotes are added in parallel, the exact quote at which they get added
         // is not determinstic.
-        orders.sort();
-        orders2.sort();
+        quotes.sort();
+        quotes2.sort();
 
-        assert_eq!(orders2, orders);
+        assert_eq!(quotes2, quotes);
     }
 
     #[test_with_logger]
@@ -384,9 +384,9 @@ mod tests {
             counter_token_id: TokenId::from(2),
         };
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let order_book = InMemoryOrderBook::default();
+        let quote_book = InMemoryQuoteBook::default();
         let (client_api, _server, _msg_bus_rx) =
-            create_test_client_and_server(&order_book, &logger);
+            create_test_client_and_server(&quote_book, &logger);
 
         let sci = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
         let req = SubmitQuotesRequest {
@@ -399,20 +399,20 @@ mod tests {
         let resp = client_api.submit_quotes(&req).expect("submit quote failed");
         assert_eq!(
             resp.status_codes,
-            vec![QuoteStatusCode::ORDER_ALREADY_EXISTS]
+            vec![QuoteStatusCode::QUOTE_ALREADY_EXISTS]
         );
     }
 
     #[test_with_logger]
-    fn submit_quotes_doesnt_add_duplicate_orders(logger: Logger) {
+    fn submit_quotes_doesnt_add_duplicate_quotes(logger: Logger) {
         let pair = Pair {
             base_token_id: TokenId::from(1),
             counter_token_id: TokenId::from(2),
         };
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let order_book = InMemoryOrderBook::default();
+        let quote_book = InMemoryQuoteBook::default();
         let (client_api, _server, _msg_bus_rx) =
-            create_test_client_and_server(&order_book, &logger);
+            create_test_client_and_server(&quote_book, &logger);
 
         let sci1 = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
         let sci2 = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
@@ -435,9 +435,9 @@ mod tests {
         assert_eq!(
             resp.status_codes,
             vec![
-                QuoteStatusCode::ORDER_ALREADY_EXISTS,
+                QuoteStatusCode::QUOTE_ALREADY_EXISTS,
                 QuoteStatusCode::CREATED,
-                QuoteStatusCode::ORDER_ALREADY_EXISTS
+                QuoteStatusCode::QUOTE_ALREADY_EXISTS
             ]
         );
     }
@@ -445,9 +445,9 @@ mod tests {
     #[test_with_logger]
     fn get_quotes_filter_correctly(logger: Logger) {
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let order_book = InMemoryOrderBook::default();
+        let quote_book = InMemoryQuoteBook::default();
         let (client_api, _server, _msg_bus_rx) =
-            create_test_client_and_server(&order_book, &logger);
+            create_test_client_and_server(&quote_book, &logger);
 
         let sci1 = create_sci(TokenId::from(1), TokenId::from(2), 10, 20, &mut rng);
         let sci2 = create_sci(TokenId::from(1), TokenId::from(2), 10, 50, &mut rng);
@@ -476,9 +476,9 @@ mod tests {
         req.set_pair(pair);
         let resp = client_api.get_quotes(&req).expect("get quotes failed");
         let received_scis = resp
-            .get_orders()
+            .get_quotes()
             .iter()
-            .map(|order| SignedContingentInput::try_from(order.get_sci()).unwrap())
+            .map(|quote| SignedContingentInput::try_from(quote.get_sci()).unwrap())
             .collect::<Vec<_>>();
         assert_eq!(received_scis, vec![sci3.clone(), sci4.clone()]);
 
@@ -486,9 +486,9 @@ mod tests {
         req.set_limit(1);
         let resp = client_api.get_quotes(&req).expect("get quotes failed");
         let received_scis = resp
-            .get_orders()
+            .get_quotes()
             .iter()
-            .map(|order| SignedContingentInput::try_from(order.get_sci()).unwrap())
+            .map(|quote| SignedContingentInput::try_from(quote.get_sci()).unwrap())
             .collect::<Vec<_>>();
         assert_eq!(received_scis, vec![sci3.clone()]);
 
@@ -497,9 +497,9 @@ mod tests {
         req.set_base_range_max(10);
         let resp = client_api.get_quotes(&req).expect("get quotes failed");
         let received_scis = resp
-            .get_orders()
+            .get_quotes()
             .iter()
-            .map(|order| SignedContingentInput::try_from(order.get_sci()).unwrap())
+            .map(|quote| SignedContingentInput::try_from(quote.get_sci()).unwrap())
             .collect::<Vec<_>>();
         assert_eq!(received_scis, vec![sci3.clone()]);
 
@@ -507,9 +507,9 @@ mod tests {
         req.set_base_range_max(12);
         let resp = client_api.get_quotes(&req).expect("get quotes failed");
         let received_scis = resp
-            .get_orders()
+            .get_quotes()
             .iter()
-            .map(|order| SignedContingentInput::try_from(order.get_sci()).unwrap())
+            .map(|quote| SignedContingentInput::try_from(quote.get_sci()).unwrap())
             .collect::<Vec<_>>();
         assert_eq!(received_scis, vec![sci4.clone()]);
 
@@ -517,23 +517,23 @@ mod tests {
         req.set_base_range_max(12);
         let resp = client_api.get_quotes(&req).expect("get quotes failed");
         let received_scis = resp
-            .get_orders()
+            .get_quotes()
             .iter()
-            .map(|order| SignedContingentInput::try_from(order.get_sci()).unwrap())
+            .map(|quote| SignedContingentInput::try_from(quote.get_sci()).unwrap())
             .collect::<Vec<_>>();
         assert_eq!(received_scis, vec![sci3, sci4]);
     }
 
     #[test_with_logger]
-    fn remove_order_works(logger: Logger) {
+    fn remove_quote_works(logger: Logger) {
         let pair = Pair {
             base_token_id: TokenId::from(1),
             counter_token_id: TokenId::from(2),
         };
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let order_book = InMemoryOrderBook::default();
+        let quote_book = InMemoryQuoteBook::default();
         let (client_api, _server, _msg_bus_rx) =
-            create_test_client_and_server(&order_book, &logger);
+            create_test_client_and_server(&quote_book, &logger);
 
         let sci = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
         let req = SubmitQuotesRequest {
@@ -543,27 +543,27 @@ mod tests {
         let resp = client_api.submit_quotes(&req).expect("submit quote failed");
         assert_eq!(resp.status_codes, vec![QuoteStatusCode::CREATED]);
 
-        // Order is present
-        let orders = order_book.get_orders(&pair, .., 0).unwrap();
-        assert_eq!(orders.len(), 1);
+        // Quote is present
+        let quotes = quote_book.get_quotes(&pair, .., 0).unwrap();
+        assert_eq!(quotes.len(), 1);
 
         // Remove it.
-        let order_id = deqs_api::deqs::OrderId::from(orders[0].id());
-        let mut req = RemoveOrderRequest::default();
-        req.set_order_id(order_id);
+        let quote_id = deqs_api::deqs::QuoteId::from(quotes[0].id());
+        let mut req = RemoveQuoteRequest::default();
+        req.set_quote_id(quote_id);
 
-        let resp = client_api.remove_order(&req).expect("remove order failed");
-        assert_eq!(resp.get_order(), &(&orders[0]).into());
+        let resp = client_api.remove_quote(&req).expect("remove quote failed");
+        assert_eq!(resp.get_quote(), &(&quotes[0]).into());
 
         // Try again, should fail.
         assert!(
-            matches!(client_api.remove_order(&req), Err(grpcio::Error::RpcFailure(status)) if status.code() == grpcio::RpcStatusCode::NOT_FOUND)
+            matches!(client_api.remove_quote(&req), Err(grpcio::Error::RpcFailure(status)) if status.code() == grpcio::RpcStatusCode::NOT_FOUND)
         );
 
-        // Invalid order id should fail.
-        let req = RemoveOrderRequest::default();
+        // Invalid quote id should fail.
+        let req = RemoveQuoteRequest::default();
         assert!(
-            matches!(client_api.remove_order(&req), Err(grpcio::Error::RpcFailure(status)) if status.code() == grpcio::RpcStatusCode::INVALID_ARGUMENT)
+            matches!(client_api.remove_quote(&req), Err(grpcio::Error::RpcFailure(status)) if status.code() == grpcio::RpcStatusCode::INVALID_ARGUMENT)
         );
     }
 
@@ -574,9 +574,9 @@ mod tests {
             counter_token_id: TokenId::from(2),
         };
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let order_book = InMemoryOrderBook::default();
+        let quote_book = InMemoryQuoteBook::default();
         let (client_api, _server, _msg_bus_rx) =
-            create_test_client_and_server(&order_book, &logger);
+            create_test_client_and_server(&quote_book, &logger);
 
         let (tx, rx) = channel();
 
@@ -613,19 +613,19 @@ mod tests {
         };
         let resp = client_api.submit_quotes(&req).expect("submit quote failed");
         assert_eq!(resp.status_codes, vec![QuoteStatusCode::CREATED]);
-        let added_order = &resp.get_orders()[0];
+        let added_quote = &resp.get_quotes()[0];
 
         // We should now see our quote arrive in the stream.
         let resp = rx.recv().expect("recv failed");
-        assert_eq!(resp.get_order_added(), added_order);
+        assert_eq!(resp.get_quote_added(), added_quote);
 
-        // Remove the order, we should see a live update.
-        let mut req = RemoveOrderRequest::default();
-        req.set_order_id(added_order.get_id().clone());
+        // Remove the quote, we should see a live update.
+        let mut req = RemoveQuoteRequest::default();
+        req.set_quote_id(added_quote.get_id().clone());
 
-        let _resp = client_api.remove_order(&req).expect("remove order failed");
+        let _resp = client_api.remove_quote(&req).expect("remove quote failed");
 
         let resp = rx.recv().expect("recv failed");
-        assert_eq!(resp.get_order_removed(), added_order.get_id());
+        assert_eq!(resp.get_quote_removed(), added_quote.get_id());
     }
 }

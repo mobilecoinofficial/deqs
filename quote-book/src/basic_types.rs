@@ -16,17 +16,17 @@ pub struct Pair {
     pub counter_token_id: TokenId,
 }
 
-/// A unique identifier for a single order
+/// A unique identifier for a single quote
 #[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub struct OrderId(pub [u8; 32]);
+pub struct QuoteId(pub [u8; 32]);
 
-impl From<&SignedContingentInput> for OrderId {
+impl From<&SignedContingentInput> for QuoteId {
     fn from(sci: &SignedContingentInput) -> Self {
-        Self(sci.digest32::<MerlinTranscript>(b"deqs-sci-order-id"))
+        Self(sci.digest32::<MerlinTranscript>(b"deqs-sci-quote-id"))
     }
 }
 
-impl TryFrom<&[u8]> for OrderId {
+impl TryFrom<&[u8]> for QuoteId {
     type Error = TryFromSliceError;
 
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
@@ -34,7 +34,7 @@ impl TryFrom<&[u8]> for OrderId {
     }
 }
 
-impl Deref for OrderId {
+impl Deref for QuoteId {
     type Target = [u8; 32];
 
     fn deref(&self) -> &Self::Target {
@@ -42,7 +42,7 @@ impl Deref for OrderId {
     }
 }
 
-impl fmt::Display for OrderId {
+impl fmt::Display for QuoteId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{}", hex::encode(&self.0))
     }

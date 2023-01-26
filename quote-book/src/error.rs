@@ -4,7 +4,7 @@ use displaydoc::Display;
 use mc_transaction_core::RevealedTxOutError;
 use mc_transaction_extra::SignedContingentInputError;
 
-/// Type for common order book errors
+/// Type for common quote book errors
 #[derive(Debug, Display, Eq, PartialEq)]
 pub enum Error {
     /// SCI: {0}
@@ -13,13 +13,13 @@ pub enum Error {
     /// Unsupported SCI: {0}
     UnsupportedSci(String),
 
-    /// Order already exists in book
-    OrderAlreadyExists,
+    /// Quote already exists in book
+    QuoteAlreadyExists,
 
-    /// Order not found
-    OrderNotFound,
+    /// Quote not found
+    QuoteNotFound,
 
-    /// Order cannot fulfill the desired amount ({0}) of base tokens
+    /// Quote cannot fulfill the desired amount ({0}) of base tokens
     InsufficientBaseTokens(u64),
 
     /// Implementation specific error: {0}
