@@ -20,7 +20,6 @@ async fn main() {
     mc_common::setup_panic_handler();
 
     let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
-    let quote_book = InMemoryQuoteBook::default();
 
     // Open the ledger db
     let ledger_db = LedgerDB::open(&config.ledger_db).expect("Could not open ledger db");
@@ -28,6 +27,8 @@ async fn main() {
         .num_blocks()
         .expect("Could not compute num_blocks");
     assert_ne!(0, num_blocks);
+
+    let quote_book = InMemoryQuoteBook::new(ledger_db);
 
     let mut server = Server::new(
         msg_bus_tx,
