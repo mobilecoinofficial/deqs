@@ -3,6 +3,7 @@
 use displaydoc::Display;
 use libp2p::{
     gossipsub::error::{PublishError, SubscriptionError},
+    kad::store::Error as KadStoreError,
     multiaddr::Error as MultiaddrError,
     noise::NoiseError,
     Multiaddr, TransportError,
@@ -50,6 +51,9 @@ pub enum Error {
 
     /// Gossip subscription: {0}
     GossipSubscription(SubscriptionError),
+
+    /// Kademlia store: {0}
+    KadStore(KadStoreError),
 }
 
 impl From<IoError> for Error {
@@ -91,6 +95,12 @@ impl From<PublishError> for Error {
 impl From<SubscriptionError> for Error {
     fn from(e: SubscriptionError) -> Self {
         Self::GossipSubscription(e)
+    }
+}
+
+impl From<KadStoreError> for Error {
+    fn from(e: KadStoreError) -> Self {
+        Self::KadStore(e)
     }
 }
 

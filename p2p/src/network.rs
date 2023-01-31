@@ -5,7 +5,7 @@ use libp2p::{
     futures::StreamExt,
     gossipsub::{GossipsubEvent, GossipsubMessage, IdentTopic},
     identify,
-    kad::{KademliaEvent, QueryResult},
+    kad::{record::Key, KademliaEvent, QueryResult},
     multiaddr::Protocol,
     swarm::SwarmEvent,
     Multiaddr, PeerId, Swarm,
@@ -13,9 +13,19 @@ use libp2p::{
 use libp2p_swarm::NetworkBehaviour;
 use mc_common::logger::{log, Logger};
 use std::fmt::Debug;
-use tokio::sync::mpsc;
+use tokio::{
+    sync::mpsc,
+    time::{interval, Duration},
+};
 
-///
+/// Key used to do peer discovery with Kademlia.
+const KAD_PEER_KEY: &str = "mc/deqs/p2p/kad/peer";
+
+/// Bootstrap interval. This is the interval at which we will attempt to
+/// re-bootstrap. This is needed to reconnect our bootstrap peers
+/// in case the connection is lost.
+const BOOTSTRAP_INTERVAL: Duration = Duration::from_secs(10);
+
 /// The `Network` is a convenience wrapper around the `Swarm` using the
 /// `Behaviour` in this crate. It can be constructed with the `NetworkBuilder`
 /// for convenience.
@@ -25,18 +35,15 @@ use tokio::sync::mpsc;
 ///
 ///
 /// The `Network`:
-/// - receives `Instructions`, which it passes on to the `InstructionHandler`
-///   trait implemented on the swarm's NetworkBehaviour.
-/// - receives events from the swarm and passes them on to the `EventHandler`
-///   trait implemented on the swarm's `NetworkBehaviour`. The `EventHandler`
-///   can notify the `Network`'s client by sending a `Notification`.
-///
-/// The `Network` does not know or care what the Instructions and Notifications
-/// contain. It is up to the client(s) to give them meaning.
+/// - receives `Instructions` over the `instruction_rx` channel
+/// - reports events over the `notification_tx` channel
 pub struct Network {
     instruction_rx: mpsc::UnboundedReceiver<Instruction>,
     notification_tx: mpsc::UnboundedSender<Notification>,
     swarm: Swarm<Behaviour>,
+    peer_discovery_key: Key,
+    shutdown_tx: mpsc::UnboundedSender<()>,
+    shutdown_rx: mpsc::UnboundedReceiver<()>,
     logger: Logger,
 }
 
@@ -47,24 +54,42 @@ impl Network {
         swarm: Swarm<Behaviour>,
         logger: Logger,
     ) -> Self {
+        let (shutdown_tx, shutdown_rx) = mpsc::unbounded_channel();
+
         Network {
             instruction_rx,
             notification_tx,
             swarm,
+            peer_discovery_key: Key::new(&KAD_PEER_KEY),
+            shutdown_tx,
+            shutdown_rx,
             logger,
+        }
+    }
+
+    pub fn shutdown(&mut self) {
+        if self.shutdown_tx.send(()).is_err() {
+            log::warn!(&self.logger, "shutdown already requested");
         }
     }
 
     pub async fn run(mut self, bootstrap_peers: &[Multiaddr]) -> Result<(), Error> {
         self.bootstrap(bootstrap_peers)?;
 
+        let mut interval = interval(BOOTSTRAP_INTERVAL);
+
         loop {
             tokio::select! {
-                //event = self.swarm.select_next_some() => self.swarm.behaviour_mut().handle_event(&self.notification_tx, event).await,
                 event = self.swarm.select_next_some() => self.handle_swarm_event(event).await,
                 Some(instruction) = self.instruction_rx.recv() =>  self.handle_instruction(instruction).await,
-                else => {
-                    log::warn!(&self.logger, "Both swarm and instruction receiver closed. Ending event loop");
+                _ = interval.tick() => {
+                    log::trace!(&self.logger, "periodic interval!");
+                    if let Err(err) = self.bootstrap(bootstrap_peers) {
+                        log::warn!(&self.logger, "bootstrap failed: {:?}", err);
+                    }
+                }
+                _ = self.shutdown_rx.recv() => {
+                    log::info!(&self.logger, "shutdown requested");
                     break
                 }
             }
@@ -89,8 +114,7 @@ impl Network {
                 result,
                 ..
             })) => match result {
-                // TODO check key
-                QueryResult::GetProviders(Ok(ok)) => {
+                QueryResult::GetProviders(Ok(ok)) if ok.key == self.peer_discovery_key => {
                     for peer in ok.providers {
                         let addrs = self.swarm.behaviour_mut().kademlia.addresses_of_peer(&peer);
                         log::info!(
@@ -224,6 +248,18 @@ impl Network {
                 .bootstrap()
                 .map_err(|err| Error::Bootstrap(err.to_string()))?;
         }
+
+        // Announce our discovery key, this lets other peers find us over the DHT
+        self.swarm
+            .behaviour_mut()
+            .kademlia
+            .start_providing(self.peer_discovery_key.clone())?;
+
+        // Search the DHT for other nodes
+        self.swarm
+            .behaviour_mut()
+            .kademlia
+            .get_providers(self.peer_discovery_key.clone());
 
         Ok(())
     }
