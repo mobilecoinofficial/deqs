@@ -716,6 +716,7 @@ dependencies = [
  "displaydoc",
  "hex",
  "mc-account-keys",
+ "mc-blockchain-test-utils",
  "mc-blockchain-types",
  "mc-crypto-digestible",
  "mc-crypto-ring-signature",
