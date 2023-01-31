@@ -29,7 +29,7 @@ const GOSSIPSUB_PROTO_ID_PREFIX: &str = "mc/deqs/gossipsub";
 #[behaviour(out_event = "OutEvent")]
 pub struct Behaviour {
     pub keep_alive: keep_alive::Behaviour,
-    //ping: ping::Behaviour,
+    ping: ping::Behaviour,
     /// - `identify::Behaviour`: when peers connect and they both support this
     ///   protocol, they exchange `IdentityInfo`. We then uses this info to add
     ///   their listen addresses to the Kademlia DHT. Without
@@ -63,7 +63,7 @@ impl Behaviour {
 
         Ok(Self {
             keep_alive: keep_alive::Behaviour::default(),
-            //ping: ping::Behaviour::default(),
+            ping: ping::Behaviour::default(),
             kademlia,
             gossipsub,
             identify,

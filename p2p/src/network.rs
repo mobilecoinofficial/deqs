@@ -3,6 +3,7 @@
 use super::{Behaviour, Error, OutEvent};
 use libp2p::{
     futures::StreamExt,
+    gossipsub::{GossipsubEvent, GossipsubMessage, IdentTopic},
     identify,
     kad::{KademliaEvent, QueryResult},
     multiaddr::Protocol,
@@ -32,7 +33,6 @@ use tokio::sync::mpsc;
 ///
 /// The `Network` does not know or care what the Instructions and Notifications
 /// contain. It is up to the client(s) to give them meaning.
-#[allow(dead_code)] // TODO
 pub struct Network {
     instruction_rx: mpsc::UnboundedReceiver<Instruction>,
     notification_tx: mpsc::UnboundedSender<Notification>,
@@ -110,6 +110,14 @@ impl Network {
                 }
             },
 
+            SwarmEvent::Behaviour(OutEvent::Gossipsub(GossipsubEvent::Message {
+                message, ..
+            })) => {
+                log::info!(&self.logger, "Gossipsub message: {:?}", message);
+
+                self.notify(Notification::GossipMessage(message));
+            }
+
             SwarmEvent::Behaviour(OutEvent::Identify(e)) => {
                 log::info!(&self.logger, "IdentifyEvent: {:?}", e);
 
@@ -143,23 +151,39 @@ impl Network {
     }
 
     async fn handle_instruction(&mut self, instruction: Instruction) {
+        log::debug!(self.logger, "handling instruction {:?}", instruction);
+
         match instruction {
             Instruction::PeerList => {
-                // Self::notify(
-                //     notification_tx,
-                //     Notification::PeerList(self.pubsub.all_peers().map(|peer|
-                // *peer.0).collect()), );
-                log::crit!(
-                    &self.logger,
-                    "peer list: {:?}",
+                self.notify(Notification::PeerList(
                     self.swarm
                         .behaviour()
                         .gossipsub
                         .all_peers()
                         .map(|peer| *peer.0)
-                        .collect::<Vec<_>>()
-                );
+                        .collect::<Vec<_>>(),
+                ));
             }
+
+            Instruction::PublishGossip { topic, message } => {
+                log::info!(&self.logger, "publishing gossip {} {:?}", topic, message);
+                if let Err(err) = self.swarm.behaviour_mut().gossipsub.publish(topic, message) {
+                    self.notify(Notification::Err(err.into()));
+                }
+            }
+
+            Instruction::SubscribeGossip { topic } => {
+                log::info!(&self.logger, "subscribing to gossip {}", topic);
+                if let Err(err) = self.swarm.behaviour_mut().gossipsub.subscribe(&topic) {
+                    self.notify(Notification::Err(err.into()));
+                }
+            }
+        }
+    }
+
+    fn notify(&mut self, notification: Notification) {
+        if let Err(err) = self.notification_tx.send(notification) {
+            log::warn!(&self.logger, "Failed to send notification: {:?}", err);
         }
     }
 
@@ -211,6 +235,21 @@ impl Network {
 pub enum Instruction {
     /// Instruct the network to provide a list of all peers it is aware of
     PeerList,
+
+    /// Send a gossip message
+    PublishGossip {
+        /// The topic to publish to
+        topic: IdentTopic,
+
+        /// The message to publish
+        message: Vec<u8>,
+    },
+
+    /// Subscribe to a gossip topic
+    SubscribeGossip {
+        /// The topic to subscribe to
+        topic: IdentTopic,
+    },
 }
 
 /// A notification from the network to one of its consumers.
@@ -218,5 +257,6 @@ pub enum Instruction {
 #[derive(Debug)]
 pub enum Notification {
     PeerList(Vec<PeerId>),
+    GossipMessage(GossipsubMessage),
     Err(Error),
 }

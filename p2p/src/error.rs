@@ -1,7 +1,12 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use displaydoc::Display;
-use libp2p::{multiaddr::Error as MultiaddrError, noise::NoiseError, Multiaddr, TransportError};
+use libp2p::{
+    gossipsub::error::{PublishError, SubscriptionError},
+    multiaddr::Error as MultiaddrError,
+    noise::NoiseError,
+    Multiaddr, TransportError,
+};
 use libp2p_swarm::DialError;
 use std::io::Error as IoError;
 
@@ -39,6 +44,12 @@ pub enum Error {
 
     /// Multiaddr: {0}
     Multiaddr(MultiaddrError),
+
+    /// Gossip publish: {0}
+    GossipPublish(PublishError),
+
+    /// Gossip subscription: {0}
+    GossipSubscription(SubscriptionError),
 }
 
 impl From<IoError> for Error {
@@ -68,6 +79,18 @@ impl From<TransportError<IoError>> for Error {
 impl From<MultiaddrError> for Error {
     fn from(e: MultiaddrError) -> Self {
         Self::Multiaddr(e)
+    }
+}
+
+impl From<PublishError> for Error {
+    fn from(e: PublishError) -> Self {
+        Self::GossipPublish(e)
+    }
+}
+
+impl From<SubscriptionError> for Error {
+    fn from(e: SubscriptionError) -> Self {
+        Self::GossipSubscription(e)
     }
 }
 

@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // )
     // .unwrap();
 
-    let (notification_tx, _notification_rx) = mpsc::unbounded_channel();
+    let (notification_tx, mut notification_rx) = mpsc::unbounded_channel();
     let (instruction_tx, instruction_rx) = mpsc::unbounded_channel();
     let behaviour = deqs_p2p::Behaviour::new(&local_key)?;
     let mut network_builder = deqs_p2p::NetworkBuilder::new(
@@ -68,6 +68,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("network run")
     });
 
+    instruction_tx
+        .send(deqs_p2p::Instruction::SubscribeGossip {
+            topic: libp2p::gossipsub::IdentTopic::new("gos"),
+        })
+        .unwrap();
+
     tokio::spawn(async move {
         use tokio::io::AsyncBufReadExt;
         let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
@@ -80,10 +86,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         .send(deqs_p2p::Instruction::PeerList)
                         .unwrap();
                 }
+                "gos" => {
+                    let topic = libp2p::gossipsub::IdentTopic::new("gos");
+                    use rand::Rng;
+                    let x = rand::thread_rng().gen_range(0..100000000);
+                    let message = x.to_string().as_bytes().to_vec();
+
+                    instruction_tx
+                        .send(deqs_p2p::Instruction::PublishGossip { topic, message })
+                        .unwrap();
+                }
                 line => {
                     println!("Unknown command: {}", line);
                 }
             }
+        }
+    });
+
+    tokio::spawn(async move {
+        loop {
+            let msg = notification_rx.recv().await.unwrap();
+            println!("Got message: {:?}", msg);
         }
     });
 
