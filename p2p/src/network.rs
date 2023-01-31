@@ -102,7 +102,7 @@ impl Network {
         self.swarm.local_peer_id()
     }
 
-    async fn handle_swarm_event<TErr>(&mut self, event: SwarmEvent<OutEvent, TErr>) {
+    async fn handle_swarm_event<TErr: Debug>(&mut self, event: SwarmEvent<OutEvent, TErr>) {
         match event {
             SwarmEvent::NewListenAddr { address, .. } => {
                 log::info!(&self.logger, "Listening on {:?}", address)
@@ -124,9 +124,9 @@ impl Network {
                             std::str::from_utf8(ok.key.as_ref()).unwrap(),
                             addrs,
                         );
-                        for addr in addrs {
-                            log::warn!(&self.logger, "dial failed: {:?}", self.swarm.dial(addr));
-                        }
+                        // for addr in addrs {
+                        //     log::info!(&self.logger, "dial: {:?}",
+                        // self.swarm.dial(addr)); }
                     }
                 }
                 evt => {
@@ -170,7 +170,9 @@ impl Network {
             }
 
             SwarmEvent::Behaviour(event) => log::info!(&self.logger, "{:?}", event),
-            _ => {}
+            event => {
+                log::info!(&self.logger, "Other event: {:?}", event);
+            }
         }
     }
 
