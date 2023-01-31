@@ -4,6 +4,7 @@ use displaydoc::Display;
 use mc_transaction_core::RevealedTxOutError;
 use mc_transaction_extra::SignedContingentInputError;
 use std::sync::PoisonError;
+use mc_ledger_db::{ Error as LedgerError};
 
 /// Type for common quote book errors
 #[derive(Debug, Display, Eq, PartialEq)]
@@ -22,6 +23,9 @@ pub enum Error {
 
     /// Quote has a spent keyimage
     QuoteIsStale,
+
+    /// Ledger related error
+    LedgerError(LedgerError),
 
     /// Quote cannot fulfill the desired amount ({0}) of base tokens
     InsufficientBaseTokens(u64),
@@ -48,6 +52,12 @@ impl From<SignedContingentInputError> for Error {
 impl From<RevealedTxOutError> for Error {
     fn from(err: RevealedTxOutError) -> Self {
         Self::RevealedTxOut(err)
+    }
+}
+
+impl From<LedgerError> for Error {
+    fn from(err: LedgerError) -> Self {
+        Self::LedgerError(err)
     }
 }
 

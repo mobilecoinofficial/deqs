@@ -25,3 +25,10 @@ fn get_quotes_filtering_works() {
     let quote_book = InMemoryQuoteBook::new(ledger);
     common::get_quotes_filtering_works(&quote_book);
 }
+
+#[test]
+fn cannot_add_stale_sci() {
+    let mut ledger = MockLedger::default();
+    let quote_book = InMemoryQuoteBook::new(ledger.clone());
+    common::add_quote_already_in_ledger_should_fail(&quote_book, &mut ledger);
+}
