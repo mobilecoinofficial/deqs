@@ -226,10 +226,6 @@ impl Network {
                         .behaviour_mut()
                         .kademlia
                         .add_address(&peer_id, peer_addr.clone());
-
-                    // Connect to the peer
-                    self.swarm.dial(peer_addr)?;
-                    log::info!(&self.logger, "p2p: Dialed {}", orig_peer_addr);
                 }
                 other => {
                     return Err(Error::InvalidPeerAddress(
