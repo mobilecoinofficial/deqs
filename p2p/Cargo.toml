@@ -6,6 +6,7 @@ edition = "2021"
 
 [dependencies]
 mc-common = { path = "../mobilecoin/common" }
+mc-util-serial = { path = "../mobilecoin/util/serial" }
 
 async-trait = "0.1"
 displaydoc = { version = "0.2", default-features = false }

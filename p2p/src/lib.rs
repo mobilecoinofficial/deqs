@@ -7,30 +7,17 @@ mod behaviour;
 mod error;
 mod network;
 mod network_builder;
+mod rpc;
 mod traits;
 
 pub use behaviour::{Behaviour, OutEvent};
 pub use error::Error;
 pub use network::{Instruction, Network, Notification};
 pub use network_builder::NetworkBuilder;
+pub use rpc::{RpcRequest, RpcResponse};
 pub use traits::{EventHandler, InstructionHandler};
-use libp2p::{
-    core::{muxing::StreamMuxerBox, transport, upgrade, upgrade::SelectUpgrade},
-    dns,
-    futures::StreamExt,
-    gossipsub::IdentTopic,
-    identify, identity,
-    kad::{record::Key, KademliaEvent, QueryResult},
-    mplex,
-    multiaddr::Protocol,
-    noise::{self},
-    swarm::{AddressScore, SwarmBuilder, SwarmEvent},
-    tcp, websocket, yamux, Multiaddr, PeerId, Transport,
-};
-use libp2p_swarm::{NetworkBehaviour, Swarm};
-use mc_common::logger::{log, Logger};
-use tokio::{io::AsyncBufReadExt, task::JoinHandle};
 
+/*
 const BROADCAST_TOPIC: &str = "BROADCAST";
 const KAD_PEER_KEY: &str = "mc/deqs/kad/peer";
 
@@ -247,3 +234,5 @@ impl P2P {
         .boxed())
     }
 }
+
+*/

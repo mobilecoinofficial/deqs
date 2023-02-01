@@ -1,13 +1,18 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use super::Error;
+use super::{
+    rpc::{RpcCodec, RpcProtocol, RpcRequest, RpcResponse},
+    Error,
+};
 use libp2p::{
     gossipsub::{
         Gossipsub, GossipsubEvent, GossipsubMessage, MessageAuthenticity, MessageId, ValidationMode,
     },
     identify, identity,
     kad::{record::store::MemoryStore, Kademlia, KademliaConfig, KademliaEvent},
-    ping, NetworkBehaviour, PeerId,
+    ping,
+    request_response::{ProtocolSupport, RequestResponse, RequestResponseEvent},
+    NetworkBehaviour, PeerId,
 };
 use libp2p_swarm::keep_alive;
 use std::{
@@ -26,8 +31,8 @@ const GOSSIPSUB_PROTO_ID_PREFIX: &str = "mc/deqs/gossipsub";
 /// Custom behaviour for the p2p network (this is a collection of protocols
 /// bundled together into a single behaviour)
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "OutEvent")]
-pub struct Behaviour {
+#[behaviour(out_event = "OutEvent<REQ, RESP>")]
+pub struct Behaviour<REQ: RpcRequest, RESP: RpcResponse> {
     pub keep_alive: keep_alive::Behaviour,
     //ping: ping::Behaviour,
     /// - `identify::Behaviour`: when peers connect and they both support this
@@ -53,13 +58,17 @@ pub struct Behaviour {
     ///   Gossipsub messages not only reach directly connected peers, but all
     ///   peers that can be reached through the DHT routing.
     pub gossipsub: Gossipsub,
+
+    /// - Application-specific RPC
+    pub rpc: RequestResponse<RpcCodec<REQ, RESP>>,
 }
 
-impl Behaviour {
+impl<REQ: RpcRequest, RESP: RpcResponse> Behaviour<REQ, RESP> {
     pub fn new(local_key: &identity::Keypair) -> Result<Self, Error> {
         let gossipsub = Self::create_gossipsub(local_key)?;
         let kademlia = Self::create_kademlia(PeerId::from(local_key.public()));
         let identify = Self::create_identify(local_key);
+        let rpc = Self::create_rpc();
 
         Ok(Self {
             keep_alive: keep_alive::Behaviour::default(),
@@ -67,7 +76,16 @@ impl Behaviour {
             kademlia,
             gossipsub,
             identify,
+            rpc,
         })
+    }
+
+    fn create_rpc() -> RequestResponse<RpcCodec<REQ, RESP>> {
+        RequestResponse::new(
+            RpcCodec::default(),
+            iter::once((RpcProtocol, ProtocolSupport::Full)),
+            Default::default(),
+        )
     }
 
     fn create_gossipsub(local_key: &identity::Keypair) -> Result<Gossipsub, Error> {
@@ -119,35 +137,43 @@ impl Behaviour {
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug)]
-pub enum OutEvent {
+pub enum OutEvent<REQ: RpcRequest, RESP: RpcResponse> {
     Ping(ping::Event),
     Void(Void),
     Kademlia(KademliaEvent),
     Identify(identify::Event),
     Gossipsub(GossipsubEvent),
+    RequestResponse(RequestResponseEvent<REQ, RESP>),
 }
-impl From<ping::Event> for OutEvent {
+impl<REQ: RpcRequest, RESP: RpcResponse> From<ping::Event> for OutEvent<REQ, RESP> {
     fn from(event: ping::Event) -> Self {
         OutEvent::Ping(event)
     }
 }
-impl From<Void> for OutEvent {
+impl<REQ: RpcRequest, RESP: RpcResponse> From<Void> for OutEvent<REQ, RESP> {
     fn from(event: Void) -> Self {
         OutEvent::Void(event)
     }
 }
-impl From<KademliaEvent> for OutEvent {
+impl<REQ: RpcRequest, RESP: RpcResponse> From<KademliaEvent> for OutEvent<REQ, RESP> {
     fn from(event: KademliaEvent) -> Self {
         OutEvent::Kademlia(event)
     }
 }
-impl From<identify::Event> for OutEvent {
+impl<REQ: RpcRequest, RESP: RpcResponse> From<identify::Event> for OutEvent<REQ, RESP> {
     fn from(event: identify::Event) -> Self {
         OutEvent::Identify(event)
     }
 }
-impl From<GossipsubEvent> for OutEvent {
+impl<REQ: RpcRequest, RESP: RpcResponse> From<GossipsubEvent> for OutEvent<REQ, RESP> {
     fn from(event: GossipsubEvent) -> Self {
         OutEvent::Gossipsub(event)
+    }
+}
+impl<REQ: RpcRequest, RESP: RpcResponse> From<RequestResponseEvent<REQ, RESP>>
+    for OutEvent<REQ, RESP>
+{
+    fn from(event: RequestResponseEvent<REQ, RESP>) -> Self {
+        OutEvent::RequestResponse(event)
     }
 }

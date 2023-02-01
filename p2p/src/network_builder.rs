@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use super::{Behaviour, Error, Instruction, Network, Notification};
+use super::{Behaviour, Error, Instruction, Network, Notification, RpcRequest, RpcResponse};
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport, transport::upgrade, upgrade::SelectUpgrade},
     dns,
@@ -12,24 +12,23 @@ use libp2p::{
 use mc_common::logger::{log, Logger};
 use tokio::sync::mpsc;
 
-pub struct NetworkBuilder {
+pub struct NetworkBuilder<REQ: RpcRequest, RESP: RpcResponse> {
     keypair: Keypair,
     instruction_rx: mpsc::UnboundedReceiver<Instruction>,
     notification_tx: mpsc::UnboundedSender<Notification>,
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
     listen_address: Multiaddr,
     external_addresses: Vec<Multiaddr>,
-    behaviour: Behaviour,
+    behaviour: Behaviour<REQ, RESP>,
     logger: Logger,
 }
 
-#[allow(dead_code)] // TODO
-impl NetworkBuilder {
+impl<REQ: RpcRequest, RESP: RpcResponse> NetworkBuilder<REQ, RESP> {
     pub fn new(
         keypair: Keypair,
         instruction_rx: mpsc::UnboundedReceiver<Instruction>,
         notification_tx: mpsc::UnboundedSender<Notification>,
-        behaviour: Behaviour,
+        behaviour: Behaviour<REQ, RESP>,
         logger: Logger,
     ) -> Result<Self, Error> {
         Ok(Self {
@@ -86,7 +85,7 @@ impl NetworkBuilder {
         .boxed())
     }
 
-    pub fn build(self) -> Result<Network, Error> {
+    pub fn build(self) -> Result<Network<REQ, RESP>, Error> {
         let mut swarm = SwarmBuilder::new(
             self.transport,
             self.behaviour,

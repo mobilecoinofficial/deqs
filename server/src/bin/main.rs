@@ -7,8 +7,15 @@ use libp2p::identity;
 use mc_common::logger::o;
 use mc_util_grpc::AdminServer;
 use postage::{broadcast, prelude::Stream};
+use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use tokio::sync::mpsc;
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum AppRpc {
+    Var1,
+    Var2(String),
+}
 
 /// Maximum number of messages that can be queued in the message bus.
 const MSG_BUS_QUEUE_SIZE: usize = 1000;
@@ -45,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (notification_tx, mut notification_rx) = mpsc::unbounded_channel();
     let (instruction_tx, instruction_rx) = mpsc::unbounded_channel();
-    let behaviour = deqs_p2p::Behaviour::new(&local_key)?;
+    let behaviour = deqs_p2p::Behaviour::<AppRpc, AppRpc>::new(&local_key)?;
     let mut network_builder = deqs_p2p::NetworkBuilder::new(
         local_key,
         instruction_rx,

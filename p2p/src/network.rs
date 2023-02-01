@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use super::{Behaviour, Error, OutEvent};
+use super::{Behaviour, Error, OutEvent, RpcRequest, RpcResponse};
 use libp2p::{
     futures::StreamExt,
     gossipsub::{GossipsubEvent, GossipsubMessage, IdentTopic},
@@ -37,21 +37,21 @@ const BOOTSTRAP_INTERVAL: Duration = Duration::from_secs(10);
 /// The `Network`:
 /// - receives `Instructions` over the `instruction_rx` channel
 /// - reports events over the `notification_tx` channel
-pub struct Network {
+pub struct Network<REQ: RpcRequest, RESP: RpcResponse> {
     instruction_rx: mpsc::UnboundedReceiver<Instruction>,
     notification_tx: mpsc::UnboundedSender<Notification>,
-    swarm: Swarm<Behaviour>,
+    swarm: Swarm<Behaviour<REQ, RESP>>,
     peer_discovery_key: Key,
     shutdown_tx: mpsc::UnboundedSender<()>,
     shutdown_rx: mpsc::UnboundedReceiver<()>,
     logger: Logger,
 }
 
-impl Network {
+impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
     pub fn new(
         instruction_rx: mpsc::UnboundedReceiver<Instruction>,
         notification_tx: mpsc::UnboundedSender<Notification>,
-        swarm: Swarm<Behaviour>,
+        swarm: Swarm<Behaviour<REQ, RESP>>,
         logger: Logger,
     ) -> Self {
         let (shutdown_tx, shutdown_rx) = mpsc::unbounded_channel();
@@ -102,7 +102,7 @@ impl Network {
         self.swarm.local_peer_id()
     }
 
-    async fn handle_swarm_event<TErr: Debug>(&mut self, event: SwarmEvent<OutEvent, TErr>) {
+    async fn handle_swarm_event<TErr: Debug>(&mut self, event: SwarmEvent<OutEvent<REQ, RESP>, TErr>) {
         match event {
             SwarmEvent::NewListenAddr { address, .. } => {
                 log::info!(&self.logger, "Listening on {:?}", address)

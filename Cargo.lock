@@ -1078,6 +1078,7 @@ dependencies = [
  "libp2p",
  "libp2p-swarm",
  "mc-common",
+ "mc-util-serial",
  "rand 0.8.5",
  "serde",
  "serde_json",
