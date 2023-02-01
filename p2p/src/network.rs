@@ -107,6 +107,24 @@ impl Network {
             SwarmEvent::NewListenAddr { address, .. } => {
                 log::info!(&self.logger, "Listening on {:?}", address)
             }
+            SwarmEvent::ConnectionEstablished {
+                peer_id,
+                endpoint,
+                num_established,
+                concurrent_dial_errors: _,
+            } => {
+                // First connection to this peer
+                if u32::from(num_established) == 1u32 {
+                    log::info!(
+                        &self.logger,
+                        "Connection established: {:?} @ {:?}",
+                        peer_id,
+                        endpoint
+                    );
+                    self.notify(Notification::ConnectionEstablished(peer_id));
+                }
+            }
+
             SwarmEvent::Behaviour(OutEvent::Ping(ping)) => {
                 log::info!(&self.logger, "ping {:?}", ping);
             }
@@ -287,10 +305,10 @@ pub enum Instruction {
 }
 
 /// A notification from the network to one of its consumers.
-/// Either arbitrary data, the list of known peers or an error.
 #[derive(Debug)]
 pub enum Notification {
     PeerList(Vec<PeerId>),
     GossipMessage(GossipsubMessage),
+    ConnectionEstablished(PeerId),
     Err(Error),
 }
