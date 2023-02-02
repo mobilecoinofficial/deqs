@@ -3,20 +3,54 @@
 use super::{Behaviour, Error, OutEvent, RpcRequest, RpcResponse};
 use libp2p::{
     futures::StreamExt,
-    gossipsub::{GossipsubEvent, GossipsubMessage, IdentTopic},
+    gossipsub::{GossipsubEvent, GossipsubMessage},
     identify,
     kad::{record::Key, KademliaEvent, QueryResult},
     multiaddr::Protocol,
+    request_response::{RequestId, RequestResponseEvent, RequestResponseMessage, ResponseChannel},
     swarm::SwarmEvent,
     Multiaddr, PeerId, Swarm,
 };
 use libp2p_swarm::NetworkBehaviour;
 use mc_common::logger::{log, Logger};
-use std::fmt::Debug;
+use std::{collections::HashMap, error::Error as StdError, fmt::Debug};
 use tokio::{
-    sync::mpsc,
+    sync::{
+        mpsc::{self, UnboundedReceiver},
+        oneshot,
+    },
     time::{interval, Duration},
 };
+
+#[derive(Clone)]
+pub struct Client<REQ: RpcRequest, RESP: RpcResponse> {
+    sender: mpsc::UnboundedSender<Instruction<REQ, RESP>>,
+}
+
+impl<REQ: RpcRequest, RESP: RpcResponse> Client<REQ, RESP> {
+    pub async fn rpc_request(
+        &mut self,
+        peer: PeerId,
+        request: REQ,
+    ) -> Result<RESP, Box<dyn StdError + Send>> {
+        let (response_sender, response_receiver) = oneshot::channel();
+        self.sender
+            .send(Instruction::RpcRequest {
+                peer,
+                request,
+                response_sender,
+            })
+            .expect("Command receiver not to be dropped.");
+        response_receiver.await.expect("Sender not be dropped.")
+    }
+
+    /// Respond with the provided file content to the given request.
+    pub async fn rpc_response(&mut self, response: RESP, channel: ResponseChannel<RESP>) {
+        self.sender
+            .send(Instruction::RpcResponse { response, channel })
+            .expect("Command receiver not to be dropped.");
+    }
+}
 
 /// Key used to do peer discovery with Kademlia.
 const KAD_PEER_KEY: &str = "mc/deqs/p2p/kad/peer";
@@ -25,6 +59,15 @@ const KAD_PEER_KEY: &str = "mc/deqs/p2p/kad/peer";
 /// re-bootstrap. This is needed to reconnect our bootstrap peers
 /// in case the connection is lost.
 const BOOTSTRAP_INTERVAL: Duration = Duration::from_secs(10);
+
+// TODO
+#[derive(Debug)]
+pub enum Event<REQ: RpcRequest, RESP: RpcResponse> {
+    RpcRequest {
+        request: REQ,
+        channel: ResponseChannel<RESP>,
+    },
+}
 
 /// The `Network` is a convenience wrapper around the `Swarm` using the
 /// `Behaviour` in this crate. It can be constructed with the `NetworkBuilder`
@@ -38,33 +81,49 @@ const BOOTSTRAP_INTERVAL: Duration = Duration::from_secs(10);
 /// - receives `Instructions` over the `instruction_rx` channel
 /// - reports events over the `notification_tx` channel
 pub struct Network<REQ: RpcRequest, RESP: RpcResponse> {
-    instruction_rx: mpsc::UnboundedReceiver<Instruction>,
-    notification_tx: mpsc::UnboundedSender<Notification>,
+    // instruction_rx: mpsc::UnboundedReceiver<Instruction>,
+    // notification_tx: mpsc::UnboundedSender<Notification>,
+    command_receiver: mpsc::UnboundedReceiver<Instruction<REQ, RESP>>,
+    event_sender: mpsc::UnboundedSender<Event<REQ, RESP>>,
     swarm: Swarm<Behaviour<REQ, RESP>>,
     peer_discovery_key: Key,
     shutdown_tx: mpsc::UnboundedSender<()>,
     shutdown_rx: mpsc::UnboundedReceiver<()>,
     logger: Logger,
+
+    pending_rpc_requests:
+        HashMap<RequestId, oneshot::Sender<Result<RESP, Box<dyn StdError + Send>>>>,
 }
 
 impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
     pub fn new(
-        instruction_rx: mpsc::UnboundedReceiver<Instruction>,
-        notification_tx: mpsc::UnboundedSender<Notification>,
+        // instruction_rx: mpsc::UnboundedReceiver<Instruction>,
+        // notification_tx: mpsc::UnboundedSender<Notification>,
         swarm: Swarm<Behaviour<REQ, RESP>>,
         logger: Logger,
-    ) -> Self {
+    ) -> (Self, UnboundedReceiver<Event<REQ, RESP>>, Client<REQ, RESP>) {
         let (shutdown_tx, shutdown_rx) = mpsc::unbounded_channel();
+        let (command_sender, command_receiver) = mpsc::unbounded_channel();
+        let (event_sender, event_receiver) = mpsc::unbounded_channel();
 
-        Network {
-            instruction_rx,
-            notification_tx,
+        let client = Client {
+            sender: command_sender,
+        };
+
+        let network = Network {
+            // instruction_rx,
+            // notification_tx,
+            command_receiver,
+            event_sender,
             swarm,
             peer_discovery_key: Key::new(&KAD_PEER_KEY),
             shutdown_tx,
             shutdown_rx,
             logger,
-        }
+            pending_rpc_requests: HashMap::new(),
+        };
+
+        (network, event_receiver, client)
     }
 
     pub fn shutdown(&mut self) {
@@ -81,7 +140,8 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
         loop {
             tokio::select! {
                 event = self.swarm.select_next_some() => self.handle_swarm_event(event).await,
-                Some(instruction) = self.instruction_rx.recv() =>  self.handle_instruction(instruction).await,
+                Some(instruction) = self.command_receiver.recv() =>  self.handle_instruction(instruction).await,
+                // Some(instruction) = self.instruction_rx.recv() =>  self.handle_instruction(instruction).await,
                 _ = interval.tick() => {
                     log::trace!(&self.logger, "periodic interval!");
                     if let Err(err) = self.bootstrap(bootstrap_peers) {
@@ -102,7 +162,10 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
         self.swarm.local_peer_id()
     }
 
-    async fn handle_swarm_event<TErr: Debug>(&mut self, event: SwarmEvent<OutEvent<REQ, RESP>, TErr>) {
+    async fn handle_swarm_event<TErr: Debug>(
+        &mut self,
+        event: SwarmEvent<OutEvent<REQ, RESP>, TErr>,
+    ) {
         match event {
             SwarmEvent::NewListenAddr { address, .. } => {
                 log::info!(&self.logger, "Listening on {:?}", address)
@@ -121,8 +184,45 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
                         peer_id,
                         endpoint
                     );
-                    self.notify(Notification::ConnectionEstablished(peer_id));
+                    //self.notify(Notification::
+                    // ConnectionEstablished(peer_id));
                 }
+            }
+
+            SwarmEvent::Behaviour(OutEvent::RequestResponse(RequestResponseEvent::Message {
+                message,
+                ..
+            })) => match message {
+                RequestResponseMessage::Request {
+                    request, channel, ..
+                } => {
+                    self.event_sender
+                        .send(Event::RpcRequest { request, channel })
+                        .unwrap();
+                }
+                RequestResponseMessage::Response {
+                    request_id,
+                    response,
+                } => {
+                    let _ = self
+                        .pending_rpc_requests
+                        .remove(&request_id)
+                        .expect("Request to still be pending.") // TODO
+                        .send(Ok(response));
+                }
+            },
+
+
+            SwarmEvent::Behaviour(OutEvent::RequestResponse(
+                RequestResponseEvent::OutboundFailure {
+                    request_id, error, ..
+                },
+            )) => {
+                let _ = self
+                .pending_rpc_requests
+                    .remove(&request_id)
+                    .expect("Request to still be pending.")
+                    .send(Err(Box::new(error)));
             }
 
             SwarmEvent::Behaviour(OutEvent::Ping(ping)) => {
@@ -157,7 +257,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
             })) => {
                 log::info!(&self.logger, "Gossipsub message: {:?}", message);
 
-                self.notify(Notification::GossipMessage(message));
+                // self.notify(Notification::GossipMessage(message));
             }
 
             SwarmEvent::Behaviour(OutEvent::Identify(e)) => {
@@ -194,42 +294,65 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
         }
     }
 
-    async fn handle_instruction(&mut self, instruction: Instruction) {
-        log::debug!(self.logger, "handling instruction {:?}", instruction);
-
+    async fn handle_instruction(&mut self, instruction: Instruction<REQ, RESP>) {
         match instruction {
-            Instruction::PeerList => {
-                self.notify(Notification::PeerList(
-                    self.swarm
-                        .behaviour()
-                        .gossipsub
-                        .all_peers()
-                        .map(|peer| *peer.0)
-                        .collect::<Vec<_>>(),
-                ));
+            Instruction::RpcRequest {
+                peer,
+                request,
+                response_sender,
+            } => {
+                let request_id = self.swarm.behaviour_mut().rpc.send_request(&peer, request);
+                self.pending_rpc_requests
+                    .insert(request_id, response_sender);
             }
 
-            Instruction::PublishGossip { topic, message } => {
-                log::info!(&self.logger, "publishing gossip {} {:?}", topic, message);
-                if let Err(err) = self.swarm.behaviour_mut().gossipsub.publish(topic, message) {
-                    self.notify(Notification::Err(err.into()));
-                }
-            }
-
-            Instruction::SubscribeGossip { topic } => {
-                log::info!(&self.logger, "subscribing to gossip {}", topic);
-                if let Err(err) = self.swarm.behaviour_mut().gossipsub.subscribe(&topic) {
-                    self.notify(Notification::Err(err.into()));
-                }
+            Instruction::RpcResponse { response, channel } => {
+                self.swarm
+                    .behaviour_mut()
+                    .rpc
+                    .send_response(channel, response)
+                    .expect("Connection to peer to be still open.");
             }
         }
     }
 
-    fn notify(&mut self, notification: Notification) {
-        if let Err(err) = self.notification_tx.send(notification) {
-            log::warn!(&self.logger, "Failed to send notification: {:?}", err);
-        }
-    }
+    // async fn handle_instruction(&mut self, instruction: Instruction) {
+    //     log::debug!(self.logger, "handling instruction {:?}", instruction);
+
+    //     match instruction {
+    //         Instruction::PeerList => {
+    //             self.notify(Notification::PeerList(
+    //                 self.swarm
+    //                     .behaviour()
+    //                     .gossipsub
+    //                     .all_peers()
+    //                     .map(|peer| *peer.0)
+    //                     .collect::<Vec<_>>(),
+    //             ));
+    //         }
+
+    //         Instruction::PublishGossip { topic, message } => {
+    //             log::info!(&self.logger, "publishing gossip {} {:?}", topic,
+    // message);             if let Err(err) =
+    // self.swarm.behaviour_mut().gossipsub.publish(topic, message) {
+    //                 self.notify(Notification::Err(err.into()));
+    //             }
+    //         }
+
+    //         Instruction::SubscribeGossip { topic } => {
+    //             log::info!(&self.logger, "subscribing to gossip {}", topic);
+    //             if let Err(err) =
+    // self.swarm.behaviour_mut().gossipsub.subscribe(&topic) {
+    // self.notify(Notification::Err(err.into()));             }
+    //         }
+    //     }
+    // }
+
+    // fn notify(&mut self, notification: Notification) {
+    //     if let Err(err) = self.notification_tx.send(notification) {
+    //         log::warn!(&self.logger, "Failed to send notification: {:?}", err);
+    //     }
+    // }
 
     fn bootstrap(&mut self, bootstrap_peers: &[Multiaddr]) -> Result<(), Error> {
         // First, we add the addresses of the bootstrap nodes to our view of the DHT
@@ -283,24 +406,34 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
 
 /// An instruction for the network to do something. Most likely to send a
 /// message of some sort
-#[derive(Debug, Clone)]
-pub enum Instruction {
-    /// Instruct the network to provide a list of all peers it is aware of
-    PeerList,
+#[derive(Debug)]
+pub enum Instruction<REQ: RpcRequest, RESP: RpcResponse> {
+    // /// Instruct the network to provide a list of all peers it is aware of
+    // PeerList,
 
-    /// Send a gossip message
-    PublishGossip {
-        /// The topic to publish to
-        topic: IdentTopic,
+    // /// Send a gossip message
+    // PublishGossip {
+    //     /// The topic to publish to
+    //     topic: IdentTopic,
 
-        /// The message to publish
-        message: Vec<u8>,
+    //     /// The message to publish
+    //     message: Vec<u8>,
+    // },
+
+    // /// Subscribe to a gossip topic
+    // SubscribeGossip {
+    //     /// The topic to subscribe to
+    //     topic: IdentTopic,
+    // },
+    RpcRequest {
+        peer: PeerId,
+        request: REQ,
+        response_sender: oneshot::Sender<Result<RESP, Box<dyn StdError + Send>>>,
     },
 
-    /// Subscribe to a gossip topic
-    SubscribeGossip {
-        /// The topic to subscribe to
-        topic: IdentTopic,
+    RpcResponse {
+        response: RESP,
+        channel: ResponseChannel<RESP>,
     },
 }
 

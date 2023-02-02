@@ -1,15 +1,16 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use clap::Parser;
+use deqs_p2p::Event;
 use deqs_quote_book::InMemoryQuoteBook;
 use deqs_server::{Msg, Server, ServerConfig};
-use libp2p::identity;
+use libp2p::{identity, PeerId};
 use mc_common::logger::o;
 use mc_util_grpc::AdminServer;
 use postage::{broadcast, prelude::Stream};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use tokio::sync::mpsc;
+//use tokio::sync::mpsc;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum AppRpc {
@@ -50,13 +51,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // )
     // .unwrap();
 
-    let (notification_tx, mut notification_rx) = mpsc::unbounded_channel();
-    let (instruction_tx, instruction_rx) = mpsc::unbounded_channel();
+    // let (notification_tx, mut notification_rx) = mpsc::unbounded_channel();
+    // let (instruction_tx, instruction_rx) = mpsc::unbounded_channel();
     let behaviour = deqs_p2p::Behaviour::<AppRpc, AppRpc>::new(&local_key)?;
     let mut network_builder = deqs_p2p::NetworkBuilder::new(
         local_key,
-        instruction_rx,
-        notification_tx,
+        // instruction_rx,
+        // notification_tx,
         behaviour,
         logger.clone(),
     )?;
@@ -66,7 +67,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(ref external_addr) = config.p2p_external_address {
         network_builder = network_builder.external_addresses(vec![external_addr.clone()]);
     }
-    let network = network_builder.build()?;
+    let (network, mut events, mut client) = network_builder.build()?;
     let p2p_bootstrap_peers = config.p2p_bootstrap_peers.clone();
     tokio::spawn(async move {
         network
@@ -75,33 +76,44 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("network run")
     });
 
-    instruction_tx
-        .send(deqs_p2p::Instruction::SubscribeGossip {
-            topic: libp2p::gossipsub::IdentTopic::new("gos"),
-        })
-        .unwrap();
+    // instruction_tx
+    //     .send(deqs_p2p::Instruction::SubscribeGossip {
+    //         topic: libp2p::gossipsub::IdentTopic::new("gos"),
+    //     })
+    //     .unwrap();
 
+    let client2 = client.clone();
     tokio::spawn(async move {
         use tokio::io::AsyncBufReadExt;
+        let mut client = client2;
         let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
+        use std::str::FromStr;
 
         loop {
             let line = stdin.next_line().await.unwrap().unwrap();
             match line.as_str() {
+                "rpc" => {
+                    let req = AppRpc::Var2("lol".to_string());
+                    let peer_id =
+                        PeerId::from_str("12D3KooWLhrpcYRYzzA6Kzjscnf3qdoSeR8AowSrRkjugEWU97bz")
+                            .unwrap();
+                    let res = client.rpc_request(peer_id, req).await;
+                    println!("Got response: {:?}", res);
+                }
                 "peers" => {
-                    instruction_tx
-                        .send(deqs_p2p::Instruction::PeerList)
-                        .unwrap();
+                    // instruction_tx
+                    //     .send(deqs_p2p::Instruction::PeerList)
+                    //     .unwrap();
                 }
                 "gos" => {
-                    let topic = libp2p::gossipsub::IdentTopic::new("gos");
-                    use rand::Rng;
-                    let x = rand::thread_rng().gen_range(0..100000000);
-                    let message = x.to_string().as_bytes().to_vec();
+                    // let topic = libp2p::gossipsub::IdentTopic::new("gos");
+                    // use rand::Rng;
+                    // let x = rand::thread_rng().gen_range(0..100000000);
+                    // let message = x.to_string().as_bytes().to_vec();
 
-                    instruction_tx
-                        .send(deqs_p2p::Instruction::PublishGossip { topic, message })
-                        .unwrap();
+                    // instruction_tx
+                    //     .send(deqs_p2p::Instruction::PublishGossip { topic,
+                    // message })     .unwrap();
                 }
                 line => {
                     println!("Unknown command: {}", line);
@@ -112,10 +124,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tokio::spawn(async move {
         loop {
-            let msg = notification_rx.recv().await.unwrap();
-            println!("Got message: {:?}", msg);
+            let event = events.recv().await.unwrap();
+            match event {
+                Event::RpcRequest { request, channel } => {
+                    println!("Got RPC request: {:?} from {:?}", request, channel);
+                    client.rpc_response(AppRpc::Var1, channel).await;
+                }
+            }
         }
     });
+
+    // tokio::spawn(async move {
+    //     loop {
+    //         let msg = notification_rx.recv().await.unwrap();
+    //         println!("Got message: {:?}", msg);
+    //     }
+    // });
 
     let mut server = Server::new(
         msg_bus_tx,
