@@ -3,7 +3,10 @@
 use super::{Behaviour, Error, OutEvent, RpcRequest, RpcResponse};
 use libp2p::{
     futures::StreamExt,
-    gossipsub::{GossipsubEvent, GossipsubMessage},
+    gossipsub::{
+        error::{PublishError, SubscriptionError},
+        GossipsubEvent, GossipsubMessage, IdentTopic, MessageId,
+    },
     identify,
     kad::{record::Key, KademliaEvent, QueryResult},
     multiaddr::Protocol,
@@ -41,6 +44,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Client<REQ, RESP> {
                 response_sender,
             })
             .expect("Command receiver not to be dropped.");
+
         response_receiver.await.expect("Sender not be dropped.")
     }
 
@@ -49,6 +53,37 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Client<REQ, RESP> {
         self.sender
             .send(Instruction::RpcResponse { response, channel })
             .expect("Command receiver not to be dropped.");
+    }
+
+    pub async fn subscribe_gossip(&mut self, topic: IdentTopic) -> Result<bool, SubscriptionError> {
+        let (response_sender, response_receiver) = oneshot::channel();
+
+        self.sender
+            .send(Instruction::SubscribeGossip {
+                topic,
+                response_sender,
+            })
+            .expect("Command receiver not to be dropped.");
+
+        response_receiver.await.expect("Sender not be dropped.")
+    }
+
+    pub async fn publish_gossip(
+        &mut self,
+        topic: IdentTopic,
+        msg: Vec<u8>,
+    ) -> Result<MessageId, PublishError> {
+        let (response_sender, response_receiver) = oneshot::channel();
+
+        self.sender
+            .send(Instruction::PublishGossip {
+                topic,
+                msg,
+                response_sender,
+            })
+            .expect("Command receiver not to be dropped.");
+
+        response_receiver.await.expect("Sender not be dropped.")
     }
 }
 
@@ -63,10 +98,17 @@ const BOOTSTRAP_INTERVAL: Duration = Duration::from_secs(10);
 // TODO
 #[derive(Debug)]
 pub enum Event<REQ: RpcRequest, RESP: RpcResponse> {
+    /// Incoming RPC request
     RpcRequest {
         request: REQ,
         channel: ResponseChannel<RESP>,
     },
+
+    /// Connection established with a peer.
+    ConnectionEstablished { peer_id: PeerId },
+
+    /// Gossip message received.
+    GossipMessage { message: GossipsubMessage },
 }
 
 /// The `Network` is a convenience wrapper around the `Swarm` using the
@@ -184,8 +226,10 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
                         peer_id,
                         endpoint
                     );
-                    //self.notify(Notification::
-                    // ConnectionEstablished(peer_id));
+
+                    self.event_sender
+                        .send(Event::ConnectionEstablished { peer_id })
+                        .unwrap();
                 }
             }
 
@@ -212,14 +256,13 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
                 }
             },
 
-
             SwarmEvent::Behaviour(OutEvent::RequestResponse(
                 RequestResponseEvent::OutboundFailure {
                     request_id, error, ..
                 },
             )) => {
                 let _ = self
-                .pending_rpc_requests
+                    .pending_rpc_requests
                     .remove(&request_id)
                     .expect("Request to still be pending.")
                     .send(Err(Box::new(error)));
@@ -257,7 +300,9 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
             })) => {
                 log::info!(&self.logger, "Gossipsub message: {:?}", message);
 
-                // self.notify(Notification::GossipMessage(message));
+                self.event_sender
+                    .send(Event::GossipMessage { message })
+                    .unwrap();
             }
 
             SwarmEvent::Behaviour(OutEvent::Identify(e)) => {
@@ -312,6 +357,25 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
                     .rpc
                     .send_response(channel, response)
                     .expect("Connection to peer to be still open.");
+            }
+
+            Instruction::PublishGossip {
+                topic,
+                msg,
+                response_sender,
+            } => {
+                let resp = self.swarm.behaviour_mut().gossipsub.publish(topic, msg);
+
+                response_sender.send(resp).expect("Receiver to be open.");
+            }
+
+            Instruction::SubscribeGossip {
+                topic,
+                response_sender,
+            } => {
+                let resp = self.swarm.behaviour_mut().gossipsub.subscribe(&topic);
+
+                response_sender.send(resp).expect("Receiver to be open.");
             }
         }
     }
@@ -410,21 +474,24 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
 pub enum Instruction<REQ: RpcRequest, RESP: RpcResponse> {
     // /// Instruct the network to provide a list of all peers it is aware of
     // PeerList,
+    /// Send a gossip message
+    PublishGossip {
+        /// The topic to publish to
+        topic: IdentTopic,
 
-    // /// Send a gossip message
-    // PublishGossip {
-    //     /// The topic to publish to
-    //     topic: IdentTopic,
+        /// The message to publish
+        msg: Vec<u8>,
 
-    //     /// The message to publish
-    //     message: Vec<u8>,
-    // },
+        response_sender: oneshot::Sender<Result<MessageId, PublishError>>,
+    },
 
-    // /// Subscribe to a gossip topic
-    // SubscribeGossip {
-    //     /// The topic to subscribe to
-    //     topic: IdentTopic,
-    // },
+    /// Subscribe to a gossip topic
+    SubscribeGossip {
+        /// The topic to subscribe to
+        topic: IdentTopic,
+        response_sender: oneshot::Sender<Result<bool, SubscriptionError>>,
+    },
+
     RpcRequest {
         peer: PeerId,
         request: REQ,
@@ -437,11 +504,11 @@ pub enum Instruction<REQ: RpcRequest, RESP: RpcResponse> {
     },
 }
 
-/// A notification from the network to one of its consumers.
-#[derive(Debug)]
-pub enum Notification {
-    PeerList(Vec<PeerId>),
-    GossipMessage(GossipsubMessage),
-    ConnectionEstablished(PeerId),
-    Err(Error),
-}
+// /// A notification from the network to one of its consumers.
+// #[derive(Debug)]
+// pub enum Notification {
+//     PeerList(Vec<PeerId>),
+//     GossipMessage(GossipsubMessage),
+//     ConnectionEstablished(PeerId),
+//     Err(Error),
+// }

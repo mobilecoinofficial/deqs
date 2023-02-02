@@ -5,7 +5,7 @@ use deqs_p2p::Event;
 use deqs_quote_book::InMemoryQuoteBook;
 use deqs_server::{Msg, Server, ServerConfig};
 use libp2p::{identity, PeerId};
-use mc_common::logger::o;
+use mc_common::logger::{log, o};
 use mc_util_grpc::AdminServer;
 use postage::{broadcast, prelude::Stream};
 use serde::{Deserialize, Serialize};
@@ -76,6 +76,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .expect("network run")
     });
 
+    log::info!(
+        logger,
+        "SUBSCRIBE: {:?}",
+        client
+            .subscribe_gossip(libp2p::gossipsub::IdentTopic::new("gos"))
+            .await
+    );
+
     // instruction_tx
     //     .send(deqs_p2p::Instruction::SubscribeGossip {
     //         topic: libp2p::gossipsub::IdentTopic::new("gos"),
@@ -83,9 +91,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //     .unwrap();
 
     let client2 = client.clone();
+    let logger2 = logger.clone();
     tokio::spawn(async move {
         use tokio::io::AsyncBufReadExt;
         let mut client = client2;
+        let logger = logger2;
         let mut stdin = tokio::io::BufReader::new(tokio::io::stdin()).lines();
         use std::str::FromStr;
 
@@ -106,14 +116,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     //     .unwrap();
                 }
                 "gos" => {
-                    // let topic = libp2p::gossipsub::IdentTopic::new("gos");
-                    // use rand::Rng;
-                    // let x = rand::thread_rng().gen_range(0..100000000);
-                    // let message = x.to_string().as_bytes().to_vec();
+                    let topic = libp2p::gossipsub::IdentTopic::new("gos");
+                    use rand::Rng;
+                    let x = rand::thread_rng().gen_range(0..100000000);
+                    let message = x.to_string().as_bytes().to_vec();
 
-                    // instruction_tx
-                    //     .send(deqs_p2p::Instruction::PublishGossip { topic,
-                    // message })     .unwrap();
+                    log::info!(
+                        logger,
+                        "PUBLIC: {:?}",
+                        client.publish_gossip(topic, message).await
+                    );
                 }
                 line => {
                     println!("Unknown command: {}", line);
@@ -129,6 +141,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 Event::RpcRequest { request, channel } => {
                     println!("Got RPC request: {:?} from {:?}", request, channel);
                     client.rpc_response(AppRpc::Var1, channel).await;
+                }
+
+                event => {
+                    println!("Got event: {:?}", event);
                 }
             }
         }

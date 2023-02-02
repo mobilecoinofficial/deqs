@@ -13,7 +13,7 @@ mod rpc;
 
 pub use behaviour::{Behaviour, OutEvent};
 pub use error::Error;
-pub use network::{Client, Event, Instruction, Network, Notification};
+pub use network::{Client, Event, Network};
 pub use network_builder::NetworkBuilder;
 pub use rpc::{RpcRequest, RpcResponse};
 //pub use traits::{EventHandler, InstructionHandler};
