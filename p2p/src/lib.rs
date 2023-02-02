@@ -4,20 +4,18 @@
 //! This is based on https://github.com/libp2p/rust-libp2p/pull/3150/files
 
 mod behaviour;
-//mod client;
+mod client;
 mod error;
 mod network;
 mod network_builder;
+mod network_event_loop;
 mod rpc;
-//mod traits;
 
 pub use behaviour::{Behaviour, OutEvent};
 pub use error::Error;
-pub use network::{Client, Event, Network};
+pub use network::{Network, NetworkEvent};
 pub use network_builder::NetworkBuilder;
 pub use rpc::{RpcRequest, RpcResponse};
-//pub use traits::{EventHandler, InstructionHandler};
-//pub use client::Client;
 
 /*
 const BROADCAST_TOPIC: &str = "BROADCAST";

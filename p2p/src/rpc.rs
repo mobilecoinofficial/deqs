@@ -1,7 +1,5 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use std::io;
-
 use async_trait::async_trait;
 use futures::{AsyncRead, AsyncWrite, AsyncWriteExt};
 use libp2p::{
@@ -9,7 +7,7 @@ use libp2p::{
     request_response::{ProtocolName, RequestResponseCodec},
 };
 use serde::{de::DeserializeOwned, Serialize};
-use std::fmt::Debug;
+use std::{fmt::Debug, io};
 
 pub trait RpcRequest:
     Clone + Debug + DeserializeOwned + Eq + PartialEq + Serialize + Send + 'static

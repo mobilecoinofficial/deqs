@@ -1,8 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::Event;
-
-use super::{Behaviour, Client, Error, Network, RpcRequest, RpcResponse};
+use super::{client::Client, Behaviour, Error, Network, RpcRequest, RpcResponse};
+use crate::network_event_loop::NetworkEventLoop;
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport, transport::upgrade, upgrade::SelectUpgrade},
     dns,
@@ -12,7 +11,7 @@ use libp2p::{
     tcp, websocket, yamux, Multiaddr, PeerId, Transport,
 };
 use mc_common::logger::{log, Logger};
-use tokio::sync::mpsc::UnboundedReceiver;
+use tokio::sync::mpsc;
 
 pub struct NetworkBuilder<REQ: RpcRequest, RESP: RpcResponse> {
     keypair: Keypair,
@@ -87,16 +86,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkBuilder<REQ, RESP> {
         .boxed())
     }
 
-    pub fn build(
-        self,
-    ) -> Result<
-        (
-            Network<REQ, RESP>,
-            UnboundedReceiver<Event<REQ, RESP>>,
-            Client<REQ, RESP>,
-        ),
-        Error,
-    > {
+    pub fn build(self) -> Result<Network<REQ, RESP>, Error> {
         let mut swarm = SwarmBuilder::new(
             self.transport,
             self.behaviour,
@@ -114,11 +104,17 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkBuilder<REQ, RESP> {
 
         log::info!(&self.logger, "Local PeerId: {}", swarm.local_peer_id());
 
-        Ok(Network::new(
-            // self.instruction_rx,
-            // self.notification_tx,
-            swarm,
-            self.logger,
-        ))
+        let (command_sender, command_receiver) = mpsc::unbounded_channel();
+        let (event_sender, event_receiver) = mpsc::unbounded_channel();
+
+        let client = Client::new(command_sender);
+
+        let event_loop = NetworkEventLoop::new(command_receiver, event_sender, swarm, self.logger);
+
+        Ok(Network {
+            event_loop,
+            client,
+            events: event_receiver,
+        })
     }
 }

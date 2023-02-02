@@ -1,7 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use clap::Parser;
-use deqs_p2p::Event;
+use deqs_p2p::{Network, NetworkEvent};
 use deqs_quote_book::InMemoryQuoteBook;
 use deqs_server::{Msg, Server, ServerConfig};
 use libp2p::{identity, PeerId};
@@ -67,10 +67,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     if let Some(ref external_addr) = config.p2p_external_address {
         network_builder = network_builder.external_addresses(vec![external_addr.clone()]);
     }
-    let (network, mut events, mut client) = network_builder.build()?;
+    let Network {
+        event_loop,
+        mut events,
+        mut client,
+    } = network_builder.build()?;
     let p2p_bootstrap_peers = config.p2p_bootstrap_peers.clone();
     tokio::spawn(async move {
-        network
+        event_loop
             .run(&p2p_bootstrap_peers)
             .await
             .expect("network run")
@@ -101,12 +105,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         loop {
             let line = stdin.next_line().await.unwrap().unwrap();
-            match line.as_str() {
+            let tokens = line.split(' ').collect::<Vec<_>>();
+            match tokens[0] {
                 "rpc" => {
                     let req = AppRpc::Var2("lol".to_string());
-                    let peer_id =
-                        PeerId::from_str("12D3KooWLhrpcYRYzzA6Kzjscnf3qdoSeR8AowSrRkjugEWU97bz")
-                            .unwrap();
+
+                    let pid = tokens
+                        .get(1)
+                        .unwrap_or(&"12D3KooWLhrpcYRYzzA6Kzjscnf3qdoSeR8AowSrRkjugEWU97bz");
+
+                    let peer_id = PeerId::from_str(pid).unwrap();
                     let res = client.rpc_request(peer_id, req).await;
                     println!("Got response: {:?}", res);
                 }
@@ -137,7 +145,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             let event = events.recv().await.unwrap();
             match event {
-                Event::RpcRequest { request, channel } => {
+                NetworkEvent::RpcRequest { request, channel } => {
                     println!("Got RPC request: {:?} from {:?}", request, channel);
                     client.rpc_response(AppRpc::Var1, channel).await;
                 }
