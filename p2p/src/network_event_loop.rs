@@ -1,9 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use super::{
-    client::{Command},
-    network::NetworkEvent,
-    Behaviour, Error, OutEvent, RpcRequest, RpcResponse,
+    client::Command, network::NetworkEvent, Behaviour, Error, OutEvent, RpcRequest, RpcResponse,
 };
 use libp2p::{
     futures::StreamExt,
@@ -19,10 +17,7 @@ use libp2p_swarm::NetworkBehaviour;
 use mc_common::logger::{log, Logger};
 use std::{collections::HashMap, error::Error as StdError, fmt::Debug};
 use tokio::{
-    sync::{
-        mpsc,
-        oneshot,
-    },
+    sync::{mpsc, oneshot},
     time::{interval, Duration},
 };
 
@@ -143,6 +138,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
                 RequestResponseMessage::Request {
                     request, channel, ..
                 } => {
+                    log::crit!(self.logger, "Received RPC request: {:?}", request);
                     self.event_sender
                         .send(NetworkEvent::RpcRequest { request, channel })
                         .unwrap();

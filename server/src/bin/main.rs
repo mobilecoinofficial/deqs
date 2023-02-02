@@ -141,13 +141,37 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     });
 
+    let logger3 = logger.clone();
     tokio::spawn(async move {
         loop {
             let event = events.recv().await.unwrap();
             match event {
                 NetworkEvent::RpcRequest { request, channel } => {
-                    println!("Got RPC request: {:?} from {:?}", request, channel);
+                    log::crit!(logger3, "Got RPC request: {:?} from {:?}", request, channel);
                     client.rpc_response(AppRpc::Var1, channel).await;
+                }
+
+                NetworkEvent::ConnectionEstablished { peer_id } => {
+                    let mut client = client.clone();
+
+                    // When a connection is established between two peers, they both receive the
+                    // ConnectionEstablished event. As such, both peers will be
+                    // executing this code at around the same time. This means
+                    // that if we try to send an RPC request from this (the event loop) context, we
+                    // will never get a response from one of the peers, since it
+                    // will be blocking here waiting for a response from
+                    // the other peer.
+                    // A useful reminder is that for RPC responses to work, we need to be able to
+                    // respond to RpcRequest events, which we cannot do while we
+                    // are blocking on an RPC request to the other peer.
+                    let logger4 = logger3.clone();
+                    tokio::spawn(async move {
+                        log::crit!(logger4, "NEW PEER: {:?}", peer_id);
+                        let resp = client
+                            .rpc_request(peer_id, AppRpc::Var2("lol".to_string()))
+                            .await;
+                        log::crit!(logger4, "NEW PEER RESP: {:?}", resp);
+                    });
                 }
 
                 event => {
