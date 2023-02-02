@@ -111,10 +111,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     println!("Got response: {:?}", res);
                 }
                 "peers" => {
-                    // instruction_tx
-                    //     .send(deqs_p2p::Instruction::PeerList)
-                    //     .unwrap();
+                    log::info!(logger, "PEERS: {:?}", client.peer_list().await);
                 }
+
                 "gos" => {
                     let topic = libp2p::gossipsub::IdentTopic::new("gos");
                     use rand::Rng;

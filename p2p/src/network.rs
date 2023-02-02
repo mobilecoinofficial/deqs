@@ -85,6 +85,16 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Client<REQ, RESP> {
 
         response_receiver.await.expect("Sender not be dropped.")
     }
+
+    pub async fn peer_list(&mut self) -> Vec<PeerId> {
+        let (response_sender, response_receiver) = oneshot::channel();
+
+        self.sender
+            .send(Instruction::PeerList { response_sender })
+            .expect("Command receiver not to be dropped.");
+
+        response_receiver.await.expect("Sender not be dropped.")
+    }
 }
 
 /// Key used to do peer discovery with Kademlia.
@@ -341,6 +351,20 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
 
     async fn handle_instruction(&mut self, instruction: Instruction<REQ, RESP>) {
         match instruction {
+            Instruction::PeerList { response_sender } => {
+                let peer_ids = self
+                    .swarm
+                    .behaviour()
+                    .gossipsub
+                    .all_peers()
+                    .map(|peer| *peer.0)
+                    .collect::<Vec<_>>();
+
+                response_sender
+                    .send(peer_ids)
+                    .expect("Receiver to be open.");
+            }
+
             Instruction::RpcRequest {
                 peer,
                 request,
@@ -472,8 +496,11 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Network<REQ, RESP> {
 /// message of some sort
 #[derive(Debug)]
 pub enum Instruction<REQ: RpcRequest, RESP: RpcResponse> {
-    // /// Instruct the network to provide a list of all peers it is aware of
-    // PeerList,
+    /// Instruct the network to provide a list of all peers it is aware of
+    PeerList {
+        response_sender: oneshot::Sender<Vec<PeerId>>,
+    },
+
     /// Send a gossip message
     PublishGossip {
         /// The topic to publish to
