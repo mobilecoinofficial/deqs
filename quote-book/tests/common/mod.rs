@@ -109,10 +109,7 @@ pub fn basic_happy_flow(quote_book: &impl QuoteBook) {
 
     // Can't remove the quote again
     assert_eq!(
-        quote_book
-            .remove_quote_by_id(quote.id())
-            .unwrap_err()
-            .into(),
+        quote_book.remove_quote_by_id(quote.id()).unwrap_err(),
         Error::QuoteNotFound
     );
     assert_eq!(
@@ -194,7 +191,7 @@ pub fn cannot_add_invalid_sci(quote_book: &impl QuoteBook) {
     let sci = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
 
     assert_eq!(
-        quote_book.add_sci(sci, None).unwrap_err().into(),
+        quote_book.add_sci(sci, None).unwrap_err(),
         Error::UnsupportedSci("Unsupported number of required/partial outputs 2/0".into())
     );
 
@@ -203,7 +200,7 @@ pub fn cannot_add_invalid_sci(quote_book: &impl QuoteBook) {
     sci.mlsag.responses.pop();
 
     assert_eq!(
-        quote_book.add_sci(sci, None).unwrap_err().into(),
+        quote_book.add_sci(sci, None).unwrap_err(),
         Error::Sci(SignedContingentInputError::RingSignature(
             RingSignatureError::LengthMismatch(22, 21),
         ))

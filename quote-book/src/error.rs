@@ -3,6 +3,7 @@
 use displaydoc::Display;
 use mc_transaction_core::RevealedTxOutError;
 use mc_transaction_extra::SignedContingentInputError;
+use std::sync::PoisonError;
 
 /// Type for common quote book errors
 #[derive(Debug, Display, Eq, PartialEq)]
@@ -28,6 +29,9 @@ pub enum Error {
     /// RevealedTxOut: {0}
     RevealedTxOut(RevealedTxOutError),
 
+    /// LockPoisoned
+    LockPoisoned,
+
     /// Time conversion error
     Time,
 }
@@ -41,5 +45,11 @@ impl From<SignedContingentInputError> for Error {
 impl From<RevealedTxOutError> for Error {
     fn from(err: RevealedTxOutError) -> Self {
         Self::RevealedTxOut(err)
+    }
+}
+
+impl<T> From<PoisonError<T>> for Error {
+    fn from(_src: PoisonError<T>) -> Self {
+        Error::LockPoisoned
     }
 }
