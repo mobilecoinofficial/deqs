@@ -21,9 +21,14 @@ pub enum NetworkEvent<REQ: RpcRequest, RESP: RpcResponse> {
     GossipMessage { message: GossipsubMessage },
 }
 
-/// An interface to a p2p network.
+/// A collection of objects that together form an interface to a p2p network.
 pub struct Network<REQ: RpcRequest, RESP: RpcResponse> {
+    /// The event loop that processes network and client events.
     pub event_loop: NetworkEventLoop<REQ, RESP>,
+
+    /// A client for interacting with the network.
     pub client: Client<REQ, RESP>,
+
+    /// Channel for receiving asynchronous network events.
     pub events: mpsc::UnboundedReceiver<NetworkEvent<REQ, RESP>>,
 }

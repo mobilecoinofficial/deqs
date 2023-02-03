@@ -50,9 +50,6 @@ impl ProtocolName for RpcProtocol {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct FileResponse(Vec<u8>);
-
 #[async_trait]
 impl<REQ: RpcRequest, RESP: RpcResponse> RequestResponseCodec for RpcCodec<REQ, RESP> {
     type Protocol = RpcProtocol;
@@ -69,8 +66,8 @@ impl<REQ: RpcRequest, RESP: RpcResponse> RequestResponseCodec for RpcCodec<REQ, 
             return Err(io::ErrorKind::UnexpectedEof.into());
         }
 
-        // TODO
-        Ok(mc_util_serial::deserialize(&vec).unwrap())
+        mc_util_serial::deserialize(&vec)
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err.to_string()))
     }
 
     async fn read_response<T>(&mut self, _: &RpcProtocol, io: &mut T) -> io::Result<Self::Response>
@@ -83,15 +80,20 @@ impl<REQ: RpcRequest, RESP: RpcResponse> RequestResponseCodec for RpcCodec<REQ, 
             return Err(io::ErrorKind::UnexpectedEof.into());
         }
 
-        // TODO
-        Ok(mc_util_serial::deserialize(&vec).unwrap())
+        mc_util_serial::deserialize(&vec)
+            .map_err(|err| io::Error::new(io::ErrorKind::InvalidInput, err.to_string()))
     }
 
     async fn write_request<T>(&mut self, _: &RpcProtocol, io: &mut T, req: REQ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,
     {
-        let data = mc_util_serial::serialize(&req).unwrap(); // TODO
+        let data = mc_util_serial::serialize(&req).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to serialize request: {}", err),
+            )
+        })?;
         write_length_prefixed(io, data).await?;
         io.close().await?;
 
@@ -102,8 +104,12 @@ impl<REQ: RpcRequest, RESP: RpcResponse> RequestResponseCodec for RpcCodec<REQ, 
     where
         T: AsyncWrite + Unpin + Send,
     {
-        // TODO
-        let data = mc_util_serial::serialize(&resp).unwrap();
+        let data = mc_util_serial::serialize(&resp).map_err(|err| {
+            io::Error::new(
+                io::ErrorKind::Other,
+                format!("Failed to serialize response: {}", err),
+            )
+        })?;
 
         write_length_prefixed(io, data).await?;
         io.close().await?;
