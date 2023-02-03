@@ -20,6 +20,9 @@ pub enum Error {
     /// Quote not found
     QuoteNotFound,
 
+    /// Quote has a spent keyimage
+    QuoteIsStale,
+
     /// Quote cannot fulfill the desired amount ({0}) of base tokens
     InsufficientBaseTokens(u64),
 
