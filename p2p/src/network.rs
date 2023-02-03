@@ -3,7 +3,7 @@
 use libp2p::{gossipsub::GossipsubMessage, request_response::ResponseChannel, PeerId};
 use tokio::sync::mpsc;
 
-use crate::{RpcRequest, RpcResponse, network_event_loop::NetworkEventLoop, client::Client};
+use crate::{client::Client, network_event_loop::NetworkEventLoop, RpcRequest, RpcResponse};
 
 /// An asynchronous event that can be received from the network.
 #[derive(Debug)]

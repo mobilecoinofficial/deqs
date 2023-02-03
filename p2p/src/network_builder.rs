@@ -1,7 +1,9 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use super::{client::Client, Behaviour, Error, Network, RpcRequest, RpcResponse};
-use crate::network_event_loop::NetworkEventLoop;
+use crate::{
+    client::Client, network_event_loop::NetworkEventLoop, Behaviour, Error, Network, RpcRequest,
+    RpcResponse,
+};
 use libp2p::{
     core::{muxing::StreamMuxerBox, transport, transport::upgrade, upgrade::SelectUpgrade},
     dns,
@@ -13,10 +15,10 @@ use libp2p::{
 use mc_common::logger::{log, Logger};
 use tokio::sync::mpsc;
 
+/// A builder object for constructing a p2p network.
+/// The output of this is a `Network`.
 pub struct NetworkBuilder<REQ: RpcRequest, RESP: RpcResponse> {
     keypair: Keypair,
-    // instruction_rx: mpsc::UnboundedReceiver<Instruction>,
-    // notification_tx: mpsc::UnboundedSender<Notification>,
     transport: transport::Boxed<(PeerId, StreamMuxerBox)>,
     listen_address: Multiaddr,
     external_addresses: Vec<Multiaddr>,
@@ -27,16 +29,12 @@ pub struct NetworkBuilder<REQ: RpcRequest, RESP: RpcResponse> {
 impl<REQ: RpcRequest, RESP: RpcResponse> NetworkBuilder<REQ, RESP> {
     pub fn new(
         keypair: Keypair,
-        // instruction_rx: mpsc::UnboundedReceiver<Instruction>,
-        // notification_tx: mpsc::UnboundedSender<Notification>,
         behaviour: Behaviour<REQ, RESP>,
         logger: Logger,
     ) -> Result<Self, Error> {
         Ok(Self {
             transport: Self::default_transport(&keypair)?,
             keypair,
-            // instruction_rx,
-            // notification_tx,
             listen_address: Self::default_listen_address()?,
             external_addresses: vec![],
             behaviour,
@@ -64,6 +62,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkBuilder<REQ, RESP> {
         Ok("/ip4/127.0.0.1/tcp/0".parse()?)
     }
 
+    // Mostly copied from development_transport in libp2p
     fn default_transport(
         keypair: &Keypair,
     ) -> Result<transport::Boxed<(PeerId, StreamMuxerBox)>, Error> {

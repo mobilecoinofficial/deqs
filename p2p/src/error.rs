@@ -43,8 +43,9 @@ pub enum Error {
     /// Multiaddr: {0}
     Multiaddr(MultiaddrError),
 
-   /// Kademlia store: {0}
+    /// Kademlia store: {0}
     KadStore(KadStoreError),
+
 }
 
 impl From<IoError> for Error {
