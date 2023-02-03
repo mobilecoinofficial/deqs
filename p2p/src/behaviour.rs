@@ -33,8 +33,13 @@ const GOSSIPSUB_PROTO_ID_PREFIX: &str = "mc/deqs/gossipsub";
 #[derive(NetworkBehaviour)]
 #[behaviour(out_event = "OutEvent<REQ, RESP>")]
 pub struct Behaviour<REQ: RpcRequest, RESP: RpcResponse> {
+    /// - `keep_alive`: this is a core feature of libp2p that ensures that
+    ///  connections are kept alive. Without this, peers would disconnect
+    /// after a certain amount of time, even if they are still connected to
+    /// each other. While we can detect that and reconnect to them, we'd like to
+    /// always be connected so that messages move faster between peers.
     pub keep_alive: keep_alive::Behaviour,
-    //ping: ping::Behaviour,
+
     /// - `identify::Behaviour`: when peers connect and they both support this
     ///   protocol, they exchange `IdentityInfo`. We then uses this info to add
     ///   their listen addresses to the Kademlia DHT. Without
@@ -61,6 +66,11 @@ pub struct Behaviour<REQ: RpcRequest, RESP: RpcResponse> {
 
     /// - Application-specific RPC
     pub rpc: RequestResponse<RpcCodec<REQ, RESP>>,
+
+    /// - `ping::Behaviour`: this is a simple protocol that allows peers to
+    ///  measure the latency between them. This is useful for debugging
+    /// purposes, but also for detecting peers that are not reachable.
+    ping: ping::Behaviour,
 }
 
 impl<REQ: RpcRequest, RESP: RpcResponse> Behaviour<REQ, RESP> {
@@ -72,7 +82,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Behaviour<REQ, RESP> {
 
         Ok(Self {
             keep_alive: keep_alive::Behaviour::default(),
-            //ping: ping::Behaviour::default(),
+            ping: ping::Behaviour::default(),
             kademlia,
             gossipsub,
             identify,
@@ -118,10 +128,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Behaviour<REQ, RESP> {
 
     fn create_kademlia(local_peer_id: PeerId) -> Kademlia<MemoryStore> {
         let mut cfg = KademliaConfig::default();
-        cfg.set_provider_publication_interval(Some(Duration::from_secs(10)));
-        cfg.set_query_timeout(Duration::from_secs(5 * 60));
         cfg.set_protocol_names(iter::once(Cow::Borrowed(KADEMLIA_PROTO_NAME)).collect());
-        //cfg.set_provider_publication_interval(Some(Duration::from_secs(1)));
 
         let store = MemoryStore::new(local_peer_id);
         Kademlia::with_config(local_peer_id, store, cfg)

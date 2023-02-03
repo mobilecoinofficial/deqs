@@ -2,10 +2,7 @@
 
 use displaydoc::Display;
 use libp2p::{
-    gossipsub::error::{PublishError, SubscriptionError},
-    kad::store::Error as KadStoreError,
-    multiaddr::Error as MultiaddrError,
-    noise::NoiseError,
+    kad::store::Error as KadStoreError, multiaddr::Error as MultiaddrError, noise::NoiseError,
     Multiaddr, TransportError,
 };
 use libp2p_swarm::DialError;
@@ -46,13 +43,7 @@ pub enum Error {
     /// Multiaddr: {0}
     Multiaddr(MultiaddrError),
 
-    /// Gossip publish: {0}
-    GossipPublish(PublishError),
-
-    /// Gossip subscription: {0}
-    GossipSubscription(SubscriptionError),
-
-    /// Kademlia store: {0}
+   /// Kademlia store: {0}
     KadStore(KadStoreError),
 }
 
@@ -83,18 +74,6 @@ impl From<TransportError<IoError>> for Error {
 impl From<MultiaddrError> for Error {
     fn from(e: MultiaddrError) -> Self {
         Self::Multiaddr(e)
-    }
-}
-
-impl From<PublishError> for Error {
-    fn from(e: PublishError) -> Self {
-        Self::GossipPublish(e)
-    }
-}
-
-impl From<SubscriptionError> for Error {
-    fn from(e: SubscriptionError) -> Self {
-        Self::GossipSubscription(e)
     }
 }
 

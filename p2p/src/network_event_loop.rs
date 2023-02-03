@@ -1,7 +1,9 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use super::{
-    client::Command, network::NetworkEvent, Behaviour, Error, OutEvent, RpcRequest, RpcResponse,
+    client::{Command, Error as ClientError},
+    network::NetworkEvent,
+    Behaviour, Error, OutEvent, RpcRequest, RpcResponse,
 };
 use libp2p::{
     futures::StreamExt,
@@ -15,7 +17,7 @@ use libp2p::{
 };
 use libp2p_swarm::NetworkBehaviour;
 use mc_common::logger::{log, Logger};
-use std::{collections::HashMap, error::Error as StdError, fmt::Debug};
+use std::{collections::HashMap, fmt::Debug};
 use tokio::{
     sync::{mpsc, oneshot},
     time::{interval, Duration},
@@ -29,8 +31,7 @@ const KAD_PEER_KEY: &str = "mc/deqs/p2p/kad/peer";
 /// in case the connection is lost.
 const BOOTSTRAP_INTERVAL: Duration = Duration::from_secs(10);
 
-type RpcRequestsMap<RESP> =
-    HashMap<RequestId, oneshot::Sender<Result<RESP, Box<dyn StdError + Send>>>>;
+type RpcRequestsMap<RESP> = HashMap<RequestId, oneshot::Sender<Result<RESP, ClientError>>>;
 
 /// TODO
 pub struct NetworkEventLoop<REQ: RpcRequest, RESP: RpcResponse> {
@@ -164,7 +165,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
                     .pending_rpc_requests
                     .remove(&request_id)
                     .expect("Request to still be pending.")
-                    .send(Err(Box::new(error)));
+                    .send(Err(error.into()));
             }
 
             SwarmEvent::Behaviour(OutEvent::Ping(ping)) => {

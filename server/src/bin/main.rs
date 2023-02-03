@@ -148,7 +148,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             match event {
                 NetworkEvent::RpcRequest { request, channel } => {
                     log::crit!(logger3, "Got RPC request: {:?} from {:?}", request, channel);
-                    client.rpc_response(AppRpc::Var1, channel).await;
+                    client
+                        .rpc_response(AppRpc::Var1, channel)
+                        .await
+                        .expect("rpc response");
                 }
 
                 NetworkEvent::ConnectionEstablished { peer_id } => {
