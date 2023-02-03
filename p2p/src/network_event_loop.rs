@@ -157,9 +157,9 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
                         endpoint
                     );
 
-                    if let Some(err) = self.event_sender
+                    self.event_sender
                         .send(NetworkEvent::ConnectionEstablished { peer_id })
-                        .unwrap();
+                        .expect("event queue should not be closed");
                 }
             }
 
@@ -175,16 +175,9 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
                 } => {
                     log::debug!(self.logger, "Received RPC request: {:?}", request);
 
-                    if let Err(err) = self
-                        .event_sender
+                    self.event_sender
                         .send(NetworkEvent::RpcRequest { request, channel })
-                    {
-                        log::warn!(
-                            self.logger,
-                            "Failed to send RPC request over channel: {:?}",
-                            err
-                        );
-                    }
+                        .expect("event queue should not be closed");
                 }
 
                 RequestResponseMessage::Response {
@@ -193,13 +186,9 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
                 } => match self.pending_rpc_requests.remove(&request_id) {
                     Some(sender) => {
                         log::trace!(self.logger, "Received RPC response: {:?}", response);
-                        if let Err(err) = sender.send(Ok(response)) {
-                            log::warn!(
-                                self.logger,
-                                "Failed to send RPC response over channel: {:?}",
-                                err
-                            );
-                        }
+                        sender
+                            .send(Ok(response))
+                            .expect("receiver should not be closed");
                     }
                     None => {
                         log::warn!(
@@ -219,13 +208,9 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
                 Some(sender) => {
                     log::trace!(self.logger, "RPC request failed: {:?}", error);
 
-                    if let Err(err) = sender.send(Err(error.into())) {
-                        log::warn!(
-                            self.logger,
-                            "Failed to send RPC error over channel: {:?}",
-                            err
-                        );
-                    }
+                    sender
+                        .send(Err(error.into()))
+                        .expect("receiver should not be closed");
                 }
                 None => {
                     log::warn!(
@@ -257,7 +242,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
                             &self.logger,
                             "Peer {:?} provides key {:?} via addresses {:?}",
                             peer,
-                            std::str::from_utf8(ok.key.as_ref()).unwrap(),
+                            std::str::from_utf8(ok.key.as_ref()).unwrap_or_else(|_| "<invalid>"),
                             addrs,
                         );
                     }
@@ -277,7 +262,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
 
                 self.event_sender
                     .send(NetworkEvent::GossipMessage { message })
-                    .unwrap();
+                    .expect("event queue should not be closed");
             }
 
             //////////////////////////////////////////////////////////////////////
@@ -336,7 +321,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
 
                 response_sender
                     .send(peer_ids)
-                    .expect("Receiver to be open.");
+                    .expect("receiver should not be closed");
             }
 
             Command::RpcRequest {
@@ -350,11 +335,14 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
             }
 
             Command::RpcResponse { response, channel } => {
-                self.swarm
+                if let Err(err) = self
+                    .swarm
                     .behaviour_mut()
                     .rpc
                     .send_response(channel, response)
-                    .expect("Connection to peer to be still open.");
+                {
+                    log::warn!(self.logger, "Failed to send RPC response: {:?}", err);
+                }
             }
 
             Command::PublishGossip {
@@ -364,7 +352,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
             } => {
                 let resp = self.swarm.behaviour_mut().gossipsub.publish(topic, msg);
 
-                response_sender.send(resp).expect("Receiver to be open.");
+                response_sender.send(resp).expect("receiver should not be closed");
             }
 
             Command::SubscribeGossip {
@@ -373,7 +361,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
             } => {
                 let resp = self.swarm.behaviour_mut().gossipsub.subscribe(&topic);
 
-                response_sender.send(resp).expect("Receiver to be open.");
+                response_sender.send(resp).expect("receiver should not be closed");
             }
         }
     }
