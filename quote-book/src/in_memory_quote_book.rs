@@ -49,7 +49,7 @@ impl QuoteBook for InMemoryQuoteBook {
             .iter()
             .any(|entry| entry.sci().key_image() == quote.sci().key_image())
         {
-            return Err(QuoteBookError::QuoteAlreadyExists.into());
+            return Err(QuoteBookError::QuoteAlreadyExists);
         }
 
         // Add quote. We assert it doesn't fail since we do not expect duplicate quotes
@@ -71,7 +71,7 @@ impl QuoteBook for InMemoryQuoteBook {
             }
         }
 
-        Err(QuoteBookError::QuoteNotFound.into())
+        Err(QuoteBookError::QuoteNotFound)
     }
 
     fn remove_quotes_by_key_image(
