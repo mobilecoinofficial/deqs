@@ -40,18 +40,10 @@ where
         // Check the ledger to see if the quote is stale before adding it to the
         // quotebook.
         if self._ledger.contains_key_image(&sci.key_image())? {
-            return Err(QuoteBookError::QuoteIsStale.into());
+            return Err(QuoteBookError::QuoteIsStale);
         }
         // Try adding to quote book.
-        let result = self.quote_book.add_sci(sci, timestamp);
-        match result {
-            Ok(quote) => {
-                return Ok(quote);
-            }
-            Err(err) => {
-                return Err(err);
-            }
-        }
+        self.quote_book.add_sci(sci, timestamp)
     }
 
     fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, QuoteBookError> {
