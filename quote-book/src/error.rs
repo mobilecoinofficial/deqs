@@ -5,7 +5,6 @@ use mc_ledger_db::Error as LedgerError;
 use mc_transaction_core::RevealedTxOutError;
 use mc_transaction_extra::SignedContingentInputError;
 use std::sync::PoisonError;
-use mc_ledger_db::{ Error as LedgerError};
 
 /// Type for common quote book errors
 #[derive(Debug, Display, Eq, PartialEq)]

@@ -5,9 +5,9 @@
 mod basic_types;
 mod error;
 mod in_memory_quote_book;
-mod synchronized_quote_book;
 mod quote;
 mod quote_book;
+mod synchronized_quote_book;
 
 pub use basic_types::{Pair, QuoteId};
 pub use error::Error;

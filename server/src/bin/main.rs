@@ -28,7 +28,7 @@ async fn main() {
         .expect("Could not compute num_blocks");
     assert_ne!(0, num_blocks);
 
-    let quote_book = InMemoryQuoteBook::new(ledger_db);
+    let quote_book = InMemoryQuoteBook::default();
 
     let mut server = Server::new(
         msg_bus_tx,
