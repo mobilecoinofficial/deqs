@@ -283,7 +283,6 @@ mod tests {
     use futures::{executor::block_on, StreamExt};
     use grpcio::{ChannelBuilder, EnvBuilder, Server, ServerBuilder};
     use mc_common::logger::test_with_logger;
-    use mc_ledger_db::test_utils::MockLedger;
     use mc_transaction_types::TokenId;
     use mc_util_grpc::{ConnectionUriGrpcioChannel, ConnectionUriGrpcioServer};
     use postage::broadcast;
@@ -333,8 +332,7 @@ mod tests {
             counter_token_id: TokenId::from(2),
         };
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let ledger_db = MockLedger::default();
-        let quote_book = InMemoryQuoteBook::new(ledger_db);
+        let quote_book = InMemoryQuoteBook::default();
         let (client_api, _server, _msg_bus_rx) =
             create_test_client_and_server(&quote_book, &logger);
 
@@ -382,8 +380,7 @@ mod tests {
             counter_token_id: TokenId::from(2),
         };
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let ledger_db = MockLedger::default();
-        let quote_book = InMemoryQuoteBook::new(ledger_db);
+        let quote_book = InMemoryQuoteBook::default();
         let (client_api, _server, _msg_bus_rx) =
             create_test_client_and_server(&quote_book, &logger);
 
@@ -409,8 +406,7 @@ mod tests {
             counter_token_id: TokenId::from(2),
         };
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let ledger_db = MockLedger::default();
-        let quote_book = InMemoryQuoteBook::new(ledger_db);
+        let quote_book = InMemoryQuoteBook::default();
         let (client_api, _server, _msg_bus_rx) =
             create_test_client_and_server(&quote_book, &logger);
 
@@ -445,8 +441,7 @@ mod tests {
     #[test_with_logger]
     fn get_quotes_filter_correctly(logger: Logger) {
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let ledger_db = MockLedger::default();
-        let quote_book = InMemoryQuoteBook::new(ledger_db);
+        let quote_book = InMemoryQuoteBook::default();
         let (client_api, _server, _msg_bus_rx) =
             create_test_client_and_server(&quote_book, &logger);
 
@@ -532,8 +527,7 @@ mod tests {
             counter_token_id: TokenId::from(2),
         };
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let ledger_db = MockLedger::default();
-        let quote_book = InMemoryQuoteBook::new(ledger_db);
+        let quote_book = InMemoryQuoteBook::default();
         let (client_api, _server, _msg_bus_rx) =
             create_test_client_and_server(&quote_book, &logger);
 
@@ -576,8 +570,7 @@ mod tests {
             counter_token_id: TokenId::from(2),
         };
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let ledger_db = MockLedger::default();
-        let quote_book = InMemoryQuoteBook::new(ledger_db);
+        let quote_book = InMemoryQuoteBook::default();
         let (client_api, _server, _msg_bus_rx) =
             create_test_client_and_server(&quote_book, &logger);
 

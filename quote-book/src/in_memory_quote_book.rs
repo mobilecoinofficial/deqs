@@ -3,7 +3,6 @@
 use crate::{Error as QuoteBookError, Pair, Quote, QuoteBook, QuoteId};
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
-use mc_ledger_db::Ledger;
 use mc_transaction_core::validation::validate_tombstone;
 use mc_transaction_extra::SignedContingentInput;
 use std::{
@@ -14,25 +13,21 @@ use std::{
 
 /// A naive in-memory quote book implementation
 #[derive(Clone)]
-pub struct InMemoryQuoteBook<L: Ledger + Clone + 'static> {
+pub struct InMemoryQuoteBook {
     /// List of all SCIs in the quote book, grouped by trading pair.
     /// Naturally sorted by the time they got added to the book.
     scis: Arc<RwLock<HashMap<Pair, BTreeSet<Quote>>>>,
-
-    _ledger: L,
 }
 
-impl<L: Ledger + Clone + Sync + 'static> InMemoryQuoteBook<L> {
-    /// Create a new InMemoryQuoteBook
-    pub fn new(_ledger: L) -> Self {
+impl Default for InMemoryQuoteBook {
+    fn default() -> Self {
         Self {
             scis: Arc::new(RwLock::new(HashMap::new())),
-            _ledger,
         }
     }
 }
 
-impl<L: Ledger + Clone + Sync + 'static> QuoteBook for InMemoryQuoteBook<L> {
+impl QuoteBook for InMemoryQuoteBook {
     fn add_sci(
         &self,
         sci: SignedContingentInput,

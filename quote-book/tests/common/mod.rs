@@ -192,7 +192,7 @@ pub fn add_quote_already_in_ledger_should_fail(
 
     //Because the key image is already in the ledger, adding this sci should fail
     assert_eq!(
-        quote_book.add_sci(sci, None).unwrap_err().into(),
+        quote_book.add_sci(sci, None).unwrap_err(),
         Error::QuoteIsStale
     );
 
