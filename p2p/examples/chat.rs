@@ -2,6 +2,22 @@
 
 //! A simple p2p chat application that demonstrates the basic usage of the
 //! deqs-p2p crate.
+//!
+//! To run it, start the first node with:
+//! `RUST_LOG=chat cargo run --example chat -- \
+//!   --seed 1 --listen-addr /ip4/127.0.0.1/tcp/5000`
+//!
+//! Using --seed 1 will generate a deterministic peer ID. Start more nodes with:
+//! `RUST_LOG=chat ./target/debug/examples/chat \
+//!   --bootstrap-peer
+//! /ip4/127.0.0.1/tcp/5000/p2p/
+//! 12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X`
+//!
+//! After seeing ConnectionEstablished in the logs you can start chatting by
+//! typing `gossip <text>`. This will send a broadcast message over the gossip
+//! network and you should see it on other nodes. To send a direct message to a
+//! node via the RPC mechanism, type `direct <peer_id> <text>`. For example:
+//! `direct 12D3KooWPjceQrSwdWXPyLLeABRXmuqt69Rg3sBYbU1Nft9HyQ6X hello`
 
 use clap::Parser;
 use deqs_p2p::{Network, NetworkBuilder, NetworkEvent};
@@ -57,8 +73,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create the network.
     // Note that the Behaviour<> object is generic of two types: REQ and RESP.
     // These types represent the request and response types for RPC calls.
-    // For this example, we use the String type for both, so that clients can send each other text.
-    // In a real application, you would define your own request and response types.
+    // For this example, we use the String type for both, so that clients can send
+    // each other text. In a real application, you would define your own request
+    // and response types.
     let behaviour = deqs_p2p::Behaviour::<String, String>::new(&local_key)?;
     let mut network_builder = NetworkBuilder::new(local_key, behaviour, logger.clone())?;
     if let Some(ref listen_addr) = config.listen_addr {

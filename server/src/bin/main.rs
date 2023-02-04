@@ -146,7 +146,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         loop {
             let event = events.recv().await.unwrap();
             match event {
-                NetworkEvent::RpcRequest { request, channel } => {
+                NetworkEvent::RpcRequest {
+                    request, channel, ..
+                } => {
                     log::crit!(logger3, "Got RPC request: {:?} from {:?}", request, channel);
                     client
                         .rpc_response(AppRpc::Var1, channel)
