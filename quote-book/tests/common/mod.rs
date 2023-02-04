@@ -7,7 +7,7 @@
 
 use std::collections::HashSet;
 
-use deqs_quote_book::{Error, Pair, QuoteBook, QuoteId};
+use deqs_quote_book::{Error, Pair, Quote, QuoteBook, QuoteId};
 use mc_account_keys::AccountKey;
 use mc_crypto_ring_signature::Error as RingSignatureError;
 use mc_crypto_ring_signature_signer::NoKeysRingSigner;
@@ -345,4 +345,23 @@ pub fn get_quote_ids_works(quote_book: &impl QuoteBook) {
 
     let quote_ids = quote_book.get_quote_ids(Some(&pair3)).unwrap();
     assert_eq!(quote_ids, vec![]);
+}
+
+/// Test that get_quote_by_id works
+pub fn get_quote_by_id_works(quote_book: &impl QuoteBook) {
+    let pair1 = pair();
+    let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+
+    let sci1 = create_sci(&pair1, 100, 1000, &mut rng);
+    let quote1 = quote_book.add_sci(sci1, None).unwrap();
+
+    let sci2 = create_sci(&pair1, 100, 1000, &mut rng);
+    let quote2 = Quote::new(sci2, None).unwrap();
+
+    assert_eq!(
+        quote_book.get_quote_by_id(&quote1.id()).unwrap(),
+        Some(quote1.clone())
+    );
+
+    assert_eq!(quote_book.get_quote_by_id(&quote2.id()).unwrap(), None,);
 }

@@ -160,6 +160,18 @@ impl QuoteBook for InMemoryQuoteBook {
 
         Ok(results)
     }
+
+    fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, QuoteBookError> {
+        let scis = self.scis.read()?;
+
+        for entries in scis.values() {
+            if let Some(element) = entries.iter().find(|entry| entry.id() == id).cloned() {
+                return Ok(Some(element));
+            }
+        }
+
+        Ok(None)
+    }
 }
 
 fn range_overlaps(x: &impl RangeBounds<u64>, y: &impl RangeBounds<u64>) -> bool {

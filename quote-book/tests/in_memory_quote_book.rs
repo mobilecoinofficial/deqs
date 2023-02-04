@@ -27,3 +27,9 @@ fn get_quote_ids_works() {
     let quote_book = InMemoryQuoteBook::default();
     common::get_quote_ids_works(&quote_book);
 }
+
+#[test]
+fn get_quote_by_id_works() {
+    let quote_book = InMemoryQuoteBook::default();
+    common::get_quote_by_id_works(&quote_book);
+}

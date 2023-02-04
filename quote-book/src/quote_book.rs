@@ -50,4 +50,7 @@ pub trait QuoteBook: Clone + Send + Sync + 'static {
 
     /// Return all known quote ids, optionally filtering for a specific pair.
     fn get_quote_ids(&self, pair: Option<&Pair>) -> Result<Vec<QuoteId>, Error>;
+
+    /// Get a quote by its id
+    fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, Error>;
 }
