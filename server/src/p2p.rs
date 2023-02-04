@@ -7,12 +7,19 @@ use deqs_p2p::{
 use deqs_quote_book::QuoteBook;
 use futures::executor::block_on;
 use mc_common::logger::Logger;
+use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc::UnboundedReceiver;
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum Request {}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub enum Response {}
 
 pub struct P2P<QB: QuoteBook> {
     _quote_book: QB,
     _logger: Logger,
-    _client: Client<String, String>,
+    _client: Client<Request, Response>,
     event_loop_handle: NetworkEventLoopHandle,
 }
 
@@ -24,10 +31,10 @@ impl<QB: QuoteBook> P2P<QB> {
         external_addr: Option<Multiaddr>,
         keypair: Option<Keypair>,
         logger: Logger,
-    ) -> Result<(Self, UnboundedReceiver<NetworkEvent<String, String>>), deqs_p2p::Error> {
+    ) -> Result<(Self, UnboundedReceiver<NetworkEvent<Request, Response>>), deqs_p2p::Error> {
         let keypair = keypair.unwrap_or_else(Keypair::generate_ed25519);
 
-        let behaviour = Behaviour::<String, String>::new(&keypair)?;
+        let behaviour = Behaviour::<Request, Response>::new(&keypair)?;
         let mut network_builder =
             NetworkBuilder::new(keypair, behaviour, bootstrap_peers, logger.clone())?;
         if let Some(ref listen_addr) = listen_addr {
