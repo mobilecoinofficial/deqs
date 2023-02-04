@@ -17,7 +17,7 @@ pub struct Pair {
 }
 
 /// A unique identifier for a single quote
-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct QuoteId(pub [u8; 32]);
 
 impl From<&SignedContingentInput> for QuoteId {

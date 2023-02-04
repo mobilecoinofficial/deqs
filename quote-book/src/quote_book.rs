@@ -47,4 +47,7 @@ pub trait QuoteBook: Clone + Send + Sync + 'static {
         base_token_quantity: impl RangeBounds<u64>,
         limit: usize,
     ) -> Result<Vec<Quote>, Error>;
+
+    /// Return all known quote ids, optionally filtering for a specific pair.
+    fn get_quote_ids(&self, pair: Option<&Pair>) -> Result<Vec<QuoteId>, Error>;
 }

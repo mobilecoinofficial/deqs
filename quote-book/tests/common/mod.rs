@@ -5,7 +5,9 @@
 // this file are unused if they are not called by each and every test file :/
 #![allow(dead_code)]
 
-use deqs_quote_book::{Error, Pair, QuoteBook};
+use std::collections::HashSet;
+
+use deqs_quote_book::{Error, Pair, QuoteBook, QuoteId};
 use mc_account_keys::AccountKey;
 use mc_crypto_ring_signature::Error as RingSignatureError;
 use mc_crypto_ring_signature_signer::NoKeysRingSigner;
@@ -297,4 +299,50 @@ pub fn get_quotes_filtering_works(quote_book: &impl QuoteBook) {
             p2_100_for_1000.clone(), // rate is 0.1
         ]
     );
+}
+
+/// Test that get_quote_ids works.
+pub fn get_quote_ids_works(quote_book: &impl QuoteBook) {
+    let pair1 = pair();
+    let pair2 = Pair {
+        base_token_id: TokenId::from(10),
+        counter_token_id: TokenId::from(2),
+    };
+    let pair3 = Pair {
+        base_token_id: TokenId::from(20),
+        counter_token_id: TokenId::from(2),
+    };
+    let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+
+    let sci1 = create_sci(&pair1, 100, 1000, &mut rng);
+    let quote1 = quote_book.add_sci(sci1, None).unwrap();
+
+    let sci2 = create_sci(&pair1, 100, 1000, &mut rng);
+    let quote2 = quote_book.add_sci(sci2, None).unwrap();
+
+    let sci3 = create_sci(&pair2, 100, 1000, &mut rng);
+    let quote3 = quote_book.add_sci(sci3, None).unwrap();
+
+    // Without filtering, we should get all quote ids.
+    let quote_ids = quote_book.get_quote_ids(None).unwrap();
+    assert_eq!(
+        HashSet::from_iter(vec![quote1.id(), quote2.id(), quote3.id()]),
+        quote_ids.iter().collect::<HashSet<&QuoteId>>(),
+    );
+
+    // Filter to a specific pair
+    let quote_ids = quote_book.get_quote_ids(Some(&pair1)).unwrap();
+    assert_eq!(
+        HashSet::from_iter(vec![quote1.id(), quote2.id()]),
+        quote_ids.iter().collect::<HashSet<&QuoteId>>(),
+    );
+
+    let quote_ids = quote_book.get_quote_ids(Some(&pair2)).unwrap();
+    assert_eq!(
+        HashSet::from_iter(vec![quote3.id(), quote3.id()]),
+        quote_ids.iter().collect::<HashSet<&QuoteId>>(),
+    );
+
+    let quote_ids = quote_book.get_quote_ids(Some(&pair3)).unwrap();
+    assert_eq!(quote_ids, vec![]);
 }
