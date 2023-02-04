@@ -86,10 +86,10 @@ impl<OB: QuoteBook> Server<OB> {
 
         let server_builder = grpcio::ServerBuilder::new(grpc_env)
             .register_service(health_service)
-            .register_service(client_service)
-            .bind_using_uri(&self.client_listen_uri, self.logger.clone());
+            .register_service(client_service);
 
-        let mut server = server_builder.build()?;
+        let mut server =
+            server_builder.build_using_uri(&self.client_listen_uri, self.logger.clone())?;
         server.start();
 
         log::info!(

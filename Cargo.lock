@@ -729,7 +729,6 @@ dependencies = [
  "mc-transaction-types",
  "rand 0.8.5",
  "rand_core 0.6.4",
- "serde",
 ]
 
 [[package]]
@@ -750,7 +749,6 @@ dependencies = [
  "mc-transaction-types",
  "mc-util-grpc",
  "mc-util-metrics",
- "mc-util-serial",
  "mc-util-uri",
  "postage",
  "rand 0.8.5",
