@@ -24,6 +24,7 @@ mc-transaction-extra = { path = "../mobilecoin/transaction/extra" }
 mc-util-grpc = { path = "../mobilecoin/util/grpc" }
 mc-util-metrics  = { path = "../mobilecoin/util/metrics" }
 mc-util-uri = { path = "../mobilecoin/util/uri" }
+mc-util-serial = { path = "../mobilecoin/util/serial" }
 
 clap = { version = "4.0", features = ["derive", "env"] }
 displaydoc = { version = "0.2", default-features = false }
