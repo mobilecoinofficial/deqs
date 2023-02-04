@@ -1,25 +1,43 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use clap::Parser;
+use deqs_p2p::libp2p::identity::Keypair;
 use deqs_quote_book::{InMemoryQuoteBook, SynchronizedQuoteBook};
-use deqs_server::{Msg, Server, ServerConfig};
-use mc_common::logger::o;
+use deqs_server::{Msg, Server, ServerConfig, P2P};
+use mc_common::logger::{log, o};
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
 use postage::{broadcast, prelude::Stream};
 use std::sync::Arc;
+use tokio::select;
 
 /// Maximum number of messages that can be queued in the message bus.
 const MSG_BUS_QUEUE_SIZE: usize = 1000;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _sentry_guard = mc_common::sentry::init();
     let config = ServerConfig::parse();
     let (logger, _global_logger_guard) = mc_common::logger::create_app_logger(o!());
     mc_common::setup_panic_handler();
 
     let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
+
+    let (_p2p, mut p2p_events) = P2P::new(
+        quote_book.clone(),
+        config.p2p_bootstrap_peers.clone(),
+        config.p2p_listen.clone(),
+        config.p2p_external_address.clone(),
+        config
+            .p2p_keypair_path
+            .as_ref()
+            .map(|path| -> Result<Keypair, Box<dyn std::error::Error>> {
+                let bytes = std::fs::read(path)?;
+                Ok(Keypair::from_protobuf_encoding(&bytes)?)
+            })
+            .transpose()?,
+        logger.clone(),
+    )?;
 
     // Open the ledger db
     let ledger_db = LedgerDB::open(&config.ledger_db).expect("Could not open ledger db");
@@ -49,15 +67,21 @@ async fn main() {
             "DEQS".into(),
             id,
             Some(get_config_json),
-            logger,
+            logger.clone(),
         )
         .expect("Failed starting admin server")
     });
 
-    // Keep the server alive by just reading messages from the message bus.
-    // This allows us to ensure we always have at least 1 receiver on the message
-    // bus, which will prevent sends from failing.
     loop {
-        let _ = msg_bus_rx.recv().await;
+        select! {
+            _ = msg_bus_rx.recv() => {
+                // This allows us to ensure we always have at least 1 receiver on the message
+                // bus, which will prevent sends from failing.
+            }
+
+            event = p2p_events.recv() => {
+                log::debug!(logger, "p2p event: {:?}", event);
+            }
+        }
     }
 }

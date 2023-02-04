@@ -14,7 +14,7 @@ use mc_transaction_types::TokenId;
 use mc_util_grpc::ConnectionUriGrpcioChannel;
 use rand::{rngs::StdRng, thread_rng, RngCore, SeedableRng};
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-use std::sync::Arc;
+use std::{path::PathBuf, sync::Arc};
 
 #[derive(Subcommand)]
 pub enum Command {
@@ -53,6 +53,13 @@ pub enum Command {
             value_parser = mc_util_parse::parse_hex::<[u8; 32]>
         )]
         quote_id: [u8; 32],
+    },
+
+    /// Generate a p2p keypair and write it to a file
+    GenP2pKeypair {
+        /// Path to write the keypair to.
+        #[clap(long)]
+        out: PathBuf,
     },
 }
 
@@ -167,6 +174,14 @@ fn main() {
             req.set_quote_id((&QuoteId(quote_id)).into());
             let resp = client_api.remove_quote(&req).expect("remove quote failed");
             println!("{:#?}", resp);
+        }
+
+        Command::GenP2pKeypair { out } => {
+            let keypair = deqs_p2p::libp2p::identity::Keypair::generate_ed25519();
+            let bytes = keypair
+                .to_protobuf_encoding()
+                .expect("failed encoding to protobuf");
+            std::fs::write(out, bytes).expect("failed to write keypair");
         }
     }
 }
