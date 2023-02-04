@@ -29,7 +29,8 @@ mc-util-serial = { path = "../mobilecoin/util/serial" }
 clap = { version = "4.0", features = ["derive", "env"] }
 displaydoc = { version = "0.2", default-features = false }
 futures = "0.3"
-grpcio = "0.11.0"
+grpcio = "0.12.0"
+lazy_static = "1.4"
 postage = "0.5"
 rayon = "1.6"
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }

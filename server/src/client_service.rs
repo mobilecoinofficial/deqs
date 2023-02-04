@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::Msg;
+use crate::{Msg, SVC_COUNTERS};
 use deqs_api::{
     deqs::{
         GetQuotesRequest, GetQuotesResponse, LiveUpdate, LiveUpdatesRequest, QuoteStatusCode,
@@ -16,7 +16,6 @@ use grpcio::{
 use mc_common::logger::{log, scoped_global_logger, Logger};
 use mc_transaction_extra::SignedContingentInput;
 use mc_util_grpc::{rpc_internal_error, rpc_invalid_arg_error, rpc_logger, send_result};
-use mc_util_metrics::SVC_COUNTERS;
 use postage::{
     broadcast::{Receiver, Sender},
     prelude::Stream,
