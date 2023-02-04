@@ -23,6 +23,7 @@ pub struct NetworkBuilder<REQ: RpcRequest, RESP: RpcResponse> {
     listen_address: Multiaddr,
     external_addresses: Vec<Multiaddr>,
     behaviour: Behaviour<REQ, RESP>,
+    bootstrap_peers: Vec<Multiaddr>,
     logger: Logger,
 }
 
@@ -30,6 +31,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkBuilder<REQ, RESP> {
     pub fn new(
         keypair: Keypair,
         behaviour: Behaviour<REQ, RESP>,
+        bootstrap_peers: Vec<Multiaddr>,
         logger: Logger,
     ) -> Result<Self, Error> {
         Ok(Self {
@@ -38,6 +40,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkBuilder<REQ, RESP> {
             listen_address: Self::default_listen_address()?,
             external_addresses: vec![],
             behaviour,
+            bootstrap_peers,
             logger,
         })
     }
@@ -108,10 +111,15 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkBuilder<REQ, RESP> {
 
         let client = Client::new(command_sender);
 
-        let event_loop = NetworkEventLoop::new(command_receiver, event_sender, swarm, self.logger);
-
+        let event_loop_handle = NetworkEventLoop::start(
+            command_receiver,
+            event_sender,
+            swarm,
+            self.bootstrap_peers.clone(),
+            self.logger,
+        );
         Ok(Network {
-            event_loop,
+            event_loop_handle,
             client,
             events: event_receiver,
         })

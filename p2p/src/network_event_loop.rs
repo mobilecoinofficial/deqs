@@ -33,6 +33,32 @@ const BOOTSTRAP_INTERVAL: Duration = Duration::from_secs(10);
 
 type RpcRequestsMap<RESP> = HashMap<RequestId, oneshot::Sender<Result<RESP, ClientError>>>;
 
+/// A handle for interacting with the event loop.
+/// Used for signalling it to shut down.
+pub struct NetworkEventLoopHandle {
+    /// Shutdown sender, used to signal the event loop to shutdown.
+    shutdown_tx: mpsc::UnboundedSender<()>,
+
+    /// Shutdown acknowledged receiver.
+    shutdown_ack_rx: mpsc::UnboundedReceiver<()>,
+
+    /// Logger.
+    logger: Logger,
+}
+
+impl NetworkEventLoopHandle {
+    /// Request the event loop to shut down.
+    pub async fn shutdown(&mut self) {
+        if self.shutdown_tx.send(()).is_err() {
+            log::warn!(&self.logger, "shutdown already requested");
+            return;
+        }
+
+        // Wait for the event loop to drop the ack sender.
+        let _ = self.shutdown_ack_rx.recv().await;
+    }
+}
+
 /// A p2p network event loop - this is where the action is. The event loop
 /// listens for client commands and events coming from the `Behaviour`, and
 /// performs actions based on them.
@@ -49,11 +75,12 @@ pub struct NetworkEventLoop<REQ: RpcRequest, RESP: RpcResponse> {
     /// The KAD key we use for peer discovery.
     peer_discovery_key: Key,
 
-    /// Shutdown sender, used to signal the event loop to shutdown.
-    shutdown_tx: mpsc::UnboundedSender<()>,
-
     /// Shutdown receiver, used to signal the event loop to shutdown.
     shutdown_rx: mpsc::UnboundedReceiver<()>,
+
+    /// Shutdown acknowledgement sender, used to signal the caller that the the
+    /// event loop terminated (when it goes out of scope).
+    shutdown_ack_tx: Option<mpsc::UnboundedSender<()>>,
 
     /// Logger.
     logger: Logger,
@@ -64,40 +91,47 @@ pub struct NetworkEventLoop<REQ: RpcRequest, RESP: RpcResponse> {
 }
 
 impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
-    pub fn new(
+    pub fn start(
         command_receiver: mpsc::UnboundedReceiver<Command<REQ, RESP>>,
         event_sender: mpsc::UnboundedSender<NetworkEvent<REQ, RESP>>,
         swarm: Swarm<Behaviour<REQ, RESP>>,
+        bootstrap_peers: Vec<Multiaddr>,
         logger: Logger,
-    ) -> Self {
+    ) -> NetworkEventLoopHandle {
         let (shutdown_tx, shutdown_rx) = mpsc::unbounded_channel();
+        let (shutdown_ack_tx, shutdown_ack_rx) = mpsc::unbounded_channel();
 
-        Self {
+        let event_loop = Self {
             command_receiver,
             event_sender,
             swarm,
             peer_discovery_key: Key::new(&KAD_PEER_KEY),
-            shutdown_tx,
             shutdown_rx,
-            logger,
+            shutdown_ack_tx: Some(shutdown_ack_tx),
+            logger: logger.clone(),
             pending_rpc_requests: HashMap::new(),
-        }
-    }
+        };
 
-    /// Request the event loop to shut down.
-    pub fn shutdown(&mut self) {
-        if self.shutdown_tx.send(()).is_err() {
-            log::warn!(&self.logger, "shutdown already requested");
-        }
+        tokio::spawn(async move {
+            event_loop
+                .run(bootstrap_peers)
+                .await
+                .expect("network should run")
+        });
 
-        // TODO: We should probably wait for the event loop to actually shut
-        // down.
+        NetworkEventLoopHandle {
+            shutdown_tx,
+            shutdown_ack_rx,
+            logger,
+        }
     }
 
     /// Run the event loop. This must be called in order for the network to do
     /// anything.
-    pub async fn run(mut self, bootstrap_peers: &[Multiaddr]) -> Result<(), Error> {
-        self.bootstrap(bootstrap_peers)?;
+    pub async fn run(mut self, bootstrap_peers: Vec<Multiaddr>) -> Result<(), Error> {
+        let shutdown_ack_tx = self.shutdown_ack_tx.take();
+
+        self.bootstrap(&bootstrap_peers)?;
 
         let mut interval = interval(BOOTSTRAP_INTERVAL);
 
@@ -109,7 +143,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
 
                 _ = interval.tick() => {
                     log::trace!(&self.logger, "periodic interval!");
-                    if let Err(err) = self.bootstrap(bootstrap_peers) {
+                    if let Err(err) = self.bootstrap(&bootstrap_peers) {
                         log::warn!(&self.logger, "bootstrap failed: {:?}", err);
                     }
                 }
@@ -121,12 +155,9 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
             }
         }
 
-        Ok(())
-    }
+        drop(shutdown_ack_tx);
 
-    /// Get our peer id.
-    pub fn peer_id(&self) -> &PeerId {
-        self.swarm.local_peer_id()
+        Ok(())
     }
 
     /// Handle an event from the libp2p library

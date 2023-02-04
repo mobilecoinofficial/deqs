@@ -77,24 +77,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // each other text. In a real application, you would define your own request
     // and response types.
     let behaviour = deqs_p2p::Behaviour::<String, String>::new(&local_key)?;
-    let mut network_builder = NetworkBuilder::new(local_key, behaviour, logger.clone())?;
+    let mut network_builder = NetworkBuilder::new(
+        local_key,
+        behaviour,
+        config.bootstrap_peers.clone(),
+        logger.clone(),
+    )?;
     if let Some(ref listen_addr) = config.listen_addr {
         network_builder = network_builder.listen_address(listen_addr.clone());
     }
     let Network {
-        event_loop,
+        mut event_loop_handle,
         mut events,
         mut client,
     } = network_builder.build()?;
-
-    // Spawn a tokio task to run the network event loop inside.
-    let p2p_bootstrap_peers = config.bootstrap_peers.clone();
-    tokio::spawn(async move {
-        event_loop
-            .run(&p2p_bootstrap_peers)
-            .await
-            .expect("network should run")
-    });
 
     // Subscribe to a gossip topic for receiving broadcast messages.
     let topic = IdentTopic::new("chat-gossip");
@@ -153,6 +149,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                                 log::info!(logger, "Send direct via RPC: {:?}", client.rpc_request(peer_id, message.to_string()).await);
                             }
 
+                            "exit" => {
+                                break;
+                            }
+
                             other => {
                                 log::error!(logger, "Unknown command: {}", other);
                             }
@@ -172,6 +172,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         }
     }
+
+    // Gracefully shutdown the network.
+    event_loop_handle.shutdown().await;
 
     Ok(())
 }

@@ -3,7 +3,7 @@
 use libp2p::{gossipsub::GossipsubMessage, request_response::ResponseChannel, Multiaddr, PeerId};
 use tokio::sync::mpsc;
 
-use crate::{client::Client, network_event_loop::NetworkEventLoop, RpcRequest, RpcResponse};
+use crate::{client::Client, network_event_loop::NetworkEventLoopHandle, RpcRequest, RpcResponse};
 
 /// An asynchronous event that can be received from the network.
 #[derive(Debug)]
@@ -27,8 +27,8 @@ pub enum NetworkEvent<REQ: RpcRequest, RESP: RpcResponse> {
 
 /// A collection of objects that together form an interface to a p2p network.
 pub struct Network<REQ: RpcRequest, RESP: RpcResponse> {
-    /// The event loop that processes network and client events.
-    pub event_loop: NetworkEventLoop<REQ, RESP>,
+    /// The event loop handle that allows us to stop it.
+    pub event_loop_handle: NetworkEventLoopHandle,
 
     /// A client for interacting with the network.
     pub client: Client<REQ, RESP>,
