@@ -8,7 +8,7 @@ use libp2p::{
         IdentTopic, MessageId,
     },
     request_response::{OutboundFailure, ResponseChannel},
-    PeerId,
+    Multiaddr, PeerId,
 };
 use tokio::sync::{mpsc, oneshot};
 
@@ -19,6 +19,11 @@ pub enum Command<REQ: RpcRequest, RESP: RpcResponse> {
     /// Instruct the network to provide a list of all peers it is aware of
     PeerList {
         response_sender: oneshot::Sender<Vec<PeerId>>,
+    },
+
+    /// Instruct the network to provide a list of addresses it is listening on
+    ListenAddrList {
+        response_sender: oneshot::Sender<Vec<Multiaddr>>,
     },
 
     /// Send a gossip message
@@ -99,6 +104,8 @@ impl From<PublishError> for Error {
     }
 }
 
+impl std::error::Error for Error {}
+
 /// Client interface to the p2p network
 #[derive(Clone)]
 pub struct Client<REQ: RpcRequest, RESP: RpcResponse> {
@@ -168,6 +175,16 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Client<REQ, RESP> {
         let (response_sender, response_receiver) = oneshot::channel();
 
         self.sender.send(Command::PeerList { response_sender })?;
+
+        Ok(response_receiver.await?)
+    }
+
+    //// Get list of listening addresses.
+    pub async fn listen_addrs(&mut self) -> Result<Vec<Multiaddr>, Error> {
+        let (response_sender, response_receiver) = oneshot::channel();
+
+        self.sender
+            .send(Command::ListenAddrList { response_sender })?;
 
         Ok(response_receiver.await?)
     }

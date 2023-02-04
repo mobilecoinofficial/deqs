@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use libp2p::{gossipsub::GossipsubMessage, request_response::ResponseChannel, PeerId};
+use libp2p::{gossipsub::GossipsubMessage, request_response::ResponseChannel, Multiaddr, PeerId};
 use tokio::sync::mpsc;
 
 use crate::{client::Client, network_event_loop::NetworkEventLoop, RpcRequest, RpcResponse};
@@ -10,12 +10,16 @@ use crate::{client::Client, network_event_loop::NetworkEventLoop, RpcRequest, Rp
 pub enum NetworkEvent<REQ: RpcRequest, RESP: RpcResponse> {
     /// Incoming RPC request
     RpcRequest {
+        peer: PeerId,
         request: REQ,
         channel: ResponseChannel<RESP>,
     },
 
     /// Connection established with a peer.
     ConnectionEstablished { peer_id: PeerId },
+
+    /// New listener address.
+    NewListenAddr { address: Multiaddr },
 
     /// Gossip message received.
     GossipMessage { message: GossipsubMessage },

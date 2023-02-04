@@ -139,7 +139,11 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
             // Connection-related events
             ///////////////////////////////////////////////////////////////////
             SwarmEvent::NewListenAddr { address, .. } => {
-                log::info!(&self.logger, "Listening on {:?}", address)
+                log::info!(&self.logger, "Listening on {:?}", address);
+
+                self.event_sender
+                    .send(NetworkEvent::NewListenAddr { address })
+                    .expect("event queue should not be closed");
             }
 
             SwarmEvent::ConnectionEstablished {
@@ -167,8 +171,8 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
             // RPC-related events
             ///////////////////////////////////////////////////////////////////
             SwarmEvent::Behaviour(OutEvent::RequestResponse(RequestResponseEvent::Message {
+                peer,
                 message,
-                ..
             })) => match message {
                 RequestResponseMessage::Request {
                     request, channel, ..
@@ -176,7 +180,11 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
                     log::debug!(self.logger, "Received RPC request: {:?}", request);
 
                     self.event_sender
-                        .send(NetworkEvent::RpcRequest { request, channel })
+                        .send(NetworkEvent::RpcRequest {
+                            peer,
+                            request,
+                            channel,
+                        })
                         .expect("event queue should not be closed");
                 }
 
@@ -317,10 +325,18 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
                     .gossipsub
                     .all_peers()
                     .map(|peer| *peer.0)
-                    .collect::<Vec<_>>();
+                    .collect();
 
                 response_sender
                     .send(peer_ids)
+                    .expect("receiver should not be closed");
+            }
+
+            Command::ListenAddrList { response_sender } => {
+                let listen_addrs = self.swarm.listeners().cloned().collect();
+
+                response_sender
+                    .send(listen_addrs)
                     .expect("receiver should not be closed");
             }
 
@@ -352,7 +368,9 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
             } => {
                 let resp = self.swarm.behaviour_mut().gossipsub.publish(topic, msg);
 
-                response_sender.send(resp).expect("receiver should not be closed");
+                response_sender
+                    .send(resp)
+                    .expect("receiver should not be closed");
             }
 
             Command::SubscribeGossip {
@@ -361,7 +379,9 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
             } => {
                 let resp = self.swarm.behaviour_mut().gossipsub.subscribe(&topic);
 
-                response_sender.send(resp).expect("receiver should not be closed");
+                response_sender
+                    .send(resp)
+                    .expect("receiver should not be closed");
             }
         }
     }
