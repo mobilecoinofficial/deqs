@@ -20,6 +20,9 @@ pub enum Error {
 
     /// P2P: {0}
     P2P(deqs_p2p::Error),
+
+    /// Quote book: {0}
+    QuoteBook(deqs_quote_book::Error),
 }
 
 impl From<grpcio::Error> for Error {
@@ -49,6 +52,12 @@ impl From<deqs_p2p::ClientError> for Error {
 impl From<deqs_p2p::Error> for Error {
     fn from(src: deqs_p2p::Error) -> Self {
         Self::P2P(src)
+    }
+}
+
+impl From<deqs_quote_book::Error> for Error {
+    fn from(src: deqs_quote_book::Error) -> Self {
+        Self::QuoteBook(src)
     }
 }
 

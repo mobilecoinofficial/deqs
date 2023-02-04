@@ -22,8 +22,8 @@ pub enum Request {}
 pub enum Response {}
 
 pub struct P2P<QB: QuoteBook> {
-    _quote_book: QB,
-    _logger: Logger,
+    quote_book: QB,
+    logger: Logger,
     client: Client<Request, Response>,
     event_loop_handle: NetworkEventLoopHandle,
     msg_bus_topic: IdentTopic,
@@ -61,8 +61,8 @@ impl<QB: QuoteBook> P2P<QB> {
 
         Ok((
             Self {
-                _quote_book: quote_book,
-                _logger: logger,
+                quote_book,
+                logger,
                 client,
                 event_loop_handle,
                 msg_bus_topic,
@@ -85,7 +85,7 @@ impl<QB: QuoteBook> P2P<QB> {
             self.handle_msg_bus_message(message.data).await?;
         } else {
             log::warn!(
-                self._logger,
+                self.logger,
                 "Received gossip message with unknown topic: {:?}",
                 message.topic
             );
@@ -94,9 +94,25 @@ impl<QB: QuoteBook> P2P<QB> {
     }
 
     async fn handle_msg_bus_message(&mut self, bytes: Vec<u8>) -> Result<(), Error> {
-        let quote: Quote = mc_util_serial::deserialize(&bytes)?;
-        panic!("{:?}", quote);
-        //Ok(())
+        let remote_quote: Quote = mc_util_serial::deserialize(&bytes)?;
+        let local_quote = self
+            .quote_book
+            .add_sci(remote_quote.sci().clone(), Some(remote_quote.timestamp()))
+            .map_err(|err| err.into())?;
+
+        // Sanity
+        if remote_quote != local_quote {
+            log::warn!(self.logger, "Received quote via gossip that did not match local quote generated from the quote SCI: {:?} vs {:?}", remote_quote, local_quote);
+            return Ok(());
+        }
+
+        log::info!(
+            self.logger,
+            "Added quote via gossip: {:?}",
+            local_quote.id(),
+        );
+
+        Ok(())
     }
 }
 
