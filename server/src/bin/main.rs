@@ -78,8 +78,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             msg = msg_bus_rx.recv() => {
                 match msg {
                     Some(Msg::SciQuoteAdded(quote)) => {
-                        if let Err(err) = p2p.broadcast_sci_quote_added(&quote).await {
+                        if let Err(err) = p2p.broadcast_sci_quote_added(quote).await {
                             log::info!(logger, "broadcast_sci_quote_added failed: {:?}", err)
+                        }
+                    }
+
+                    Some(Msg::SciQuoteRemoved(quote_id)) => {
+                        if let Err(err) = p2p.broadcast_sci_quote_removed(quote_id).await {
+                            log::info!(logger, "broadcast_sci_quote_removed failed: {:?}", err)
                         }
                     }
 

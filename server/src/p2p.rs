@@ -9,7 +9,7 @@ use deqs_p2p::{
     },
     Behaviour, Client, Network, NetworkBuilder, NetworkEvent, NetworkEventLoopHandle,
 };
-use deqs_quote_book::{Quote, QuoteBook};
+use deqs_quote_book::{Quote, QuoteBook, QuoteId};
 use futures::executor::block_on;
 use mc_common::logger::{log, Logger};
 use serde::{Deserialize, Serialize};
@@ -20,6 +20,12 @@ pub enum Request {}
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum Response {}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub enum GossipMsgBusData {
+    SciQuoteAdded(Quote),
+    SciQuoteRemoved(QuoteId),
+}
 
 pub struct P2P<QB: QuoteBook> {
     quote_book: QB,
@@ -71,8 +77,17 @@ impl<QB: QuoteBook> P2P<QB> {
         ))
     }
 
-    pub async fn broadcast_sci_quote_added(&mut self, quote: &Quote) -> Result<(), Error> {
-        let bytes = mc_util_serial::serialize(quote)?;
+    pub async fn broadcast_sci_quote_added(&mut self, quote: Quote) -> Result<(), Error> {
+        let bytes = mc_util_serial::serialize(&GossipMsgBusData::SciQuoteAdded(quote))?;
+        let _message_id = self
+            .client
+            .publish_gossip(self.msg_bus_topic.clone(), bytes)
+            .await?;
+        Ok(())
+    }
+
+    pub async fn broadcast_sci_quote_removed(&mut self, quote_id: QuoteId) -> Result<(), Error> {
+        let bytes = mc_util_serial::serialize(&GossipMsgBusData::SciQuoteRemoved(quote_id))?;
         let _message_id = self
             .client
             .publish_gossip(self.msg_bus_topic.clone(), bytes)
@@ -82,7 +97,8 @@ impl<QB: QuoteBook> P2P<QB> {
 
     pub async fn handle_gossip_message(&mut self, message: GossipsubMessage) -> Result<(), Error> {
         if message.topic == self.msg_bus_topic.hash() {
-            self.handle_msg_bus_message(message.data).await?;
+            let msg: GossipMsgBusData = mc_util_serial::deserialize(&message.data)?;
+            self.handle_msg_bus_message(msg).await?;
         } else {
             log::warn!(
                 self.logger,
@@ -93,8 +109,17 @@ impl<QB: QuoteBook> P2P<QB> {
         Ok(())
     }
 
-    async fn handle_msg_bus_message(&mut self, bytes: Vec<u8>) -> Result<(), Error> {
-        let remote_quote: Quote = mc_util_serial::deserialize(&bytes)?;
+    async fn handle_msg_bus_message(&mut self, msg: GossipMsgBusData) -> Result<(), Error> {
+        match msg {
+            GossipMsgBusData::SciQuoteAdded(quote) => self.handle_sci_quote_added(quote).await,
+
+            GossipMsgBusData::SciQuoteRemoved(quote_id) => {
+                self.handle_sci_quote_removed(&quote_id).await
+            }
+        }
+    }
+
+    async fn handle_sci_quote_added(&mut self, remote_quote: Quote) -> Result<(), Error> {
         let local_quote = self
             .quote_book
             .add_sci(remote_quote.sci().clone(), Some(remote_quote.timestamp()))
@@ -106,11 +131,25 @@ impl<QB: QuoteBook> P2P<QB> {
             return Ok(());
         }
 
-        log::info!(
-            self.logger,
-            "Added quote via gossip: {:?}",
-            local_quote.id(),
-        );
+        log::info!(self.logger, "Added quote via gossip: {}", local_quote.id());
+
+        Ok(())
+    }
+
+    async fn handle_sci_quote_removed(&mut self, quote_id: &QuoteId) -> Result<(), Error> {
+        match self.quote_book.remove_quote_by_id(quote_id) {
+            Ok(_) => {
+                log::info!(self.logger, "Removed quote via gossip: {}", quote_id,);
+            }
+            Err(err) => {
+                log::info!(
+                    self.logger,
+                    "Failed removing quote {} via gossip: {:?}",
+                    quote_id,
+                    err,
+                );
+            }
+        }
 
         Ok(())
     }
