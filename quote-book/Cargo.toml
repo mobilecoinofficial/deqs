@@ -7,6 +7,7 @@ edition = "2021"
 [dependencies]
 displaydoc = "0.2"
 hex = "0.4"
+serde = "1"
 
 mc-blockchain-types = { path = "../mobilecoin/blockchain/types" }
 mc-crypto-digestible = { path = "../mobilecoin/crypto/digestible" }

@@ -1,7 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use clap::Parser;
-use deqs_p2p::libp2p::identity::Keypair;
+use deqs_p2p::{libp2p::identity::Keypair, NetworkEvent};
 use deqs_quote_book::{InMemoryQuoteBook, SynchronizedQuoteBook};
 use deqs_server::{Msg, Server, ServerConfig, P2P};
 use mc_common::logger::{log, o};
@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
 
-    let (_p2p, mut p2p_events) = P2P::new(
+    let (mut p2p, mut p2p_events) = P2P::new(
         quote_book.clone(),
         config.p2p_bootstrap_peers.clone(),
         config.p2p_listen.clone(),
@@ -37,7 +37,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             })
             .transpose()?,
         logger.clone(),
-    )?;
+    )
+    .await?;
 
     // Open the ledger db
     let ledger_db = LedgerDB::open(&config.ledger_db).expect("Could not open ledger db");
@@ -74,13 +75,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     loop {
         select! {
-            _ = msg_bus_rx.recv() => {
-                // This allows us to ensure we always have at least 1 receiver on the message
-                // bus, which will prevent sends from failing.
+            msg = msg_bus_rx.recv() => {
+                match msg {
+                    Some(Msg::SciQuoteAdded(quote)) => {
+                        if let Err(err) = p2p.broadcast_sci_quote_added(&quote).await {
+                            log::info!(logger, "broadcast_sci_quote_added failed: {:?}", err)
+                        }
+                    }
+
+                    _ => {}
+                }
             }
 
             event = p2p_events.recv() => {
-                log::debug!(logger, "p2p event: {:?}", event);
+                match event {
+                    Some(NetworkEvent::GossipMessage { message }) => {
+                        if let Err(err) = p2p.handle_gossip_message(message).await {
+                            log::error!(logger, "handle_gossip_message failed: {:?}", err)
+                        }
+                    }
+                    event => {
+                        log::debug!(logger, "p2p event: {:?}", event);
+                    }
+                }
             }
         }
     }

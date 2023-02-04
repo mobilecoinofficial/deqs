@@ -3,10 +3,11 @@
 use mc_crypto_digestible::{Digestible, MerlinTranscript};
 use mc_transaction_extra::SignedContingentInput;
 use mc_transaction_types::TokenId;
+use serde::{Deserialize, Serialize};
 use std::{array::TryFromSliceError, fmt, hash::Hash, ops::Deref};
 
 /// A single trading pair
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct Pair {
     /// The token id being offered "for sale".
     pub base_token_id: TokenId,
@@ -17,7 +18,7 @@ pub struct Pair {
 }
 
 /// A unique identifier for a single quote
-#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
 pub struct QuoteId(pub [u8; 32]);
 
 impl From<&SignedContingentInput> for QuoteId {
