@@ -143,6 +143,35 @@ impl QuoteBook for InMemoryQuoteBook {
 
         Ok(results)
     }
+
+    fn get_quote_ids(&self, pair: Option<&Pair>) -> Result<Vec<QuoteId>, QuoteBookError> {
+        let scis = self.scis.read()?;
+        let mut results = Vec::new();
+
+        if let Some(pair) = pair {
+            if let Some(quotes) = scis.get(pair) {
+                results.extend(quotes.iter().map(|quote| *quote.id()));
+            }
+        } else {
+            for quotes in scis.values() {
+                results.extend(quotes.iter().map(|quote| *quote.id()));
+            }
+        }
+
+        Ok(results)
+    }
+
+    fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, QuoteBookError> {
+        let scis = self.scis.read()?;
+
+        for entries in scis.values() {
+            if let Some(element) = entries.iter().find(|entry| entry.id() == id).cloned() {
+                return Ok(Some(element));
+            }
+        }
+
+        Ok(None)
+    }
 }
 
 fn range_overlaps(x: &impl RangeBounds<u64>, y: &impl RangeBounds<u64>) -> bool {
