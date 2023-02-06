@@ -231,6 +231,11 @@ async fn sync_quotes_from_peer(
         missing_quote_ids.len(),
     );
 
+    let mut num_added_quotes = 0;
+    let mut num_duplicate_quotes = 0;
+    let mut num_errors = 0;
+    let mut num_missing_quotes = 0;
+
     for (i, quote_id) in missing_quote_ids.iter().enumerate() {
         log::debug!(
             logger,
@@ -253,6 +258,8 @@ async fn sync_quotes_from_peer(
                             missing_quote_ids.len(),
                             peer_id
                         );
+
+                        num_added_quotes += 1;
                     }
 
                     Err(QuoteBookError::QuoteAlreadyExists) => {
@@ -264,6 +271,8 @@ async fn sync_quotes_from_peer(
                             missing_quote_ids.len(),
                             peer_id,
                         );
+
+                        num_duplicate_quotes += 1;
                     }
 
                     Err(err) => {
@@ -276,12 +285,15 @@ async fn sync_quotes_from_peer(
                             peer_id,
                             err,
                         );
+
+                        num_errors += 1;
                     }
                 }
             }
 
             Ok(None) => {
                 log::debug!(logger, "Peer {:?} did not have quote {}", peer_id, quote_id,);
+                num_missing_quotes += 1;
             }
 
             Err(err) => {
@@ -292,9 +304,22 @@ async fn sync_quotes_from_peer(
                     peer_id,
                     err,
                 );
+
+                num_errors += 1;
             }
         }
     }
+
+    log::info!(
+        logger,
+        "Synced {} quotes from peer {:?}: {} added, {} duplicates, {} missing, {} errors",
+        missing_quote_ids.len(),
+        peer_id,
+        num_added_quotes,
+        num_duplicate_quotes,
+        num_missing_quotes,
+        num_errors
+    );
 
     Ok(())
 }
