@@ -122,8 +122,7 @@ impl<QB: QuoteBook> P2P<QB> {
     async fn handle_sci_quote_added(&mut self, remote_quote: Quote) -> Result<(), Error> {
         let local_quote = self
             .quote_book
-            .add_sci(remote_quote.sci().clone(), Some(remote_quote.timestamp()))
-            .map_err(|err| err.into())?;
+            .add_sci(remote_quote.sci().clone(), Some(remote_quote.timestamp()))?;
 
         // Sanity
         if remote_quote != local_quote {
