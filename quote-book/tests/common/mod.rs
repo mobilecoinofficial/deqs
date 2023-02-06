@@ -314,14 +314,14 @@ pub fn get_quote_ids_works(quote_book: &impl QuoteBook) {
     };
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
-    let sci1 = create_sci(&pair1, 100, 1000, &mut rng);
-    let quote1 = quote_book.add_sci(sci1, None).unwrap();
+    let pair1_sci1 = create_sci(&pair1, 100, 1000, &mut rng);
+    let quote1 = quote_book.add_sci(pair1_sci1, None).unwrap();
 
-    let sci2 = create_sci(&pair1, 100, 1000, &mut rng);
-    let quote2 = quote_book.add_sci(sci2, None).unwrap();
+    let pair1_sci2 = create_sci(&pair1, 100, 1000, &mut rng);
+    let quote2 = quote_book.add_sci(pair1_sci2, None).unwrap();
 
-    let sci3 = create_sci(&pair2, 100, 1000, &mut rng);
-    let quote3 = quote_book.add_sci(sci3, None).unwrap();
+    let pair2_sci3 = create_sci(&pair2, 100, 1000, &mut rng);
+    let quote3 = quote_book.add_sci(pair2_sci3, None).unwrap();
 
     // Without filtering, we should get all quote ids.
     let quote_ids = quote_book.get_quote_ids(None).unwrap();
@@ -363,5 +363,5 @@ pub fn get_quote_by_id_works(quote_book: &impl QuoteBook) {
         Some(quote1.clone())
     );
 
-    assert_eq!(quote_book.get_quote_by_id(&quote2.id()).unwrap(), None,);
+    assert_eq!(quote_book.get_quote_by_id(&quote2.id()).unwrap(), None);
 }
