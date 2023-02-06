@@ -4,42 +4,32 @@ use crate::{Error, Pair, Quote, QuoteId};
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
 use mc_transaction_extra::SignedContingentInput;
-use std::{
-    fmt::{Debug, Display},
-    ops::RangeBounds,
-};
+use std::ops::RangeBounds;
 
 /// Quote book functionality for a single trading pair
 pub trait QuoteBook: Clone + Send + Sync + 'static {
-    /// Error data type
-    type Error: Debug + Display + Eq + Send + Sync + Into<Error>;
-
     /// Add an SCI to the quote book.
     ///
     /// # Arguments
     /// * `sci` - The SCI to add.
     /// * `timestamp` - The timestamp of the block containing the SCI. If not
     ///   provided, the current system time is used.
-    fn add_sci(
-        &self,
-        sci: SignedContingentInput,
-        timestamp: Option<u64>,
-    ) -> Result<Quote, Self::Error>;
+    fn add_sci(&self, sci: SignedContingentInput, timestamp: Option<u64>) -> Result<Quote, Error>;
 
     /// Remove a single quote from the book, identified by its id.
     /// Returns the removed quote if it was found
-    fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, Self::Error>;
+    fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, Error>;
 
     /// Remove all quotes matching a given key image, returns the list of quotes
     /// removed
-    fn remove_quotes_by_key_image(&self, key_image: &KeyImage) -> Result<Vec<Quote>, Self::Error>;
+    fn remove_quotes_by_key_image(&self, key_image: &KeyImage) -> Result<Vec<Quote>, Error>;
 
     /// Remove all quotes whose tombstone block is >= current block index,
     /// returns the list of quotes removed.
     fn remove_quotes_by_tombstone_block(
         &self,
         current_block_index: BlockIndex,
-    ) -> Result<Vec<Quote>, Self::Error>;
+    ) -> Result<Vec<Quote>, Error>;
 
     /// Search for quotes that can provide `pair.base_token_id in exchange for
     /// being sent `pair.counter_token_id`. Optionally filtering only for
@@ -56,5 +46,5 @@ pub trait QuoteBook: Clone + Send + Sync + 'static {
         pair: &Pair,
         base_token_quantity: impl RangeBounds<u64>,
         limit: usize,
-    ) -> Result<Vec<Quote>, Self::Error>;
+    ) -> Result<Vec<Quote>, Error>;
 }

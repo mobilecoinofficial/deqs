@@ -119,7 +119,7 @@ impl<OB: QuoteBook> ClientService<OB> {
                 }
                 Err(err) => {
                     error_messages.push(err.to_string());
-                    let quote_book_error: deqs_quote_book::Error = err.into();
+                    let quote_book_error: deqs_quote_book::Error = err;
                     status_codes.push((&quote_book_error).into());
                     quotes.push(Default::default());
                 }
@@ -172,11 +172,7 @@ impl<OB: QuoteBook> ClientService<OB> {
         let quote_id = QuoteId::try_from(req.get_quote_id())
             .map_err(|err| rpc_invalid_arg_error("quote_id", err, &self.logger))?;
 
-        match self
-            .quote_book
-            .remove_quote_by_id(&quote_id)
-            .map_err(|err| err.into())
-        {
+        match self.quote_book.remove_quote_by_id(&quote_id) {
             Ok(quote) => {
                 log::info!(self.logger, "Quote {} removed", quote.id());
                 if let Err(err) = self

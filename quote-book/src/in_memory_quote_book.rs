@@ -1,7 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use crate::{Error as QuoteBookError, Pair, Quote, QuoteBook, QuoteId};
-use displaydoc::Display;
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
 use mc_transaction_core::validation::validate_tombstone;
@@ -9,7 +8,7 @@ use mc_transaction_extra::SignedContingentInput;
 use std::{
     collections::{BTreeSet, HashMap},
     ops::{Bound, RangeBounds},
-    sync::{Arc, PoisonError, RwLock},
+    sync::{Arc, RwLock},
 };
 
 /// A naive in-memory quote book implementation
@@ -29,13 +28,11 @@ impl Default for InMemoryQuoteBook {
 }
 
 impl QuoteBook for InMemoryQuoteBook {
-    type Error = Error;
-
     fn add_sci(
         &self,
         sci: SignedContingentInput,
         timestamp: Option<u64>,
-    ) -> Result<Quote, Self::Error> {
+    ) -> Result<Quote, QuoteBookError> {
         // Convert SCI into an quote. This also validates it.
         let quote = Quote::new(sci, timestamp)?;
 
@@ -52,7 +49,7 @@ impl QuoteBook for InMemoryQuoteBook {
             .iter()
             .any(|entry| entry.sci().key_image() == quote.sci().key_image())
         {
-            return Err(QuoteBookError::QuoteAlreadyExists.into());
+            return Err(QuoteBookError::QuoteAlreadyExists);
         }
 
         // Add quote. We assert it doesn't fail since we do not expect duplicate quotes
@@ -61,7 +58,7 @@ impl QuoteBook for InMemoryQuoteBook {
         Ok(quote)
     }
 
-    fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, Self::Error> {
+    fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, QuoteBookError> {
         let mut scis = self.scis.write()?;
 
         for entries in scis.values_mut() {
@@ -74,10 +71,13 @@ impl QuoteBook for InMemoryQuoteBook {
             }
         }
 
-        Err(QuoteBookError::QuoteNotFound.into())
+        Err(QuoteBookError::QuoteNotFound)
     }
 
-    fn remove_quotes_by_key_image(&self, key_image: &KeyImage) -> Result<Vec<Quote>, Self::Error> {
+    fn remove_quotes_by_key_image(
+        &self,
+        key_image: &KeyImage,
+    ) -> Result<Vec<Quote>, QuoteBookError> {
         let mut scis = self.scis.write()?;
 
         let mut all_removed_quotes = Vec::new();
@@ -96,7 +96,7 @@ impl QuoteBook for InMemoryQuoteBook {
     fn remove_quotes_by_tombstone_block(
         &self,
         current_block_index: BlockIndex,
-    ) -> Result<Vec<Quote>, Self::Error> {
+    ) -> Result<Vec<Quote>, QuoteBookError> {
         let mut scis = self.scis.write()?;
 
         let mut all_removed_quotes = Vec::new();
@@ -124,7 +124,7 @@ impl QuoteBook for InMemoryQuoteBook {
         pair: &Pair,
         base_token_quantity: impl RangeBounds<u64>,
         limit: usize,
-    ) -> Result<Vec<Quote>, Self::Error> {
+    ) -> Result<Vec<Quote>, QuoteBookError> {
         let scis = self.scis.read()?;
         let mut results = Vec::new();
 
@@ -171,37 +171,6 @@ fn range_overlaps(x: &impl RangeBounds<u64>, y: &impl RangeBounds<u64>) -> bool 
     };
 
     x1 <= y2 && y1 <= x2
-}
-
-/// Error data type
-#[derive(Debug, Display, Eq, PartialEq)]
-pub enum Error {
-    /// Quote book: {0}
-    QuoteBook(QuoteBookError),
-
-    /// Lock poisoned
-    LockPoisoned,
-}
-
-impl From<Error> for QuoteBookError {
-    fn from(src: Error) -> Self {
-        match src {
-            Error::QuoteBook(err) => err,
-            err => QuoteBookError::ImplementationSpecific(err.to_string()),
-        }
-    }
-}
-
-impl From<QuoteBookError> for Error {
-    fn from(err: QuoteBookError) -> Self {
-        Self::QuoteBook(err)
-    }
-}
-
-impl<T> From<PoisonError<T>> for Error {
-    fn from(_src: PoisonError<T>) -> Self {
-        Error::LockPoisoned
-    }
 }
 
 #[cfg(test)]
