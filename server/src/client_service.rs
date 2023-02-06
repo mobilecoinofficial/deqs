@@ -283,7 +283,7 @@ mod tests {
     use grpcio::{ChannelBuilder, EnvBuilder, Server, ServerBuilder, ServerCredentials};
     use mc_common::logger::test_with_logger;
     use mc_transaction_types::TokenId;
-    use mc_util_grpc::{ConnectionUriGrpcioChannel};
+    use mc_util_grpc::ConnectionUriGrpcioChannel;
     use postage::broadcast;
     use rand::{rngs::StdRng, SeedableRng};
     use std::{

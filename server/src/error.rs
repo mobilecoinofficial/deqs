@@ -1,5 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+use crate::p2p::RpcError;
 use displaydoc::Display;
 use mc_util_serial::{decode::Error as DecodeError, encode::Error as EncodeError};
 
@@ -20,6 +21,9 @@ pub enum Error {
 
     /// P2P: {0}
     P2P(deqs_p2p::Error),
+
+    /// P2P RPC: {0}
+    P2PRpc(RpcError),
 
     /// Quote book: {0}
     QuoteBook(deqs_quote_book::Error),
@@ -52,6 +56,12 @@ impl From<deqs_p2p::ClientError> for Error {
 impl From<deqs_p2p::Error> for Error {
     fn from(src: deqs_p2p::Error) -> Self {
         Self::P2P(src)
+    }
+}
+
+impl From<RpcError> for Error {
+    fn from(src: RpcError) -> Self {
+        Self::P2PRpc(src)
     }
 }
 
