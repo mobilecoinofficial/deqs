@@ -4,10 +4,11 @@ use displaydoc::Display;
 use mc_ledger_db::Error as LedgerError;
 use mc_transaction_core::RevealedTxOutError;
 use mc_transaction_extra::SignedContingentInputError;
+use serde::{Deserialize, Serialize};
 use std::sync::PoisonError;
 
 /// Type for common quote book errors
-#[derive(Debug, Display, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Display, Eq, PartialEq, Serialize)]
 pub enum Error {
     /// SCI: {0}
     Sci(SignedContingentInputError),
