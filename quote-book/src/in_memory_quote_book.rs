@@ -12,7 +12,7 @@ use std::{
 };
 
 /// A naive in-memory quote book implementation
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct InMemoryQuoteBook {
     /// List of all SCIs in the quote book, grouped by trading pair.
     /// Naturally sorted by the time they got added to the book.

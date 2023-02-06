@@ -10,19 +10,18 @@ use std::ops::RangeBounds;
 /// A wrapper for a quote book implementation that syncs quotes with the ledger
 #[derive(Clone)]
 pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + 'static> {
-    /// List of all SCIs in the quote book, grouped by trading pair.
-    /// Naturally sorted by the time they got added to the book.
+    /// Quotebook being synchronized to the ledger by the Synchronized Quotebook
     quote_book: Q,
 
-    _ledger: L,
+    ledger: L,
 }
 
 impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, L> {
     /// Create a new Synchronized Quotebook
-    pub fn new(quote_book: Q, _ledger: L) -> Self {
+    pub fn new(quote_book: Q, ledger: L) -> Self {
         Self {
             quote_book,
-            _ledger,
+            ledger,
         }
     }
 }
@@ -39,7 +38,7 @@ where
     ) -> Result<Quote, QuoteBookError> {
         // Check the ledger to see if the quote is stale before adding it to the
         // quotebook.
-        if self._ledger.contains_key_image(&sci.key_image())? {
+        if self.ledger.contains_key_image(&sci.key_image())? {
             return Err(QuoteBookError::QuoteIsStale);
         }
         // Try adding to quote book.

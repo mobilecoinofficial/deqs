@@ -25,7 +25,7 @@ pub enum Error {
     QuoteIsStale,
 
     /// Ledger related error
-    LedgerError(LedgerError),
+    Ledger(LedgerError),
 
     /// Quote cannot fulfill the desired amount ({0}) of base tokens
     InsufficientBaseTokens(u64),
@@ -57,7 +57,7 @@ impl From<RevealedTxOutError> for Error {
 
 impl From<LedgerError> for Error {
     fn from(err: LedgerError) -> Self {
-        Self::LedgerError(err)
+        Self::Ledger(err)
     }
 }
 
