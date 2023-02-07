@@ -28,6 +28,8 @@ pub struct RpcClient {
     logger: Logger,
 }
 
+/// A wrapper around the p2p client that handles serialization and
+/// deserialization of requests and responses
 impl RpcClient {
     pub fn new(client: Client<Request, Response>, logger: Logger) -> Self {
         Self { client, logger }
