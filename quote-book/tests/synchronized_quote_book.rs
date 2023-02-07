@@ -107,7 +107,7 @@ fn cannot_add_stale_sci() {
     )
     .unwrap();
 
-    //Because the key image is already in the ledger, adding this sci should fail
+    // Because the key image is already in the ledger, adding this sci should fail
     assert_eq!(
         synchronized_quote_book.add_sci(sci, None).unwrap_err(),
         Error::QuoteIsStale
