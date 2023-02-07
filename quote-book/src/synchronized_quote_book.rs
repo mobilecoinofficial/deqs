@@ -48,6 +48,7 @@ where
         if self.ledger.contains_key_image(&sci.key_image())? {
             return Err(QuoteBookError::QuoteIsStale);
         }
+
         // Try adding to quote book.
         self.quote_book.add_sci(sci, timestamp)
     }
