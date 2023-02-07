@@ -1,7 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use clap::Parser;
-use deqs_quote_book::InMemoryQuoteBook;
+use deqs_quote_book::{InMemoryQuoteBook, SynchronizedQuoteBook};
 use deqs_server::{Msg, Server, ServerConfig};
 use mc_common::logger::o;
 use mc_ledger_db::{Ledger, LedgerDB};
@@ -20,7 +20,6 @@ async fn main() {
     mc_common::setup_panic_handler();
 
     let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
-    let quote_book = InMemoryQuoteBook::default();
 
     // Open the ledger db
     let ledger_db = LedgerDB::open(&config.ledger_db).expect("Could not open ledger db");
@@ -29,9 +28,12 @@ async fn main() {
         .expect("Could not compute num_blocks");
     assert_ne!(0, num_blocks);
 
+    let internal_quote_book = InMemoryQuoteBook::default();
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger_db);
+
     let mut server = Server::new(
         msg_bus_tx,
-        quote_book,
+        synchronized_quote_book,
         config.client_listen_uri.clone(),
         logger.clone(),
     );

@@ -716,11 +716,13 @@ dependencies = [
  "displaydoc",
  "hex",
  "mc-account-keys",
+ "mc-blockchain-test-utils",
  "mc-blockchain-types",
  "mc-crypto-digestible",
  "mc-crypto-ring-signature",
  "mc-crypto-ring-signature-signer",
  "mc-fog-report-validation-test-utils",
+ "mc-ledger-db",
  "mc-transaction-builder",
  "mc-transaction-core",
  "mc-transaction-extra",
@@ -1671,6 +1673,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "mc-blockchain-test-utils"
+version = "4.0.1"
+dependencies = [
+ "mc-blockchain-types",
+ "mc-common",
+ "mc-consensus-scp-types",
+ "mc-crypto-keys",
+ "mc-transaction-core",
+ "mc-transaction-core-test-utils",
+ "mc-util-from-random",
+ "mc-util-test-helper",
+]
+
+[[package]]
 name = "mc-blockchain-types"
 version = "4.0.1"
 dependencies = [
@@ -1738,7 +1754,10 @@ dependencies = [
  "mc-crypto-digestible",
  "mc-crypto-keys",
  "mc-util-from-random",
+ "mc-util-test-helper",
  "prost",
+ "rand 0.8.5",
+ "rand_hc 0.3.1",
  "serde",
 ]
 
@@ -2025,11 +2044,13 @@ dependencies = [
  "lazy_static",
  "lmdb-rkv",
  "mc-account-keys",
+ "mc-blockchain-test-utils",
  "mc-blockchain-types",
  "mc-common",
  "mc-crypto-keys",
  "mc-transaction-builder",
  "mc-transaction-core",
+ "mc-transaction-core-test-utils",
  "mc-util-from-random",
  "mc-util-lmdb",
  "mc-util-metrics",
@@ -2132,6 +2153,21 @@ dependencies = [
  "sha2",
  "subtle",
  "zeroize",
+]
+
+[[package]]
+name = "mc-transaction-core-test-utils"
+version = "4.0.1"
+dependencies = [
+ "mc-account-keys",
+ "mc-crypto-keys",
+ "mc-crypto-multisig",
+ "mc-crypto-rand",
+ "mc-crypto-ring-signature-signer",
+ "mc-fog-report-validation-test-utils",
+ "mc-transaction-core",
+ "mc-util-from-random",
+ "mc-util-serial",
 ]
 
 [[package]]
@@ -2322,6 +2358,7 @@ name = "mc-util-serial"
 version = "4.0.1"
 dependencies = [
  "prost",
+ "protobuf",
  "serde",
  "serde_cbor",
  "serde_with",

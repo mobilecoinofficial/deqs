@@ -1,6 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use displaydoc::Display;
+use mc_ledger_db::Error as LedgerError;
 use mc_transaction_core::RevealedTxOutError;
 use mc_transaction_extra::SignedContingentInputError;
 use std::sync::PoisonError;
@@ -19,6 +20,12 @@ pub enum Error {
 
     /// Quote not found
     QuoteNotFound,
+
+    /// Quote has a spent keyimage
+    QuoteIsStale,
+
+    /// Ledger related error
+    Ledger(LedgerError),
 
     /// Quote cannot fulfill the desired amount ({0}) of base tokens
     InsufficientBaseTokens(u64),
@@ -45,6 +52,12 @@ impl From<SignedContingentInputError> for Error {
 impl From<RevealedTxOutError> for Error {
     fn from(err: RevealedTxOutError) -> Self {
         Self::RevealedTxOut(err)
+    }
+}
+
+impl From<LedgerError> for Error {
+    fn from(err: LedgerError) -> Self {
+        Self::Ledger(err)
     }
 }
 
