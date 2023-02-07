@@ -22,22 +22,47 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use tokio::sync::mpsc::UnboundedReceiver;
 
+/// Gossip topic for message-bus traffic.
+const MSG_BUS_TOPIC: &str = "mc/deqs/server/msg-bus";
+
+/// Data type for messages sent over the message-bus gossip topic.
 #[derive(Debug, Deserialize, Serialize)]
-pub enum GossipMsgBusData {
+enum GossipMsgBusData {
     SciQuoteAdded(Quote),
     SciQuoteRemoved(QuoteId),
 }
 
+/// An object for containing the logic for interfacing with the P2P network.
 pub struct P2P<QB: QuoteBook> {
+    /// Quote book.
     quote_book: QB,
+
+    /// Logger.
     logger: Logger,
+
+    /// P2P network client
     client: Client<Request, Response>,
+
+    /// Our custom behaviour RPC client (that operates on top of the p2p network
+    /// client)
     rpc: RpcClient,
+
+    /// P2P network event loop handle
     event_loop_handle: NetworkEventLoopHandle,
+
+    /// The gossip topic we use for exchanging message-bus messages.
     msg_bus_topic: IdentTopic,
 }
 
 impl<QB: QuoteBook> P2P<QB> {
+    /// Construct a new P2P object. This returns both the object (that holds the
+    /// majority of the deqs-server-specific p2p logic) and the network
+    /// event receiver, which hands out asynchronous events from the p2p
+    /// network. It is up to to the caller to read from it and feed the
+    /// events to the P2P object's handle_network_event method.
+    /// The caller is expected to have an event loop, so this can easily be
+    /// added to it and saves us from having to manage a task inside this
+    /// object.
     pub async fn new(
         quote_book: QB,
         bootstrap_peers: Vec<Multiaddr>,
@@ -46,7 +71,7 @@ impl<QB: QuoteBook> P2P<QB> {
         keypair: Option<Keypair>,
         logger: Logger,
     ) -> Result<(Self, UnboundedReceiver<NetworkEvent<Request, Response>>), Error> {
-        let msg_bus_topic = IdentTopic::new("mc/deqs/server/msg-bus");
+        let msg_bus_topic = IdentTopic::new(MSG_BUS_TOPIC);
 
         let keypair = keypair.unwrap_or_else(Keypair::generate_ed25519);
 
@@ -82,6 +107,8 @@ impl<QB: QuoteBook> P2P<QB> {
         ))
     }
 
+    /// Broadcast to other peers that a new quote has been added to the quote
+    /// book.
     pub async fn broadcast_sci_quote_added(&mut self, quote: Quote) -> Result<(), Error> {
         let bytes = mc_util_serial::serialize(&GossipMsgBusData::SciQuoteAdded(quote))?;
         let _message_id = self
@@ -91,6 +118,8 @@ impl<QB: QuoteBook> P2P<QB> {
         Ok(())
     }
 
+    /// Broadcast to toher peers that a quote has been removed from the quote
+    /// book.
     pub async fn broadcast_sci_quote_removed(&mut self, quote_id: QuoteId) -> Result<(), Error> {
         let bytes = mc_util_serial::serialize(&GossipMsgBusData::SciQuoteRemoved(quote_id))?;
         let _message_id = self
@@ -100,7 +129,43 @@ impl<QB: QuoteBook> P2P<QB> {
         Ok(())
     }
 
-    pub async fn handle_connection_established(&mut self, peer_id: PeerId) -> Result<(), Error> {
+    /// Handle an asynchronous event from the p2p network.
+    pub async fn handle_network_event(&mut self, event: NetworkEvent<Request, Response>) {
+        match event {
+            NetworkEvent::ConnectionEstablished { peer_id } => {
+                if let Err(err) = self.handle_connection_established(peer_id).await {
+                    log::error!(
+                        self.logger,
+                        "handle_connection_established failed: {:?}",
+                        err
+                    )
+                }
+            }
+
+            NetworkEvent::GossipMessage { message } => {
+                if let Err(err) = self.handle_gossip_message(message).await {
+                    log::error!(self.logger, "handle_gossip_message failed: {:?}", err)
+                }
+            }
+
+            NetworkEvent::RpcRequest {
+                peer,
+                request,
+                channel,
+            } => {
+                if let Err(err) = self.handle_rpc_request(peer, request, channel).await {
+                    log::error!(self.logger, "handle_rpc_request failed: {:?}", err)
+                }
+            }
+
+            event => {
+                log::debug!(self.logger, "p2p event: {:?}", event);
+            }
+        }
+    }
+
+    /// Async network event: connection established with a peer.
+    async fn handle_connection_established(&mut self, peer_id: PeerId) -> Result<(), Error> {
         log::info!(self.logger, "Connection established with peer: {}", peer_id);
 
         // Start a task to sync quotes from the peer.
@@ -116,7 +181,8 @@ impl<QB: QuoteBook> P2P<QB> {
         Ok(())
     }
 
-    pub async fn handle_rpc_request(
+    /// Async network event: incoming RPC request
+    async fn handle_rpc_request(
         &mut self,
         _peer_id: PeerId,
         request: Request,
@@ -141,7 +207,8 @@ impl<QB: QuoteBook> P2P<QB> {
         Ok(())
     }
 
-    pub async fn handle_gossip_message(&mut self, message: GossipsubMessage) -> Result<(), Error> {
+    /// Async network event: incoming gossip message
+    async fn handle_gossip_message(&mut self, message: GossipsubMessage) -> Result<(), Error> {
         if message.topic == self.msg_bus_topic.hash() {
             let msg: GossipMsgBusData = mc_util_serial::deserialize(&message.data)?;
             self.handle_msg_bus_message(msg).await?;
@@ -155,6 +222,7 @@ impl<QB: QuoteBook> P2P<QB> {
         Ok(())
     }
 
+    /// Handle a gossip message on the message bus topic.
     async fn handle_msg_bus_message(&mut self, msg: GossipMsgBusData) -> Result<(), Error> {
         match msg {
             GossipMsgBusData::SciQuoteAdded(quote) => self.handle_sci_quote_added(quote).await,
@@ -165,6 +233,7 @@ impl<QB: QuoteBook> P2P<QB> {
         }
     }
 
+    /// Handle a message on the message bus topic: a new quote has beeen added
     async fn handle_sci_quote_added(&mut self, remote_quote: Quote) -> Result<(), Error> {
         let local_quote = self
             .quote_book
@@ -181,6 +250,7 @@ impl<QB: QuoteBook> P2P<QB> {
         Ok(())
     }
 
+    /// Handle a message on the message bus topic: a quote has been removed
     async fn handle_sci_quote_removed(&mut self, quote_id: &QuoteId) -> Result<(), Error> {
         match self.quote_book.remove_quote_by_id(quote_id) {
             Ok(_) => {
