@@ -70,7 +70,6 @@ fn get_quote_by_id_works() {
     common::get_quote_by_id_works(&synchronized_quote_book);
 }
 
-
 #[test]
 fn cannot_add_stale_sci() {
     let mut ledger = create_and_initialize_test_ledger();
