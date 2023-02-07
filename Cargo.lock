@@ -2992,7 +2992,7 @@ dependencies = [
 
 [[package]]
 name = "mc-blockchain-test-utils"
-version = "4.0.1"
+version = "4.0.2"
 dependencies = [
  "mc-blockchain-types",
  "mc-common",
@@ -3474,7 +3474,7 @@ dependencies = [
 
 [[package]]
 name = "mc-transaction-core-test-utils"
-version = "4.0.1"
+version = "4.0.2"
 dependencies = [
  "mc-account-keys",
  "mc-crypto-keys",

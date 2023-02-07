@@ -1,7 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use clap::Parser;
-use deqs_p2p::{libp2p::identity::Keypair, NetworkEvent};
+use deqs_p2p::libp2p::identity::Keypair;
 use deqs_quote_book::{InMemoryQuoteBook, SynchronizedQuoteBook};
 use deqs_server::{Msg, Server, ServerConfig, P2P};
 use mc_common::logger::{log, o};
@@ -23,8 +23,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
 
+    // Open the ledger db
+    let ledger_db = LedgerDB::open(&config.ledger_db).expect("Could not open ledger db");
+    let num_blocks = ledger_db
+        .num_blocks()
+        .expect("Could not compute num_blocks");
+    assert_ne!(0, num_blocks);
+
+    // Create quote book
+    let internal_quote_book = InMemoryQuoteBook::default();
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger_db);
+
+    // Init p2p network
     let (mut p2p, mut p2p_events) = P2P::new(
-        quote_book.clone(),
+        synchronized_quote_book.clone(),
         config.p2p_bootstrap_peers.clone(),
         config.p2p_listen.clone(),
         config.p2p_external_address.clone(),
@@ -40,16 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .await?;
 
-    // Open the ledger db
-    let ledger_db = LedgerDB::open(&config.ledger_db).expect("Could not open ledger db");
-    let num_blocks = ledger_db
-        .num_blocks()
-        .expect("Could not compute num_blocks");
-    assert_ne!(0, num_blocks);
-
-    let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger_db);
-
+    // Start GRPC server
     let mut server = Server::new(
         msg_bus_tx,
         synchronized_quote_book,
@@ -58,6 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
     server.start().expect("Failed starting client GRPC server");
 
+    // Start admin server
     let config_json = serde_json::to_string(&config).expect("failed to serialize config to JSON");
     let get_config_json = Arc::new(move || Ok(config_json.clone()));
     let id = config.client_listen_uri.to_string();
@@ -73,6 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed starting admin server")
     });
 
+    // Event loop
     loop {
         select! {
             msg = msg_bus_rx.recv() => {

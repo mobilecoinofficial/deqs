@@ -1,8 +1,9 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 mod rpc;
+mod rpc_error;
 
-pub use rpc::RpcError;
+pub use rpc_error::{RpcError, RpcQuoteBookError};
 
 use crate::Error;
 use deqs_p2p::{
@@ -193,13 +194,13 @@ impl<QB: QuoteBook> P2P<QB> {
                 .quote_book
                 .get_quote_ids(None)
                 .map(Response::AllQuoteIds)
-                .unwrap_or_else(|err| Response::Error(RpcError::QuoteBook(err))),
+                .unwrap_or_else(|err| Response::Error(RpcError::QuoteBook(err.into()))),
 
             Request::GetQuoteById(quote_id) => self
                 .quote_book
                 .get_quote_by_id(&quote_id)
                 .map(Response::MaybeQuote)
-                .unwrap_or_else(|err| Response::Error(RpcError::QuoteBook(err))),
+                .unwrap_or_else(|err| Response::Error(RpcError::QuoteBook(err.into()))),
         };
 
         self.client.rpc_response(response, channel).await?;
