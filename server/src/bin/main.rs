@@ -89,35 +89,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         }
                     }
 
-                    _ => {}
+                    None => {
+                            log::info!(logger, "msg_bus_rx stream closed");
+                            break;
+                    }
                 }
             }
 
             event = p2p_events.recv() => {
                 match event {
-                    Some(NetworkEvent::ConnectionEstablished { peer_id }) => {
-                        if let Err(err) = p2p.handle_connection_established(peer_id).await {
-                            log::error!(logger, "handle_connection_established failed: {:?}", err)
-                        }
-                    }
-
-                    Some(NetworkEvent::GossipMessage { message }) => {
-                        if let Err(err) = p2p.handle_gossip_message(message).await {
-                            log::error!(logger, "handle_gossip_message failed: {:?}", err)
-                        }
-                    }
-
-                    Some(NetworkEvent::RpcRequest { peer, request, channel }) => {
-                        if let Err(err) = p2p.handle_rpc_request(peer, request, channel).await {
-                            log::error!(logger, "handle_rpc_request failed: {:?}", err)
-                        }
-                    }
-
-                    event => {
-                        log::debug!(logger, "p2p event: {:?}", event);
+                    Some(event) => p2p.handle_network_event(event).await,
+                    None => {
+                        log::info!(logger, "p2p_events stream closed");
+                        break;
                     }
                 }
             }
         }
     }
+
+    Ok(())
 }
