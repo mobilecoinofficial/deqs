@@ -313,7 +313,6 @@ async fn sync_quotes_from_peer(
     let results = stream::iter(missing_quote_ids)
         .map(|quote_id| {
             let mut rpc = rpc.clone();
-            let quote_id = quote_id.clone();
             let quote_book = quote_book.clone();
             let logger = logger.clone();
 

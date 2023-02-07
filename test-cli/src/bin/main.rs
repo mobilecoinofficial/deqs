@@ -20,6 +20,10 @@ use std::{path::PathBuf, sync::Arc};
 pub enum Command {
     /// Submit quotes to the DEQS server.
     SubmitQuotes {
+        /// gRPC URI for client requests.
+        #[clap(long)]
+        deqs_uri: DeqsClientUri,
+
         /// Number of quotes to submit.
         #[clap(long, default_value = "1")]
         num_quotes: u64,
@@ -47,6 +51,10 @@ pub enum Command {
 
     /// Remove an quote.
     RemoveQuote {
+        /// gRPC URI for client requests.
+        #[clap(long)]
+        deqs_uri: DeqsClientUri,
+
         /// Quote id.
         #[clap(
             long,
@@ -67,10 +75,6 @@ pub enum Command {
 #[derive(Parser)]
 #[clap(version)]
 pub struct Config {
-    /// gRPC URI for client requests.
-    #[clap(long, env = "MC_CLIENT_LISTEN_URI")]
-    pub deqs_uri: DeqsClientUri,
-
     /// Optional seed for the rng.
     #[clap(long)]
     pub rng_seed: Option<u64>,
@@ -92,11 +96,9 @@ fn main() {
     };
     let mut rng: StdRng = SeedableRng::from_seed(seed_bytes);
 
-    let ch = ChannelBuilder::default_channel_builder(env).connect_to_uri(&config.deqs_uri, &logger);
-    let client_api = DeqsClientApiClient::new(ch);
-
     match config.command {
         Command::SubmitQuotes {
+            deqs_uri,
             num_quotes,
             base_token_id,
             counter_token_id,
@@ -104,6 +106,10 @@ fn main() {
             counter_amount,
             allow_partial_fills,
         } => {
+            let ch =
+                ChannelBuilder::default_channel_builder(env).connect_to_uri(&deqs_uri, &logger);
+            let client_api = DeqsClientApiClient::new(ch);
+
             log::info!(&logger, "Generating {} SCIs...", num_quotes);
 
             // We can't share our rng with the Rayon threads, but we still want a
@@ -169,7 +175,11 @@ fn main() {
             }
         }
 
-        Command::RemoveQuote { quote_id } => {
+        Command::RemoveQuote { quote_id, deqs_uri } => {
+            let ch =
+                ChannelBuilder::default_channel_builder(env).connect_to_uri(&deqs_uri, &logger);
+            let client_api = DeqsClientApiClient::new(ch);
+
             let mut req = RemoveQuoteRequest::default();
             req.set_quote_id((&QuoteId(quote_id)).into());
             let resp = client_api.remove_quote(&req).expect("remove quote failed");
