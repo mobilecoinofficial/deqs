@@ -113,7 +113,7 @@ fn cannot_add_stale_sci() {
         Error::QuoteIsStale
     );
 
-    //Adding a quote that isn't already in the ledger should work
+    // Adding a quote that isn't already in the ledger should work
     let sci = common::create_sci(&pair, 10, 20, &mut rng);
     let quote = synchronized_quote_book.add_sci(sci, None).unwrap();
 
