@@ -1,12 +1,13 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+use crate::{
+    p2p::{RpcError, RpcQuoteBookError},
+    Error,
+};
 use deqs_p2p::{libp2p::PeerId, Client};
-use deqs_quote_book::{Error as QuoteBookError, Quote, QuoteId};
-use displaydoc::Display;
+use deqs_quote_book::{Quote, QuoteId};
 use mc_common::logger::{log, Logger};
 use serde::{Deserialize, Serialize};
-
-use crate::Error;
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum Request {
@@ -19,15 +20,6 @@ pub enum Response {
     AllQuoteIds(Vec<QuoteId>),
     MaybeQuote(Option<Quote>),
     Error(RpcError),
-}
-
-#[derive(Clone, Debug, Deserialize, Display, Eq, PartialEq, Serialize)]
-pub enum RpcError {
-    /// Quote book: {0}
-    QuoteBook(QuoteBookError),
-
-    /// Unexpected response
-    UnexpectedResponse,
 }
 
 #[derive(Clone)]
@@ -87,7 +79,7 @@ impl RpcClient {
         {
             Ok(Response::MaybeQuote(quote)) => Ok(quote),
 
-            Ok(Response::Error(RpcError::QuoteBook(QuoteBookError::QuoteNotFound))) => Ok(None),
+            Ok(Response::Error(RpcError::QuoteBook(RpcQuoteBookError::QuoteNotFound))) => Ok(None),
 
             Ok(Response::Error(err)) => {
                 log::info!(self.logger, "Received error from peer {}: {}", peer_id, err);
