@@ -5,6 +5,7 @@ use super::{
     network::NetworkEvent,
     Behaviour, Error, OutEvent, RpcRequest, RpcResponse,
 };
+use futures::executor::block_on;
 use libp2p::{
     futures::StreamExt,
     gossipsub::GossipsubEvent,
@@ -56,6 +57,13 @@ impl NetworkEventLoopHandle {
 
         // Wait for the event loop to drop the ack sender.
         let _ = self.shutdown_ack_rx.recv().await;
+    }
+}
+
+impl Drop for NetworkEventLoopHandle {
+    fn drop(&mut self) {
+        log::debug!(&self.logger, "dropping NetworkEventLoopHandle");
+        block_on(self.shutdown());
     }
 }
 

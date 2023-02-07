@@ -45,7 +45,6 @@ pub enum Error {
 
     /// Kademlia store: {0}
     KadStore(KadStoreError),
-
 }
 
 impl From<IoError> for Error {

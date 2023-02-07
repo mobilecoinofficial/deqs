@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         network_builder = network_builder.listen_address(listen_addr.clone());
     }
     let Network {
-        mut event_loop_handle,
+        event_loop_handle: _event_loop_handle, // Must keep in scope to keep the event loop running.
         mut events,
         mut client,
     } = network_builder.build()?;
@@ -172,9 +172,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         }
     }
-
-    // Gracefully shutdown the network.
-    event_loop_handle.shutdown().await;
 
     Ok(())
 }
