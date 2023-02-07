@@ -33,32 +33,49 @@ fn create_and_initialize_test_ledger() -> LedgerDB {
 #[test]
 fn basic_happy_flow() {
     let ledger = create_and_initialize_test_ledger();
-    let quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(quote_book, ledger);
+    let internal_quote_book = InMemoryQuoteBook::default();
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger);
     common::basic_happy_flow(&synchronized_quote_book);
 }
 
 #[test]
 fn cannot_add_invalid_sci() {
     let ledger = create_and_initialize_test_ledger();
-    let quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(quote_book, ledger);
+    let internal_quote_book = InMemoryQuoteBook::default();
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger);
     common::cannot_add_invalid_sci(&synchronized_quote_book);
 }
 
 #[test]
 fn get_quotes_filtering_works() {
     let ledger = create_and_initialize_test_ledger();
-    let quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(quote_book, ledger);
+    let internal_quote_book = InMemoryQuoteBook::default();
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger);
     common::get_quotes_filtering_works(&synchronized_quote_book);
 }
 
 #[test]
+fn get_quote_ids_works() {
+    let ledger = create_and_initialize_test_ledger();
+    let internal_quote_book = InMemoryQuoteBook::default();
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger);
+    common::get_quote_ids_works(&synchronized_quote_book);
+}
+
+#[test]
+fn get_quote_by_id_works() {
+    let ledger = create_and_initialize_test_ledger();
+    let internal_quote_book = InMemoryQuoteBook::default();
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger);
+    common::get_quote_by_id_works(&synchronized_quote_book);
+}
+
+
+#[test]
 fn cannot_add_stale_sci() {
     let mut ledger = create_and_initialize_test_ledger();
-    let unwrapped_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(unwrapped_quote_book, ledger.clone());
+    let internal_quote_book = InMemoryQuoteBook::default();
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone());
 
     let pair = common::pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);

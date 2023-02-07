@@ -69,6 +69,14 @@ where
     ) -> Result<Vec<Quote>, QuoteBookError> {
         self.quote_book.get_quotes(pair, base_token_quantity, limit)
     }
+
+    fn get_quote_ids(&self, pair: Option<&Pair>) -> Result<Vec<QuoteId>, QuoteBookError> {
+        self.quote_book.get_quote_ids(pair)
+    }
+
+    fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, QuoteBookError> {
+        self.quote_book.get_quote_by_id(id)
+    }
 }
 
 #[cfg(test)]
