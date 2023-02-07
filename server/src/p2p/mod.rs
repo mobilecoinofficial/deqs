@@ -316,56 +316,63 @@ async fn sync_quotes_from_peer(
             let quote_id = quote_id.clone();
             let quote_book = quote_book.clone();
             let logger = logger.clone();
+
             async move {
-                rpc.get_quote_by_id(peer_id, quote_id)
-                    .await
-                    .and_then(|maybe_quote| {
-                        maybe_quote
-                            .ok_or_else(|| Error::QuoteBook(QuoteBookError::QuoteNotFound))
-                            .and_then(|quote| {
-                                quote_book
-                                    .add_sci(quote.sci().clone(), Some(quote.timestamp()))
-                                    .and_then(|quote| {
-                                        log::debug!(
-                                            logger,
-                                            "Synced quote {} from peer {:?}",
-                                            quote.id(),
-                                            peer_id
-                                        );
-                                        Ok(())
-                                    })
-                                    .map_err(|err| {
-                                        match err {
-                                            QuoteBookError::QuoteAlreadyExists => {
-                                                log::debug!(
-                                                    logger,
-                                                    "Failed to add quote {} from peer {:?}: Already exists (this is acceptable)",
-                                                    quote.id(),
-                                                    peer_id,
-                                                );
-                                            }
-                                            _ => {
-                                                log::info!(
-                                                    logger,
-                                                    "Failed to add quote from peer {:?}: {}",
-                                                    peer_id,
-                                                    err
-                                                );
-                                            }
-                                        }
-                                       Error::QuoteBook(err.into())
-                                    })
-                            })
-                    })
-                    .map_err(|err| {
-                        log::info!(
+                // Make an RPC call to the peer to get the quote.
+                let quote = match rpc.get_quote_by_id(peer_id, quote_id).await {
+                    Ok(Some(quote)) => quote,
+                    Ok(None) => {
+                        log::debug!(
                             logger,
-                            "Failed to get quote from peer {:?}: {}",
+                            "Peer {:?} did not have quote {}",
                             peer_id,
-                            err
+                            quote_id,
                         );
-                        err
-                    })
+                        return Err(Error::QuoteBook(QuoteBookError::QuoteNotFound));
+                    }
+                    Err(err) => {
+                        log::warn!(
+                            logger,
+                            "Failed to get quote {} from peer {:?}: {:?}",
+                            quote_id,
+                            peer_id,
+                            err,
+                        );
+                        return Err(err);
+                    }
+                };
+
+                // Add the quote to our local quote book.
+                match quote_book.add_sci(quote.sci().clone(), Some(quote.timestamp())) {
+                    Ok(quote) => {
+                        log::debug!(
+                            logger,
+                            "Synced quote {} from peer {:?}",
+                            quote.id(),
+                            peer_id
+                        );
+                        Ok(())
+                    }
+                    Err(err @ QuoteBookError::QuoteAlreadyExists) => {
+                        log::debug!(
+                            logger,
+                            "Failed to add quote {} from peer {:?}: Already exists (this is acceptable)",
+                            quote.id(),
+                            peer_id,
+                        );
+                        Err(err.into())
+                    }
+                    Err(err)=> {
+                        log::warn!(
+                            logger,
+                            "Failed to add quote {} from peer {:?}: {:?}",
+                            quote.id(),
+                            peer_id,
+                            err,
+                        );
+                        Err(err.into())
+                    }
+                }
             }
         })
         .buffered(PEER_SYNC_MAX_CONCURRENT_REQUESTS)
@@ -389,18 +396,18 @@ async fn sync_quotes_from_peer(
         }
     }
 
-    let end_time = tokio::time::Instant::now() - start_time;
+    let duration = tokio::time::Instant::now() - start_time;
 
     log::info!(
         logger,
-        "Synced {} quotes from peer {:?}: {} added, {} duplicates, {} missing, {} errors (took {} milliseconds)",
+        "Queried {} quotes from peer {:?}: {} added, {} duplicates, {} missing, {} errors (took {} milliseconds)",
         num_missing_quote_ids,
         peer_id,
         num_added_quotes,
         num_duplicate_quotes,
         num_missing_quotes,
         num_errors,
-        end_time.as_millis(),
+        duration.as_millis(),
     );
     /*
     let mut num_added_quotes = 0;
