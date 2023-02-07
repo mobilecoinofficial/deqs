@@ -19,10 +19,7 @@ pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + 'static> {
 impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, L> {
     /// Create a new Synchronized Quotebook
     pub fn new(quote_book: Q, ledger: L) -> Self {
-        Self {
-            quote_book,
-            ledger,
-        }
+        Self { quote_book, ledger }
     }
 }
 
