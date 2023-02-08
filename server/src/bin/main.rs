@@ -3,8 +3,8 @@
 use clap::Parser;
 use deqs_p2p::libp2p::identity::Keypair;
 use deqs_quote_book::{InMemoryQuoteBook, SynchronizedQuoteBook};
-use deqs_server::{DeqsServer, ServerConfig};
-use mc_common::logger::{log, o};
+use deqs_server::{Server, ServerConfig};
+use mc_common::logger::o;
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
 use std::sync::Arc;
@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Start deqs server. Stays alive as long as it remains in scope.
-    let _deqs_server = DeqsServer::start(
+    let _deqs_server = Server::start(
         synchronized_quote_book,
         config.client_listen_uri,
         config.p2p_bootstrap_peers,

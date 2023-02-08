@@ -11,7 +11,7 @@ use tokio::{select, sync::mpsc};
 /// Maximum number of messages that can be queued in the message bus.
 const MSG_BUS_QUEUE_SIZE: usize = 1000;
 
-pub struct DeqsServer<QB: QuoteBook> {
+pub struct Server<QB: QuoteBook> {
     /// Shutdown sender, used to signal the event loop to shutdown.
     shutdown_tx: mpsc::UnboundedSender<()>,
 
@@ -22,7 +22,7 @@ pub struct DeqsServer<QB: QuoteBook> {
     grpc_server: GrpcServer<QB>,
 }
 
-impl<QB: QuoteBook> DeqsServer<QB> {
+impl<QB: QuoteBook> Server<QB> {
     pub async fn start(
         quote_book: QB,
         grpc_listen_address: DeqsClientUri,
@@ -56,7 +56,7 @@ impl<QB: QuoteBook> DeqsServer<QB> {
 
         // Event loop
         tokio::spawn(async move {
-            log::info!(logger, "DeqsServer event loop started");
+            log::info!(logger, "Server event loop started");
 
             loop {
                 select! {
@@ -92,7 +92,7 @@ impl<QB: QuoteBook> DeqsServer<QB> {
                     }
 
                     _ = shutdown_rx.recv() => {
-                        log::info!(logger, "DeqsServer shutdown requested");
+                        log::info!(logger, "Server shutdown requested");
                         break
                     }
 
