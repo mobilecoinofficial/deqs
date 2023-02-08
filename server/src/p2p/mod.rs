@@ -299,7 +299,7 @@ async fn sync_quotes_from_peer(
 
     log::info!(
         logger,
-        "Received {} quote ids from peer {:?}. Will need to sync {} quotes",
+        "Received {} quote ids from {:?}. Will need to sync {} quotes",
         remote_quote_ids.len(),
         peer_id,
         num_missing_quote_ids,
@@ -321,13 +321,13 @@ async fn sync_quotes_from_peer(
                 let quote = match rpc.get_quote_by_id(peer_id, quote_id).await {
                     Ok(Some(quote)) => quote,
                     Ok(None) => {
-                        log::debug!(logger, "Peer {:?} did not have quote {}", peer_id, quote_id,);
+                        log::debug!(logger, "{:?} did not have quote {}", peer_id, quote_id,);
                         return Err(Error::QuoteBook(QuoteBookError::QuoteNotFound));
                     }
                     Err(err) => {
                         log::warn!(
                             logger,
-                            "Failed to get quote {} from peer {:?}: {:?}",
+                            "Failed to get quote {} from {:?}: {:?}",
                             quote_id,
                             peer_id,
                             err,
@@ -341,7 +341,7 @@ async fn sync_quotes_from_peer(
                     Ok(quote) => {
                         log::debug!(
                             logger,
-                            "Synced quote {} from peer {:?}",
+                            "Synced quote {} from {:?}",
                             quote.id(),
                             peer_id
                         );
@@ -350,8 +350,7 @@ async fn sync_quotes_from_peer(
                     Err(err @ QuoteBookError::QuoteAlreadyExists) => {
                         log::debug!(
                             logger,
-                            "Failed to add quote {} from peer {:?}: Already
-        exists (this is acceptable)",
+                            "Failed to add quote {} from {:?}: Already exists (this is acceptable)",
                             quote.id(),
                             peer_id,
                         );
@@ -360,7 +359,7 @@ async fn sync_quotes_from_peer(
                     Err(err) => {
                         log::warn!(
                             logger,
-                            "Failed to add quote {} from peer {:?}: {:?}",
+                            "Failed to add quote {} from {:?}: {:?}",
                             quote.id(),
                             peer_id,
                             err,
@@ -395,8 +394,7 @@ async fn sync_quotes_from_peer(
 
     log::info!(
         logger,
-        "Queried {} quotes from peer {:?}: {} added, {} duplicates, {} missing,
-        {} errors (took {} milliseconds)",
+        "Queried {} quotes from {:?}: {} added, {} duplicates, {} missing, {} errors (took {} milliseconds)",
         num_missing_quote_ids,
         peer_id,
         num_added_quotes,
