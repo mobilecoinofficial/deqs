@@ -15,6 +15,9 @@ pub enum RpcError {
 
     /// Unexpected response
     UnexpectedResponse,
+
+    /// Too many quotes requested
+    TooManyQuotesRequested,
 }
 
 impl From<deqs_quote_book::Error> for RpcError {

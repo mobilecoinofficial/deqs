@@ -29,6 +29,10 @@ const MSG_BUS_TOPIC: &str = "mc/deqs/server/msg-bus";
 /// Maximum number of concurrent requests we will issue when syncing quotes.
 const PEER_SYNC_MAX_CONCURRENT_REQUESTS: usize = 10;
 
+/// Maximal number of quotes that can be requested in a single RPC call.
+/// Each quote is a bit more than 8KB.
+pub const MAX_QUOTES_PER_REQUEST: usize = 100;
+
 /// Data type for messages sent over the message-bus gossip topic.
 #[derive(Debug, Deserialize, Serialize)]
 enum GossipMsgBusData {
@@ -201,11 +205,18 @@ impl<QB: QuoteBook> P2P<QB> {
                 .map(Response::AllQuoteIds)
                 .unwrap_or_else(|err| Response::Error(RpcError::QuoteBook(err.into()))),
 
-            Request::GetQuoteById(quote_id) => self
-                .quote_book
-                .get_quote_by_id(&quote_id)
-                .map(Response::MaybeQuote)
-                .unwrap_or_else(|err| Response::Error(RpcError::QuoteBook(err.into()))),
+            Request::GetQuotesById(quote_ids) => {
+                if quote_ids.len() <= MAX_QUOTES_PER_REQUEST {
+                    Response::MaybeQuotes(
+                        quote_ids
+                            .iter()
+                            .map(|quote_id| Ok(self.quote_book.get_quote_by_id(quote_id)?))
+                            .collect(),
+                    )
+                } else {
+                    Response::Error(RpcError::TooManyQuotesRequested)
+                }
+            }
         };
 
         self.client.rpc_response(response, channel).await?;
@@ -309,59 +320,91 @@ async fn sync_quotes_from_peer(
 
     // Iterate over each missing quote id, and request it from the peer.
     // We will be executing this in parallel (up to
-    // PEER_SYNC_MAX_CONCURRENT_REQUESTS)
-    let results = stream::iter(missing_quote_ids)
-        .map(|quote_id| {
+    // PEER_SYNC_MAX_CONCURRENT_REQUESTS), and in batches of MAX_QUOTES_PER_REQUEST
+    // for each RPC call.
+    let chunks = missing_quote_ids
+        .chunks(MAX_QUOTES_PER_REQUEST)
+        .map(|c| c.to_owned())
+        .collect::<Vec<_>>();
+
+    let chunk_results = stream::iter(chunks)
+        .map(|quote_ids| {
             let mut rpc = rpc.clone();
             let quote_book = quote_book.clone();
             let logger = logger.clone();
 
+            // This spawns a task that performs a get_quotes_by_id RPC call to the peer. If
+            // successful, this call returns a Vec of Result<Quote, RpcError> -
+            // one for each quote id requested.
             tokio::spawn(async move {
-                // Make an RPC call to the peer to get the quote.
-                let quote = match rpc.get_quote_by_id(peer_id, quote_id).await {
-                    Ok(Some(quote)) => quote,
-                    Ok(None) => {
-                        log::debug!(logger, "{:?} did not have quote {}", peer_id, quote_id,);
-                        return Err(Error::QuoteBook(QuoteBookError::QuoteNotFound));
-                    }
-                    Err(err) => {
-                        log::warn!(
-                            logger,
-                            "Failed to get quote {} from {:?}: {:?}",
-                            quote_id,
-                            peer_id,
-                            err,
-                        );
-                        return Err(err);
-                    }
-                };
+                // TODO: retries on the RPC call
+                Ok::<Vec<_>, Error>(
+                    rpc.get_quotes_by_id(peer_id, quote_ids.clone().to_vec())
+                        .await?
+                        .into_iter()
+                        .enumerate()
+                        .map(|(i, maybe_quote)| {
+                            // This is safe because get_quotes_by_id guarantees the right amount of
+                            // quotes is returned.
+                            let quote_id = quote_ids[i];
 
-                // Add the quote to our local quote book.
-                match quote_book.add_sci(quote.sci().clone(), Some(quote.timestamp())) {
-                    Ok(quote) => {
-                        log::debug!(logger, "Synced quote {} from {:?}", quote.id(), peer_id);
-                        Ok(())
-                    }
-                    Err(err @ QuoteBookError::QuoteAlreadyExists) => {
-                        log::debug!(
+                            let quote = match maybe_quote {
+                                Ok(Some(quote)) => quote,
+                                Ok(None) => {
+                                    log::debug!(
+                                        logger,
+                                        "{:?} did not have quote {}",
+                                        peer_id,
+                                        quote_id,
+                                    );
+                                    return Err(Error::QuoteBook(QuoteBookError::QuoteNotFound));
+                                }
+                                Err(err) => {
+                                    log::warn!(
+                                        logger,
+                                        "Failed to get quote {} from {:?}: {:?}",
+                                        quote_id,
+                                        peer_id,
+                                        err,
+                                    );
+                                    return Err(err.into());
+                                }
+                            };
+
+                            // Add the quote to our local quote book.
+                            match quote_book.add_sci(quote.sci().clone(), Some(quote.timestamp())) {
+                                Ok(quote) => {
+                                    log::debug!(
+                                        logger,
+                                        "Synced quote {} from {:?}",
+                                        quote.id(),
+                                        peer_id
+                                    );
+                                    Ok(())
+                                }
+                                Err(err @ QuoteBookError::QuoteAlreadyExists) => {
+                                    log::debug!(
                             logger,
                             "Failed to add quote {} from {:?}: Already exists (this is acceptable)",
                             quote.id(),
                             peer_id,
                         );
-                        Err(err.into())
-                    }
-                    Err(err) => {
-                        log::warn!(
-                            logger,
-                            "Failed to add quote {} from {:?}: {:?}",
-                            quote.id(),
-                            peer_id,
-                            err,
-                        );
-                        Err(err.into())
-                    }
-                }
+                                    Err(err.into())
+                                }
+                                Err(err) => {
+                                    log::warn!(
+                                        logger,
+                                        "Failed to add quote {} from {:?}: {:?}",
+                                        quote.id(),
+                                        peer_id,
+                                        err,
+                                    );
+                                    Err(err.into())
+                                }
+                            }
+                        })
+                        .collect(),
+                )
             })
         })
         .buffered(PEER_SYNC_MAX_CONCURRENT_REQUESTS)
@@ -373,8 +416,19 @@ async fn sync_quotes_from_peer(
     let mut num_errors = 0;
     let mut num_missing_quotes = 0;
 
-    for result in results {
-        match result.unwrap_or_else(|err| Err(Error::TaskJoin(err))) {
+    // We filter_map to remove errors on joining the tokio tasks. Those are not
+    // expected to happen and there's not a lot we can do about them if they do
+    // happen.
+    // After that, we have a Vec<> where each element is the return value from the
+    // tasks we spawned above. Each task returns a Vec<> with a result per quote
+    // requested, hence the need to flatten twice.
+    for result in chunk_results
+        .into_iter()
+        .filter_map(|r| r.ok())
+        .flatten()
+        .flatten()
+    {
+        match result {
             Ok(_) => num_added_quotes += 1,
             Err(Error::QuoteBook(QuoteBookError::QuoteAlreadyExists)) => num_duplicate_quotes += 1,
             Err(Error::QuoteBook(QuoteBookError::QuoteNotFound)) => num_missing_quotes += 1,
