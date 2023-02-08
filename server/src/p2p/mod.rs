@@ -339,12 +339,7 @@ async fn sync_quotes_from_peer(
                 // Add the quote to our local quote book.
                 match quote_book.add_sci(quote.sci().clone(), Some(quote.timestamp())) {
                     Ok(quote) => {
-                        log::debug!(
-                            logger,
-                            "Synced quote {} from {:?}",
-                            quote.id(),
-                            peer_id
-                        );
+                        log::debug!(logger, "Synced quote {} from {:?}", quote.id(), peer_id);
                         Ok(())
                     }
                     Err(err @ QuoteBookError::QuoteAlreadyExists) => {
