@@ -3,7 +3,7 @@
 use clap::Parser;
 use deqs_p2p::libp2p::identity::Keypair;
 use deqs_quote_book::{InMemoryQuoteBook, SynchronizedQuoteBook};
-use deqs_server::{Msg, Server, ServerConfig, P2P};
+use deqs_server::{GrpcServer, Msg, ServerConfig, P2P};
 use mc_common::logger::{log, o};
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
@@ -53,13 +53,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     .await?;
 
     // Start GRPC server
-    let mut server = Server::new(
+    let mut grpc_server = GrpcServer::new(
         msg_bus_tx,
         synchronized_quote_book,
         config.client_listen_uri.clone(),
         logger.clone(),
     );
-    server.start().expect("Failed starting client GRPC server");
+    grpc_server
+        .start()
+        .expect("Failed starting client GRPC server");
 
     // Start admin server
     let config_json = serde_json::to_string(&config).expect("failed to serialize config to JSON");

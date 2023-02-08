@@ -11,7 +11,7 @@ use postage::broadcast::Sender;
 use std::sync::Arc;
 
 /// DEQS server
-pub struct Server<OB: QuoteBook> {
+pub struct GrpcServer<OB: QuoteBook> {
     /// Message bus sender.
     msg_bus_tx: Sender<Msg>,
 
@@ -28,7 +28,7 @@ pub struct Server<OB: QuoteBook> {
     server: Option<grpcio::Server>,
 }
 
-impl<OB: QuoteBook> Server<OB> {
+impl<OB: QuoteBook> GrpcServer<OB> {
     pub fn new(
         msg_bus_tx: Sender<Msg>,
         quote_book: OB,
@@ -48,7 +48,7 @@ impl<OB: QuoteBook> Server<OB> {
     pub fn start(&mut self) -> Result<(), Error> {
         let ret = self.start_helper();
         if let Err(ref err) = ret {
-            log::error!(self.logger, "Server failed to start: {}", err);
+            log::error!(self.logger, "GrpcServer failed to start: {}", err);
             self.stop();
         }
         ret
@@ -112,7 +112,7 @@ impl<OB: QuoteBook> Server<OB> {
     }
 }
 
-impl<OB: QuoteBook> Drop for Server<OB> {
+impl<OB: QuoteBook> Drop for GrpcServer<OB> {
     fn drop(&mut self) {
         self.stop();
     }
