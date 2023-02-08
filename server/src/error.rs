@@ -3,6 +3,7 @@
 use crate::p2p::RpcError;
 use displaydoc::Display;
 use mc_util_serial::{decode::Error as DecodeError, encode::Error as EncodeError};
+use tokio::task::JoinError;
 
 /// Error data type
 #[derive(Debug, Display)]
@@ -27,6 +28,9 @@ pub enum Error {
 
     /// Quote book: {0}
     QuoteBook(deqs_quote_book::Error),
+
+    /// Task join error
+    TaskJoin(JoinError),
 }
 
 impl From<grpcio::Error> for Error {
@@ -68,6 +72,12 @@ impl From<RpcError> for Error {
 impl From<deqs_quote_book::Error> for Error {
     fn from(src: deqs_quote_book::Error) -> Self {
         Self::QuoteBook(src)
+    }
+}
+
+impl From<JoinError> for Error {
+    fn from(src: JoinError) -> Self {
+        Self::TaskJoin(src)
     }
 }
 
