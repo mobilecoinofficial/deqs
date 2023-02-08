@@ -34,7 +34,7 @@ async fn e2e(logger: Logger) {
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger_db);
 
-    let _deqs_server = Server::start(
+    let deqs_server = Server::start(
         synchronized_quote_book,
         DeqsClientUri::from_str("insecure-deqs://127.0.0.1:0/").unwrap(),
         vec![],
@@ -46,8 +46,9 @@ async fn e2e(logger: Logger) {
     .await
     .unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-
-    drop(_deqs_server);
-    tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+    panic!(
+        "{:?} {:?}",
+        deqs_server.grpc_listen_uri(),
+        deqs_server.p2p_listen_addrs(),
+    );
 }

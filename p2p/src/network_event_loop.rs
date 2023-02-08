@@ -364,7 +364,13 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
             }
 
             Command::ListenAddrList { response_sender } => {
-                let listen_addrs = self.swarm.listeners().cloned().collect();
+                let mut listen_addrs = self.swarm.listeners().cloned().collect::<Vec<_>>();
+
+                // Add our peer id to each listen address. This makes the address usable by
+                // clients.
+                for listen_addr in listen_addrs.iter_mut() {
+                    listen_addr.push(Protocol::P2p(self.swarm.local_peer_id().clone().into()));
+                }
 
                 response_sender
                     .send(listen_addrs)

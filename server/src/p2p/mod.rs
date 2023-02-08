@@ -117,6 +117,11 @@ impl<QB: QuoteBook> P2P<QB> {
         ))
     }
 
+    //// Get list of listening addresses.
+    pub async fn listen_addrs(&mut self) -> Result<Vec<Multiaddr>, Error> {
+        Ok(self.client.listen_addrs().await?)
+    }
+
     /// Broadcast to other peers that a new quote has been added to the quote
     /// book.
     pub async fn broadcast_sci_quote_added(&mut self, quote: Quote) -> Result<(), Error> {

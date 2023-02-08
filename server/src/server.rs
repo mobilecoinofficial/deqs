@@ -20,6 +20,9 @@ pub struct Server<QB: QuoteBook> {
 
     /// Must hold a reference to the grpc server, otherwise it will be dropped.
     grpc_server: GrpcServer<QB>,
+
+    /// Addresses the peer to peer network is listening on.
+    p2p_listen_addrs: Vec<Multiaddr>,
 }
 
 impl<QB: QuoteBook> Server<QB> {
@@ -46,6 +49,9 @@ impl<QB: QuoteBook> Server<QB> {
             logger.clone(),
         )
         .await?;
+
+        // Get p2p listening addresses
+        let p2p_listen_addrs = p2p.listen_addrs().await?;
 
         // Start GRPC server
         let mut grpc_server =
@@ -108,6 +114,7 @@ impl<QB: QuoteBook> Server<QB> {
             shutdown_tx,
             shutdown_ack_rx,
             grpc_server,
+            p2p_listen_addrs,
         })
     }
 
@@ -123,5 +130,9 @@ impl<QB: QuoteBook> Server<QB> {
 
     pub fn grpc_listen_uri(&self) -> Option<DeqsClientUri> {
         self.grpc_server.actual_listen_uri()
+    }
+
+    pub fn p2p_listen_addrs(&self) -> Vec<Multiaddr> {
+        self.p2p_listen_addrs.clone()
     }
 }
