@@ -24,7 +24,7 @@ pub enum Error {
     /// Quote has a spent keyimage
     QuoteIsStale,
 
-    /// Ledger related error
+    /// Ledger: {0}
     Ledger(LedgerError),
 
     /// Quote cannot fulfill the desired amount ({0}) of base tokens

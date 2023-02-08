@@ -316,17 +316,12 @@ async fn sync_quotes_from_peer(
             let quote_book = quote_book.clone();
             let logger = logger.clone();
 
-            async move {
+            tokio::spawn(async move {
                 // Make an RPC call to the peer to get the quote.
                 let quote = match rpc.get_quote_by_id(peer_id, quote_id).await {
                     Ok(Some(quote)) => quote,
                     Ok(None) => {
-                        log::debug!(
-                            logger,
-                            "Peer {:?} did not have quote {}",
-                            peer_id,
-                            quote_id,
-                        );
+                        log::debug!(logger, "Peer {:?} did not have quote {}", peer_id, quote_id,);
                         return Err(Error::QuoteBook(QuoteBookError::QuoteNotFound));
                     }
                     Err(err) => {
@@ -355,13 +350,14 @@ async fn sync_quotes_from_peer(
                     Err(err @ QuoteBookError::QuoteAlreadyExists) => {
                         log::debug!(
                             logger,
-                            "Failed to add quote {} from peer {:?}: Already exists (this is acceptable)",
+                            "Failed to add quote {} from peer {:?}: Already
+        exists (this is acceptable)",
                             quote.id(),
                             peer_id,
                         );
                         Err(err.into())
                     }
-                    Err(err)=> {
+                    Err(err) => {
                         log::warn!(
                             logger,
                             "Failed to add quote {} from peer {:?}: {:?}",
@@ -372,7 +368,7 @@ async fn sync_quotes_from_peer(
                         Err(err.into())
                     }
                 }
-            }
+            })
         })
         .buffered(PEER_SYNC_MAX_CONCURRENT_REQUESTS)
         .collect::<Vec<_>>()
@@ -384,7 +380,7 @@ async fn sync_quotes_from_peer(
     let mut num_missing_quotes = 0;
 
     for result in results {
-        match result {
+        match result.unwrap_or_else(|err| Err(Error::TaskJoin(err))) {
             Ok(_) => num_added_quotes += 1,
             Err(Error::QuoteBook(QuoteBookError::QuoteAlreadyExists)) => num_duplicate_quotes += 1,
             Err(Error::QuoteBook(QuoteBookError::QuoteNotFound)) => num_missing_quotes += 1,
@@ -399,7 +395,8 @@ async fn sync_quotes_from_peer(
 
     log::info!(
         logger,
-        "Queried {} quotes from peer {:?}: {} added, {} duplicates, {} missing, {} errors (took {} milliseconds)",
+        "Queried {} quotes from peer {:?}: {} added, {} duplicates, {} missing,
+        {} errors (took {} milliseconds)",
         num_missing_quote_ids,
         peer_id,
         num_added_quotes,
