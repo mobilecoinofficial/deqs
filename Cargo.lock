@@ -5756,6 +5756,7 @@ dependencies = [
  "mio",
  "num_cpus",
  "pin-project-lite 0.2.9",
+ "signal-hook-registry",
  "socket2",
  "tokio-macros",
  "windows-sys",

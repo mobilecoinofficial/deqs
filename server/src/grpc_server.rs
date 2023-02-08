@@ -18,7 +18,7 @@ pub struct GrpcServer<OB: QuoteBook> {
     /// Quote book.
     quote_book: OB,
 
-    /// Client listen URI.
+    /// Client listen URI. This is the URI that we are asked to listen on.
     client_listen_uri: DeqsClientUri,
 
     /// Logger.
@@ -26,6 +26,11 @@ pub struct GrpcServer<OB: QuoteBook> {
 
     /// Client GRPC server.
     server: Option<grpcio::Server>,
+
+    /// The address we are listening on, once the server is started.
+    /// This might differ from the client_listen_uri if the client_listen_uri
+    /// port is 0 and we are choosing an available port when we start.
+    actual_listen_uri: Option<DeqsClientUri>,
 }
 
 impl<OB: QuoteBook> GrpcServer<OB> {
@@ -41,6 +46,7 @@ impl<OB: QuoteBook> GrpcServer<OB> {
             client_listen_uri,
             logger,
             server: None,
+            actual_listen_uri: None,
         }
     }
 
@@ -88,17 +94,27 @@ impl<OB: QuoteBook> GrpcServer<OB> {
             .register_service(health_service)
             .register_service(client_service);
 
-        let mut server =
-            server_builder.build_using_uri(&self.client_listen_uri, self.logger.clone())?;
+        let server_creds = grpcio::ServerBuilder::server_credentials_from_uri(
+            &self.client_listen_uri,
+            &self.logger,
+        );
+
+        let mut server = server_builder.build()?;
+        let port = server.add_listening_port(self.client_listen_uri.addr(), server_creds)?;
         server.start();
+
+        let mut actual_listen_uri = self.client_listen_uri.clone();
+        actual_listen_uri.set_port(port);
 
         log::info!(
             self.logger,
             "Deqs Client GRPC API listening on {}",
-            self.client_listen_uri.addr(),
+            actual_listen_uri
         );
 
         self.server = Some(server);
+        self.actual_listen_uri = Some(actual_listen_uri);
+
         Ok(())
     }
 
@@ -109,6 +125,11 @@ impl<OB: QuoteBook> GrpcServer<OB> {
         if let Some(mut server) = self.server.take() {
             block_on(server.shutdown()).expect("Could not stop client grpc server");
         }
+    }
+
+    /// Get our actual listening uri, if available.
+    pub fn actual_listen_uri(&self) -> Option<DeqsClientUri> {
+        self.actual_listen_uri.clone()
     }
 }
 
