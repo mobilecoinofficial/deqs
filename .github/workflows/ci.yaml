@@ -43,7 +43,7 @@ jobs:
         with:
           submodules: recursive
       - uses: xt0rted/markdownlint-problem-matcher@v2
-      - uses: DavidAnson/markdownlint-cli2-action@v8
+      - uses: DavidAnson/markdownlint-cli2-action@v9
         with:
           globs: |
             **/*.md
