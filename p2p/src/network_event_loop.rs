@@ -369,7 +369,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
                 // Add our peer id to each listen address. This makes the address usable by
                 // clients.
                 for listen_addr in listen_addrs.iter_mut() {
-                    listen_addr.push(Protocol::P2p(self.swarm.local_peer_id().clone().into()));
+                    listen_addr.push(Protocol::P2p((*self.swarm.local_peer_id()).into()));
                 }
 
                 response_sender

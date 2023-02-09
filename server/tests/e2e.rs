@@ -88,15 +88,9 @@ async fn e2e(logger: Logger) {
     let quote = Retry::spawn(retry_strategy, || async {
         let quote = synchronized_quote_book2.get_quote_by_id(&quote_id);
         match quote {
-            Ok(Some(quote)) => {
-                return Result::<_, String>::Ok(quote);
-            }
-            Ok(None) => {
-                return Result::<_, String>::Err("not yet".to_string());
-            }
-            Err(e) => {
-                return Result::<_, String>::Err(format!("error: {:?}", e));
-            }
+            Ok(Some(quote)) => Ok(quote),
+            Ok(None) => Err("not yet".to_string()),
+            Err(e) => Err(format!("error: {:?}", e)),
         }
     })
     .await
