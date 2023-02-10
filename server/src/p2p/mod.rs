@@ -182,8 +182,14 @@ impl<QB: QuoteBook> P2P<QB> {
         let rpc = self.rpc.clone();
         let quote_book = self.quote_book.clone();
         let logger = self.logger.clone();
+
+        let client = self.client.clone();
+        let msg_bus_topic = self.msg_bus_topic.clone();
         tokio::spawn(async move {
-            if let Err(err) = sync_quotes_from_peer(peer_id, rpc, &quote_book, &logger).await {
+            if let Err(err) =
+                sync_quotes_from_peer(peer_id, rpc, client, msg_bus_topic, &quote_book, &logger)
+                    .await
+            {
                 log::warn!(logger, "Failed to sync quotes from peer: {}", err);
             }
         });
@@ -294,6 +300,8 @@ impl<QB: QuoteBook> P2P<QB> {
 async fn sync_quotes_from_peer(
     peer_id: PeerId,
     mut rpc: RpcClient,
+    client: Client<Request, Response>,
+    msg_bus_topic: IdentTopic,
     quote_book: &impl QuoteBook,
     logger: &Logger,
 ) -> Result<(), Error> {
@@ -333,9 +341,14 @@ async fn sync_quotes_from_peer(
             let quote_book = quote_book.clone();
             let logger = logger.clone();
 
+            let client = client.clone();
+            let msg_bus_topic = msg_bus_topic.clone();
+
             // This spawns a task that performs a get_quotes_by_id RPC call to the peer. If
             // successful, this call returns a Vec of Result<Quote, RpcError> -
             // one for each quote id requested.
+            let mut client = client.clone();
+
             tokio::spawn(async move {
                 // TODO: retries on the RPC call
                 Ok::<Vec<_>, Error>(
@@ -380,6 +393,19 @@ async fn sync_quotes_from_peer(
                                         quote.id(),
                                         peer_id
                                     );
+
+                                    // TODO This is duplicated from `broadcast_sci_quote_added, it
+                                    // should probably move elsewhere.
+                                    let bytes = mc_util_serial::serialize(
+                                        &GossipMsgBusData::SciQuoteAdded(quote),
+                                    )
+                                    .unwrap();
+                                    let mut client = client.clone();
+                                    let msg_bus_topic = msg_bus_topic.clone();
+                                    tokio::spawn(async move {
+                                        client.publish_gossip(msg_bus_topic, bytes).await.unwrap();
+                                    });
+
                                     Ok(())
                                 }
                                 Err(err @ QuoteBookError::QuoteAlreadyExists) => {
