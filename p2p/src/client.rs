@@ -11,6 +11,10 @@ use libp2p::{
     Multiaddr, PeerId,
 };
 use tokio::sync::{mpsc, oneshot};
+use tokio_retry::{
+    strategy::{jitter, ExponentialBackoff},
+    Retry,
+};
 
 /// A command for the network to do something. Most likely to send a
 /// message of some sort
@@ -119,7 +123,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Client<REQ, RESP> {
     }
 
     /// Perform an RPC request to the given peer.
-    pub async fn rpc_request(&mut self, peer: PeerId, request: REQ) -> Result<RESP, Error> {
+    pub async fn rpc_request(&self, peer: PeerId, request: REQ) -> Result<RESP, Error> {
         let (response_sender, response_receiver) = oneshot::channel();
         self.sender.send(Command::RpcRequest {
             peer,
@@ -128,6 +132,18 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Client<REQ, RESP> {
         })?;
 
         response_receiver.await?
+    }
+
+    /// Issue an RPC request to the given peer, retrying on failure.
+    /// Current retry strategy is hardcoded and was chosen arbitrarily.
+    pub async fn retrying_rpc_request(&self, peer: PeerId, request: REQ) -> Result<RESP, Error> {
+        let retry_strategy = ExponentialBackoff::from_millis(10).map(jitter).take(50);
+
+        let req_ref = &request;
+        Retry::spawn(retry_strategy, || async {
+            self.rpc_request(peer, req_ref.clone()).await
+        })
+        .await
     }
 
     /// Respond to an incoming RPC request.

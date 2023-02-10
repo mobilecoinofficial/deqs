@@ -35,7 +35,7 @@ impl RpcClient {
     pub async fn get_all_quote_ids(&mut self, peer_id: PeerId) -> Result<Vec<QuoteId>, Error> {
         match self
             .client
-            .rpc_request(peer_id, Request::GetAllQuoteIds)
+            .retrying_rpc_request(peer_id, Request::GetAllQuoteIds)
             .await
         {
             Ok(Response::AllQuoteIds(quote_ids)) => Ok(quote_ids),
@@ -75,7 +75,7 @@ impl RpcClient {
 
         match self
             .client
-            .rpc_request(peer_id, Request::GetQuotesById(quote_ids))
+            .retrying_rpc_request(peer_id, Request::GetQuotesById(quote_ids))
             .await
         {
             Ok(Response::MaybeQuotes(quotes)) => {
@@ -110,7 +110,7 @@ impl RpcClient {
             Err(err) => {
                 log::info!(
                     self.logger,
-                    "Failed to get quote from peer {}: {}",
+                    "Failed to get quotes from peer {}: {}",
                     peer_id,
                     err
                 );
