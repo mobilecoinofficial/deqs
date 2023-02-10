@@ -7,11 +7,11 @@ use deqs_api::{
     deqs_grpc::DeqsClientApiClient,
     DeqsClientUri,
 };
-use deqs_quote_book::{InMemoryQuoteBook, Pair, QuoteBook, QuoteId, SynchronizedQuoteBook};
+use deqs_quote_book::{InMemoryQuoteBook, Pair, Quote, QuoteBook, QuoteId, SynchronizedQuoteBook};
 use deqs_server::Server;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_account_keys::AccountKey;
-use mc_common::logger::{async_test_with_logger, Logger};
+use mc_common::logger::{async_test_with_logger, log, Logger};
 use mc_ledger_db::{
     test_utils::{create_ledger, initialize_ledger},
     LedgerDB,
@@ -75,6 +75,29 @@ async fn start_deqs_server(
     let client_api = DeqsClientApiClient::new(ch);
 
     (deqs_server, synchronized_quote_book, client_api)
+}
+
+// Helper to wait until a quote book has a set of quotes, or timeout.
+async fn wait_for_quotes(
+    pair: &Pair,
+    quote_book: &TestQuoteBook,
+    expected_quotes: &BTreeSet<Quote>,
+) {
+    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(10); // limit to 10 retries
+    Retry::spawn(retry_strategy, || async {
+        let quotes = BTreeSet::from_iter(quote_book.get_quotes(pair, .., 0).unwrap());
+        if &quotes == expected_quotes {
+            Ok(())
+        } else {
+            Err(format!(
+                "quotes: {}/{}",
+                quotes.len(),
+                expected_quotes.len()
+            ))
+        }
+    })
+    .await
+    .unwrap();
 }
 
 /// Test that two nodes propagate quotes being added and removed to eachother.
@@ -195,36 +218,65 @@ async fn e2e_two_nodes_initial_sync(logger: Logger) {
     );
 
     // The first server should eventually have all SCIs from the second server
-    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(10); // limit to 10 retries
-    Retry::spawn(retry_strategy, || async {
-        let quotes = BTreeSet::from_iter(quote_book1.get_quotes(&pair, .., 0).unwrap());
-        if quotes == combined_quotes {
-            Ok(())
-        } else {
-            Err(format!(
-                "quotes: {}/{}",
-                quotes.len(),
-                combined_quotes.len()
-            ))
-        }
-    })
-    .await
-    .unwrap();
+    wait_for_quotes(&pair, &quote_book1, &combined_quotes).await;
 
     // The second server should eventually have all SCIs from the sfirst server
-    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(10); // limit to 10 retries
-    Retry::spawn(retry_strategy, || async {
-        let quotes = BTreeSet::from_iter(quote_book2.get_quotes(&pair, .., 0).unwrap());
-        if quotes == combined_quotes {
-            Ok(())
-        } else {
-            Err(format!(
-                "quotes: {}/{}",
-                quotes.len(),
-                combined_quotes.len()
-            ))
+    wait_for_quotes(&pair, &quote_book2, &combined_quotes).await;
+}
+
+/// Test that a five node network propagates quotes correctly. This is a
+/// combination of the two tests above, with a few more nodes.
+#[async_test_with_logger]
+async fn e2e_multiple_nodes_play_nicely(logger: Logger) {
+    const NUM_NODES: usize = 5;
+    let pair = Pair {
+        base_token_id: TokenId::from(1),
+        counter_token_id: TokenId::from(2),
+    };
+
+    let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+    let ledger_db = create_and_initialize_test_ledger();
+
+    let mut last_server = None;
+    let mut servers = Vec::new();
+    let mut quote_books = Vec::new();
+    let mut quotes = Vec::new();
+    for _ in 0..NUM_NODES {
+        let scis = (0..10)
+            .map(|i| {
+                deqs_mc_test_utils::create_sci(
+                    pair.base_token_id,
+                    pair.counter_token_id,
+                    10000 * i,
+                    20000,
+                    &mut rng,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        let bootstrap_peers = last_server
+            .as_ref()
+            .map(|server| vec![server])
+            .unwrap_or_default();
+
+        let (server, quote_book, _client) =
+            start_deqs_server(&ledger_db, &bootstrap_peers, &scis, &logger).await;
+
+        if let Some(prev_server) = last_server.take() {
+            servers.push(prev_server);
         }
-    })
-    .await
-    .unwrap();
+        last_server = Some(server);
+
+        quotes.push(quote_book.get_quotes(&pair, .., 0).unwrap());
+        quote_books.push(quote_book);
+    }
+    servers.push(last_server.unwrap());
+
+    // Test that all servers got all initial quotes.
+    let combined_quotes = BTreeSet::from_iter(quotes.into_iter().flatten());
+
+    for (i, quote_book) in quote_books.iter().enumerate() {
+        log::info!(logger, "Waiting for quotes on server {}", i);
+        wait_for_quotes(&pair, quote_book, &combined_quotes).await;
+    }
 }
