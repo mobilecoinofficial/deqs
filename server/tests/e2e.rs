@@ -1,13 +1,13 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use std::{str::FromStr, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, str::FromStr, sync::Arc, time::Duration};
 
 use deqs_api::{
     deqs::{RemoveQuoteRequest, SubmitQuotesRequest},
     deqs_grpc::DeqsClientApiClient,
     DeqsClientUri,
 };
-use deqs_quote_book::{InMemoryQuoteBook, QuoteBook, QuoteId, SynchronizedQuoteBook};
+use deqs_quote_book::{InMemoryQuoteBook, Pair, QuoteBook, QuoteId, SynchronizedQuoteBook};
 use deqs_server::Server;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_account_keys::AccountKey;
@@ -16,6 +16,7 @@ use mc_ledger_db::{
     test_utils::{create_ledger, initialize_ledger},
     LedgerDB,
 };
+use mc_transaction_extra::SignedContingentInput;
 use mc_transaction_types::{BlockVersion, TokenId};
 use mc_util_grpc::ConnectionUriGrpcioChannel;
 use rand::{rngs::StdRng, SeedableRng};
@@ -41,11 +42,16 @@ type TestServer = Server<TestQuoteBook>;
 async fn start_deqs_server(
     ledger_db: &LedgerDB,
     p2p_bootstrap_from: &[&TestServer],
+    initial_scis: &[SignedContingentInput],
     logger: &Logger,
 ) -> (TestServer, TestQuoteBook, DeqsClientApiClient) {
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book =
         SynchronizedQuoteBook::new(internal_quote_book, ledger_db.clone());
+
+    for sci in initial_scis.into_iter() {
+        synchronized_quote_book.add_sci(sci.clone(), None).unwrap();
+    }
 
     let deqs_server = Server::start(
         synchronized_quote_book.clone(),
@@ -73,15 +79,16 @@ async fn start_deqs_server(
 
 /// Test that two nodes propagate quotes being added and removed to eachother.
 #[async_test_with_logger]
-async fn two_nodes_e2e_quote_propagation(logger: Logger) {
+async fn e2e_two_nodes_quote_propagation(logger: Logger) {
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
     let ledger_db = create_and_initialize_test_ledger();
 
     // Start two DEQS servers
-    let (deqs_server1, quote_book1, client1) = start_deqs_server(&ledger_db, &[], &logger).await;
+    let (deqs_server1, quote_book1, client1) =
+        start_deqs_server(&ledger_db, &[], &[], &logger).await;
 
     let (_deqs_server2, quote_book2, client2) =
-        start_deqs_server(&ledger_db, &[&deqs_server1], &logger).await;
+        start_deqs_server(&ledger_db, &[&deqs_server1], &[], &logger).await;
 
     // Submit an SCI to the first server
     let sci =
@@ -129,6 +136,93 @@ async fn two_nodes_e2e_quote_propagation(logger: Logger) {
             Ok(Some(_quote)) => Err("not yet".to_string()),
             Ok(None) => Ok(()),
             Err(e) => Err(format!("error: {:?}", e)),
+        }
+    })
+    .await
+    .unwrap();
+}
+
+/// Test that two nodes exchange their quote books when they connect to
+/// eachother.
+#[async_test_with_logger]
+async fn e2e_two_nodes_initial_sync(logger: Logger) {
+    let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+    let ledger_db = create_and_initialize_test_ledger();
+
+    let pair = Pair {
+        base_token_id: TokenId::from(1),
+        counter_token_id: TokenId::from(2),
+    };
+
+    let server1_scis = (0..10)
+        .map(|i| {
+            deqs_mc_test_utils::create_sci(
+                pair.base_token_id,
+                pair.counter_token_id,
+                10000 * i,
+                20000,
+                &mut rng,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    let server2_scis = (0..20)
+        .map(|i| {
+            deqs_mc_test_utils::create_sci(
+                pair.base_token_id,
+                pair.counter_token_id,
+                10000,
+                20000 * i,
+                &mut rng,
+            )
+        })
+        .collect::<Vec<_>>();
+
+    // Start two DEQS servers
+    let (deqs_server1, quote_book1, _client1) =
+        start_deqs_server(&ledger_db, &[], &server1_scis, &logger).await;
+
+    let (_deqs_server2, quote_book2, _client2) =
+        start_deqs_server(&ledger_db, &[&deqs_server1], &server2_scis, &logger).await;
+
+    // The combined set of quotes.
+    let quotes1 = quote_book1.get_quotes(&pair, .., 0).unwrap();
+    let quotes2 = quote_book2.get_quotes(&pair, .., 0).unwrap();
+    let combined_quotes = BTreeSet::from_iter(quotes1.into_iter().chain(quotes2.into_iter()));
+    assert_eq!(
+        combined_quotes.len(),
+        server1_scis.len() + server2_scis.len()
+    );
+
+    // The first server should eventually have all SCIs from the second server
+    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(10); // limit to 10 retries
+    Retry::spawn(retry_strategy, || async {
+        let quotes = BTreeSet::from_iter(quote_book1.get_quotes(&pair, .., 0).unwrap());
+        if quotes == combined_quotes {
+            Ok(())
+        } else {
+            Err(format!(
+                "quotes: {}/{}",
+                quotes.len(),
+                combined_quotes.len()
+            ))
+        }
+    })
+    .await
+    .unwrap();
+
+    // The second server should eventually have all SCIs from the sfirst server
+    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(10); // limit to 10 retries
+    Retry::spawn(retry_strategy, || async {
+        let quotes = BTreeSet::from_iter(quote_book2.get_quotes(&pair, .., 0).unwrap());
+        if quotes == combined_quotes {
+            Ok(())
+        } else {
+            Err(format!(
+                "quotes: {}/{}",
+                quotes.len(),
+                combined_quotes.len()
+            ))
         }
     })
     .await
