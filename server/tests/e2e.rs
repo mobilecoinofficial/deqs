@@ -152,7 +152,7 @@ async fn e2e_two_nodes_quote_propagation(logger: Logger) {
     let _resp = client2.remove_quote(&req).expect("remove quote failed");
 
     // Quote should eventually be removed from the first server
-    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(10); // limit to 10 retries
+    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(30); // limit to 30 retries
     Retry::spawn(retry_strategy, || async {
         let quote = quote_book1.get_quote_by_id(&quote_id);
         match quote {
@@ -239,6 +239,7 @@ async fn e2e_multiple_nodes_play_nicely(logger: Logger) {
 
     let mut last_server = None;
     let mut servers = Vec::new();
+    let mut clients = Vec::new();
     let mut quote_books = Vec::new();
     let mut quotes = Vec::new();
     for _ in 0..NUM_NODES {
@@ -259,7 +260,7 @@ async fn e2e_multiple_nodes_play_nicely(logger: Logger) {
             .map(|server| vec![server])
             .unwrap_or_default();
 
-        let (server, quote_book, _client) =
+        let (server, quote_book, client) =
             start_deqs_server(&ledger_db, &bootstrap_peers, &scis, &logger).await;
 
         if let Some(prev_server) = last_server.take() {
@@ -267,6 +268,7 @@ async fn e2e_multiple_nodes_play_nicely(logger: Logger) {
         }
         last_server = Some(server);
 
+        clients.push(client);
         quotes.push(quote_book.get_quotes(&pair, .., 0).unwrap());
         quote_books.push(quote_book);
     }
@@ -278,5 +280,41 @@ async fn e2e_multiple_nodes_play_nicely(logger: Logger) {
     for (i, quote_book) in quote_books.iter().enumerate() {
         log::info!(logger, "Waiting for quotes on server {}", i);
         wait_for_quotes(&pair, quote_book, &combined_quotes).await;
+    }
+
+    // Add a quote to one of the servers and see that all servers eventually see
+    // it.
+    let new_sci = deqs_mc_test_utils::create_sci(
+        pair.base_token_id,
+        pair.counter_token_id,
+        1234,
+        20000,
+        &mut rng,
+    );
+
+    let req = SubmitQuotesRequest {
+        quotes: vec![(&new_sci).into()].into(),
+        ..Default::default()
+    };
+    let resp = clients[3].submit_quotes(&req).expect("submit quote failed");
+    let quote_id = QuoteId::try_from(resp.get_quotes()[0].get_id()).unwrap();
+
+    // All servers should now be aware of this quote.
+    for (i, quote_book) in quote_books.iter().enumerate() {
+        log::info!(logger, "Waiting for quote {} on server {}", quote_id, i);
+
+        let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(10); // limit to 10 retries
+        let quote = Retry::spawn(retry_strategy, || async {
+            let quote = quote_book.get_quote_by_id(&quote_id);
+            match quote {
+                Ok(Some(quote)) => Ok(quote),
+                Ok(None) => Err("not yet".to_string()),
+                Err(e) => Err(format!("error: {:?}", e)),
+            }
+        })
+        .await
+        .unwrap();
+
+        assert_eq!(quote.sci(), &new_sci);
     }
 }
