@@ -1,1 +1,4 @@
+
 protoc --proto_path=./api/proto --proto_path=mobilecoin/api/proto --descriptor_set_out=deqs.protoset --include_imports api/proto/deqs.proto
+
+protoc --proto_path=./mobilecoin/util/grpc/proto --proto_path=mobilecoin/util/grpc/proto --descriptor_set_out=admin.protoset --include_imports mobilecoin/util/grpc/proto/admin.proto

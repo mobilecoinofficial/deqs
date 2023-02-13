@@ -377,6 +377,14 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
                     .expect("receiver should not be closed");
             }
 
+            Command::ConnectedPeerList { response_sender } => {
+                let peer_ids = self.swarm.connected_peers().cloned().collect();
+
+                response_sender
+                    .send(peer_ids)
+                    .expect("receiver should not be closed");
+            }
+
             Command::RpcRequest {
                 peer,
                 request,

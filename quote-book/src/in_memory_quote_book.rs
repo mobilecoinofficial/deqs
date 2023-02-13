@@ -172,6 +172,11 @@ impl QuoteBook for InMemoryQuoteBook {
 
         Ok(None)
     }
+
+    fn num_scis(&self) -> Result<u64, QuoteBookError> {
+        let scis = self.scis.read()?;
+        Ok(scis.values().map(|entries| entries.len() as u64).sum())
+    }
 }
 
 fn range_overlaps(x: &impl RangeBounds<u64>, y: &impl RangeBounds<u64>) -> bool {

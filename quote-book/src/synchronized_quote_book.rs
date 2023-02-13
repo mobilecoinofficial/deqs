@@ -88,6 +88,10 @@ where
     fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, QuoteBookError> {
         self.quote_book.get_quote_by_id(id)
     }
+
+    fn num_scis(&self) -> Result<u64, QuoteBookError> {
+        self.quote_book.num_scis()
+    }
 }
 
 #[cfg(test)]

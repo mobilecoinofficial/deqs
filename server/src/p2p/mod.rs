@@ -97,7 +97,7 @@ impl<QB: QuoteBook> P2P<QB> {
         let Network {
             event_loop_handle,
             events,
-            mut client,
+            client,
         } = network_builder.build()?;
 
         client.subscribe_gossip(msg_bus_topic.clone()).await?;
@@ -177,6 +177,11 @@ impl<QB: QuoteBook> P2P<QB> {
                 log::debug!(self.logger, "p2p event: {:?}", event);
             }
         }
+    }
+
+    /// Get list of connected peers.
+    pub async fn connected_peers(&self) -> Result<Vec<PeerId>, Error> {
+        Ok(self.client.connected_peers().await?)
     }
 
     /// Async network event: connection established with a peer.
