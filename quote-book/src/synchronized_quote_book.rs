@@ -38,6 +38,13 @@ where
         if self.ledger.contains_key_image(&sci.key_image())? {
             return Err(QuoteBookError::QuoteIsStale);
         }
+        let num_blocks = self.ledger.num_blocks()?;
+        if let Some(input_rules) = &sci.tx_in.input_rules {
+            if input_rules.max_tombstone_block != 0 && num_blocks >= input_rules.max_tombstone_block
+            {
+                return Err(QuoteBookError::QuoteIsStale);
+            }
+        }
         // Try adding to quote book.
         self.quote_book.add_sci(sci, timestamp)
     }
