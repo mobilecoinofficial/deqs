@@ -12,6 +12,16 @@ pub enum Request {
     GetQuotesById(Vec<QuoteId>),
 }
 
+impl Request {
+    /// Method name to use in Prometheus metrics.
+    pub fn metrics_method_name(&self) -> &'static str {
+        match self {
+            Request::GetAllQuoteIds => "get_all_quote_ids",
+            Request::GetQuotesById(_) => "get_quotes_by_id",
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum Response {
     AllQuoteIds(Vec<QuoteId>),

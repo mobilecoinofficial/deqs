@@ -1,0 +1,1 @@
+grpcurl -d '' -plaintext -protoset ./admin.protoset 127.0.0.1:9999 admin.AdminAPI.GetPrometheusMetrics  | jq -r .metrics

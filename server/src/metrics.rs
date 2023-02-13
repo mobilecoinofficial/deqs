@@ -1,10 +1,9 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+use crate::{Error, P2P};
 use deqs_quote_book::QuoteBook;
 use mc_util_metrics::{IntGauge, OpMetrics, ServiceMetrics};
 use std::time::Duration;
-
-use crate::{Error, P2P};
 
 /// Frequency at which we update metrics.
 pub const METRICS_POLL_INTERVAL: Duration = Duration::from_secs(1);
