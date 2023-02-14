@@ -5,7 +5,7 @@ mod common;
 use deqs_quote_book::{Error, InMemoryQuoteBook, QuoteBook, SynchronizedQuoteBook};
 use mc_blockchain_types::BlockVersion;
 use mc_crypto_ring_signature_signer::NoKeysRingSigner;
-use mc_ledger_db::LedgerDB;
+use mc_ledger_db::{Ledger, LedgerDB};
 use rand::{rngs::StdRng, SeedableRng};
 
 use mc_account_keys::AccountKey;
@@ -71,7 +71,7 @@ fn get_quote_by_id_works() {
 }
 
 #[test]
-fn cannot_add_stale_sci() {
+fn cannot_add_sci_with_key_image_in_ledger() {
     let mut ledger = create_and_initialize_test_ledger();
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone());
@@ -119,4 +119,57 @@ fn cannot_add_stale_sci() {
 
     let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
     assert_eq!(quotes, vec![quote.clone()]);
+}
+
+#[test]
+fn cannot_add_sci_past_tombstone_block() {
+    let pair = common::pair();
+    let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+
+    let ledger = create_and_initialize_test_ledger();
+    let internal_quote_book = InMemoryQuoteBook::default();
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone());
+
+    // Because the tombstone block is lower than the number blocks already in the
+    // ledger, adding this sci should fail
+    let mut sci_builder = common::create_sci_builder(&pair, 10, 20, &mut rng);
+    sci_builder.set_tombstone_block(ledger.num_blocks().unwrap() - 2);
+    let sci = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
+
+    assert_eq!(
+        synchronized_quote_book.add_sci(sci, None).unwrap_err(),
+        Error::QuoteIsStale
+    );
+
+    // Because the tombstone block is higher than the block index of the highest
+    // block already in the ledger, adding this sci should pass
+    let mut sci_builder2 = common::create_sci_builder(&pair, 10, 20, &mut rng);
+    sci_builder2.set_tombstone_block(ledger.num_blocks().unwrap());
+    let sci2 = sci_builder2.build(&NoKeysRingSigner {}, &mut rng).unwrap();
+
+    let quote2 = synchronized_quote_book.add_sci(sci2, None).unwrap();
+
+    let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
+    assert_eq!(quotes, vec![quote2.clone()]);
+
+    // Because the tombstone block is 0, adding this sci should pass
+    let mut sci_builder3 = common::create_sci_builder(&pair, 10, 20, &mut rng);
+    sci_builder3.set_tombstone_block(0);
+    let sci3 = sci_builder3.build(&NoKeysRingSigner {}, &mut rng).unwrap();
+
+    let quote3 = synchronized_quote_book.add_sci(sci3, None).unwrap();
+
+    let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
+    assert_eq!(quotes, vec![quote2.clone(), quote3.clone()]);
+
+    // Because the tombstone block is equal to the current block index, adding this
+    // sci should fail
+    let mut sci_builder4 = common::create_sci_builder(&pair, 10, 20, &mut rng);
+    sci_builder4.set_tombstone_block(ledger.num_blocks().unwrap() - 1);
+    let sci4 = sci_builder4.build(&NoKeysRingSigner {}, &mut rng).unwrap();
+
+    assert_eq!(
+        synchronized_quote_book.add_sci(sci4, None).unwrap_err(),
+        Error::QuoteIsStale
+    );
 }
