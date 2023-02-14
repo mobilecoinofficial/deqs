@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::Msg;
+use crate::{Msg, SVC_COUNTERS};
 use deqs_api::{
     deqs::{
         GetQuotesRequest, GetQuotesResponse, LiveUpdate, LiveUpdatesRequest, QuoteStatusCode,
@@ -16,7 +16,6 @@ use grpcio::{
 use mc_common::logger::{log, scoped_global_logger, Logger};
 use mc_transaction_extra::SignedContingentInput;
 use mc_util_grpc::{rpc_internal_error, rpc_invalid_arg_error, rpc_logger, send_result};
-use mc_util_metrics::SVC_COUNTERS;
 use postage::{
     broadcast::{Receiver, Sender},
     prelude::Stream,
@@ -281,10 +280,10 @@ mod tests {
     use deqs_mc_test_utils::create_sci;
     use deqs_quote_book::{InMemoryQuoteBook, Quote};
     use futures::{executor::block_on, StreamExt};
-    use grpcio::{ChannelBuilder, EnvBuilder, Server, ServerBuilder};
+    use grpcio::{ChannelBuilder, EnvBuilder, Server, ServerBuilder, ServerCredentials};
     use mc_common::logger::test_with_logger;
     use mc_transaction_types::TokenId;
-    use mc_util_grpc::{ConnectionUriGrpcioChannel, ConnectionUriGrpcioServer};
+    use mc_util_grpc::ConnectionUriGrpcioChannel;
     use postage::broadcast;
     use rand::{rngs::StdRng, SeedableRng};
     use std::{
@@ -302,22 +301,18 @@ mod tests {
 
         let client_service =
             ClientService::new(msg_bus_tx, quote_book.clone(), logger.clone()).into_service();
-        let server_builder = ServerBuilder::new(server_env)
+        let mut server = ServerBuilder::new(server_env)
             .register_service(client_service)
-            .bind_using_uri(
-                &DeqsClientUri::from_str("insecure-deqs://127.0.0.1:0").unwrap(),
-                logger.clone(),
-            );
-        let mut server = server_builder.build().expect("build server");
+            .build()
+            .unwrap();
+        let port = server
+            .add_listening_port("127.0.0.1:0", ServerCredentials::insecure())
+            .expect("Could not create anonymous bind");
         server.start();
 
         let client_env = Arc::new(EnvBuilder::new().build());
         let ch = ChannelBuilder::default_channel_builder(client_env).connect_to_uri(
-            &DeqsClientUri::from_str(&format!(
-                "insecure-deqs://127.0.0.1:{}",
-                server.bind_addrs().next().unwrap().1
-            ))
-            .unwrap(),
+            &DeqsClientUri::from_str(&format!("insecure-deqs://127.0.0.1:{}", port)).unwrap(),
             &logger,
         );
         let client_api = DeqsClientApiClient::new(ch);

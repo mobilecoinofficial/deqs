@@ -1,19 +1,21 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use clap::Parser;
+use deqs_p2p::libp2p::identity::Keypair;
 use deqs_quote_book::{InMemoryQuoteBook, SynchronizedQuoteBook};
-use deqs_server::{Msg, Server, ServerConfig};
-use mc_common::logger::o;
+use deqs_server::{Msg, Server, ServerConfig, P2P};
+use mc_common::logger::{log, o};
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
 use postage::{broadcast, prelude::Stream};
 use std::sync::Arc;
+use tokio::select;
 
 /// Maximum number of messages that can be queued in the message bus.
 const MSG_BUS_QUEUE_SIZE: usize = 1000;
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let _sentry_guard = mc_common::sentry::init();
     let config = ServerConfig::parse();
     let (logger, _global_logger_guard) = mc_common::logger::create_app_logger(o!());
@@ -28,9 +30,29 @@ async fn main() {
         .expect("Could not compute num_blocks");
     assert_ne!(0, num_blocks);
 
+    // Create quote book
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger_db);
 
+    // Init p2p network
+    let (mut p2p, mut p2p_events) = P2P::new(
+        synchronized_quote_book.clone(),
+        config.p2p_bootstrap_peers.clone(),
+        config.p2p_listen.clone(),
+        config.p2p_external_address.clone(),
+        config
+            .p2p_keypair_path
+            .as_ref()
+            .map(|path| -> Result<Keypair, Box<dyn std::error::Error>> {
+                let bytes = std::fs::read(path)?;
+                Ok(Keypair::from_protobuf_encoding(&bytes)?)
+            })
+            .transpose()?,
+        logger.clone(),
+    )
+    .await?;
+
+    // Start GRPC server
     let mut server = Server::new(
         msg_bus_tx,
         synchronized_quote_book,
@@ -39,6 +61,7 @@ async fn main() {
     );
     server.start().expect("Failed starting client GRPC server");
 
+    // Start admin server
     let config_json = serde_json::to_string(&config).expect("failed to serialize config to JSON");
     let get_config_json = Arc::new(move || Ok(config_json.clone()));
     let id = config.client_listen_uri.to_string();
@@ -49,15 +72,46 @@ async fn main() {
             "DEQS".into(),
             id,
             Some(get_config_json),
-            logger,
+            logger.clone(),
         )
         .expect("Failed starting admin server")
     });
 
-    // Keep the server alive by just reading messages from the message bus.
-    // This allows us to ensure we always have at least 1 receiver on the message
-    // bus, which will prevent sends from failing.
+    // Event loop
     loop {
-        let _ = msg_bus_rx.recv().await;
+        select! {
+            msg = msg_bus_rx.recv() => {
+                match msg {
+                    Some(Msg::SciQuoteAdded(quote)) => {
+                        if let Err(err) = p2p.broadcast_sci_quote_added(quote).await {
+                            log::info!(logger, "broadcast_sci_quote_added failed: {:?}", err)
+                        }
+                    }
+
+                    Some(Msg::SciQuoteRemoved(quote_id)) => {
+                        if let Err(err) = p2p.broadcast_sci_quote_removed(quote_id).await {
+                            log::info!(logger, "broadcast_sci_quote_removed failed: {:?}", err)
+                        }
+                    }
+
+                    None => {
+                            log::info!(logger, "msg_bus_rx stream closed");
+                            break;
+                    }
+                }
+            }
+
+            event = p2p_events.recv() => {
+                match event {
+                    Some(event) => p2p.handle_network_event(event).await,
+                    None => {
+                        log::info!(logger, "p2p_events stream closed");
+                        break;
+                    }
+                }
+            }
+        }
     }
+
+    Ok(())
 }

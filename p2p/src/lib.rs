@@ -14,6 +14,7 @@ mod rpc;
 pub use behaviour::{Behaviour, OutEvent};
 pub use client::{Client, Error as ClientError};
 pub use error::Error;
+pub use libp2p;
 pub use network::{Network, NetworkEvent};
 pub use network_builder::NetworkBuilder;
 pub use network_event_loop::NetworkEventLoopHandle;

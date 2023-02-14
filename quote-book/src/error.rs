@@ -7,7 +7,7 @@ use mc_transaction_extra::SignedContingentInputError;
 use std::sync::PoisonError;
 
 /// Type for common quote book errors
-#[derive(Debug, Display, Eq, PartialEq)]
+#[derive(Clone, Debug, Display, Eq, PartialEq)]
 pub enum Error {
     /// SCI: {0}
     Sci(SignedContingentInputError),
@@ -24,7 +24,7 @@ pub enum Error {
     /// Quote has a spent keyimage
     QuoteIsStale,
 
-    /// Ledger related error
+    /// Ledger: {0}
     Ledger(LedgerError),
 
     /// Quote cannot fulfill the desired amount ({0}) of base tokens

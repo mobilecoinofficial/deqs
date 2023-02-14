@@ -3,6 +3,7 @@
 use crate::{Error, Pair, QuoteId};
 use mc_transaction_extra::SignedContingentInput;
 use mc_transaction_types::TokenId;
+use serde::{Deserialize, Serialize};
 use std::{
     cmp::Ordering,
     ops::{Deref, RangeInclusive},
@@ -11,7 +12,7 @@ use std::{
 
 /// A single "quote" in the book. This is a wrapper around an SCI and some
 /// auxiliary data
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct Quote {
     /// SCI
     sci: SignedContingentInput,
