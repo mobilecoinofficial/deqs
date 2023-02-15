@@ -12,7 +12,7 @@ use rand::{rngs::StdRng, SeedableRng};
 
 use mc_account_keys::AccountKey;
 use mc_fog_report_validation_test_utils::MockFogResolver;
-use mc_ledger_db::test_utils::{
+use mc_ledger_db::test_utils::{ add_txos_to_ledger,
     add_txos_and_key_images_to_ledger, create_ledger, initialize_ledger,
 };
 use mc_transaction_builder::test_utils::get_transaction;
@@ -168,7 +168,7 @@ fn sci_that_are_added_to_ledger_are_removed_in_the_background(logger: Logger) {
     )
     .unwrap();
 
-    // Because the key image is already in the ledger, adding this sci should be removed in the background after waiting for the quotebook to sync
+    // Because the key image is already in the ledger, this sci should be removed in the background after waiting for the quotebook to sync
     std::thread::sleep(Duration::from_millis(1000));
 
     let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
@@ -228,4 +228,57 @@ fn cannot_add_sci_past_tombstone_block(logger: Logger) {
         synchronized_quote_book.add_sci(sci4, None).unwrap_err(),
         Error::QuoteIsStale
     );
+}
+
+#[test_with_logger]
+fn sci_past_tombstone_block_get_removed_in_the_background(logger: Logger) {
+    let pair = common::pair();
+    let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+
+    let mut ledger = create_and_initialize_test_ledger();
+    let internal_quote_book = InMemoryQuoteBook::default();
+    let starting_blocks = ledger.num_blocks().unwrap();
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), logger);
+
+    // Because the tombstone block is lower than the number blocks already in the
+    // ledger, adding this sci should fail
+    let mut sci_builder = common::create_sci_builder(&pair, 10, 20, &mut rng);
+    sci_builder.set_tombstone_block(ledger.num_blocks().unwrap());
+    let sci = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
+
+    let quote = synchronized_quote_book.add_sci(sci, None).unwrap();
+
+    assert_eq!(synchronized_quote_book.get_quotes(&pair, .., 0).unwrap(), vec![quote.clone()]);
+
+    let block_version = BlockVersion::MAX;
+    let fog_resolver = MockFogResolver::default();
+
+    let offerer_account = AccountKey::random(&mut rng);
+
+    let tx = get_transaction(
+        block_version,
+        TokenId::from(0),
+        2,
+        2,
+        &offerer_account,
+        &offerer_account,
+        fog_resolver,
+        &mut rng,
+    )
+    .unwrap();
+    add_txos_to_ledger(
+        &mut ledger,
+        BlockVersion::MAX,
+        &tx.prefix.outputs,
+        &mut rng,
+    )
+    .unwrap();
+    assert_eq!(ledger.num_blocks().unwrap(), starting_blocks+1);
+    // Because the ledger has advanced, this sci should be removed in the background after waiting for the quotebook to sync
+    std::thread::sleep(Duration::from_millis(1000));
+
+    let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
+    assert_eq!(quotes, vec![]);
+    
+
 }
