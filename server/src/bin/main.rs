@@ -29,7 +29,7 @@ async fn main() {
     assert_ne!(0, num_blocks);
 
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger_db);
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger_db, logger.clone());
 
     let mut server = Server::new(
         msg_bus_tx,

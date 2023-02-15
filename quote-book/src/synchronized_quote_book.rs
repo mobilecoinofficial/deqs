@@ -9,69 +9,39 @@ use mc_transaction_extra::SignedContingentInput;
 
 use std::{
     ops::RangeBounds, 
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    thread::{Builder as ThreadBuilder, JoinHandle},
+    thread::{Builder as ThreadBuilder},
     time::{Duration},
 };
 
 use mc_common::logger::{log, Logger};
 
 /// A wrapper for a quote book implementation that syncs quotes with the ledger
+#[derive(Clone)]
 pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + 'static> {
     /// Quotebook being synchronized to the ledger by the Synchronized Quotebook
     quote_book: Q,
 
     /// Ledger
     ledger: L,
-
-    /// Join handle used to wait for the thread to terminate.
-    join_handle: Option<JoinHandle<()>>,
-
-    /// Stop request trigger, used to signal the thread to stop.
-    stop_requested: Arc<AtomicBool>,
 }
 
 impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, L> {
     /// Create a new Synchronized Quotebook
     pub fn new(quote_book: Q, ledger: L, logger: Logger) -> Self {
-        let stop_requested = Arc::new(AtomicBool::new(false));
-        let thread_stop_requested = stop_requested.clone();
-
-        let join_handle = Some(
-            ThreadBuilder::new()
-                .name("LedgerDbFetcher".to_owned())
-                .spawn(move || {
-                    DbFetcherThread::start(
-                        ledger.clone(),
-                        quote_book.clone(),
-                        thread_stop_requested,
-                        0,
-                        logger
-                    )
-                })
-                .expect("Could not spawn thread"),
-        );
-        Self { quote_book, ledger, join_handle, stop_requested}
-    }
-
-    /// Stop and join the db poll thread
-    pub fn stop(&mut self) -> Result<(), ()> {
-        if let Some(join_handle) = self.join_handle.take() {
-            self.stop_requested.store(true, Ordering::SeqCst);
-            join_handle.join().map_err(|_| ())?;
-        }
-
-        Ok(())
-    }
-}
-
-
-impl<Q: QuoteBook, L: Ledger + Clone + 'static> Clone for SynchronizedQuoteBook<Q, L> {
-    fn clone(&self) -> Self {
-        *self
+        let ledger_clone = ledger.clone();
+        let quote_book_clone = quote_book.clone();
+        ThreadBuilder::new()
+            .name("LedgerDbFetcher".to_owned())
+            .spawn(move || {
+                DbFetcherThread::start(
+                    ledger_clone,
+                    quote_book_clone,
+                    0,
+                    logger
+                )
+            })
+            .expect("Could not spawn thread");
+        Self { quote_book, ledger}
     }
 }
 
@@ -141,34 +111,9 @@ where
     }
 }
 
-
-/// An object for managing background data fetches from the ledger database.
-pub struct DbFetcher {
-    /// Join handle used to wait for the thread to terminate.
-    join_handle: Option<JoinHandle<()>>,
-
-    /// Stop request trigger, used to signal the thread to stop.
-    stop_requested: Arc<AtomicBool>,
-}
-
-/// State that we want to expose from the db poll thread
-#[derive(Debug, Default)]
-pub struct DbPollSharedState {
-    /// The highest block count for which we can guarantee we have loaded all
-    /// available data.
-    pub highest_processed_block_count: u64,
-
-    /// The cumulative txo count of the last known block.
-    pub last_known_block_cumulative_txo_count: u64,
-
-    /// The latest value of `block_version` in the blockchain
-    pub latest_block_version: u32,
-}
-
 struct DbFetcherThread<DB: Ledger, Q: QuoteBook> {
     db: DB,
     quotebook: Q,
-    stop_requested: Arc<AtomicBool>,
     next_block_index: u64,
     logger: Logger,
 }
@@ -182,14 +127,12 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
     pub fn start(
         db: DB,
         quotebook: Q,
-        stop_requested: Arc<AtomicBool>,
         next_block_index: u64,
         logger: Logger,
     ) {
         let thread = Self {
             db,
             quotebook,
-            stop_requested,
             next_block_index,
             logger
         };
@@ -200,16 +143,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
         log::info!(self.logger, "Db fetcher thread started.");
         self.next_block_index = 0;
         loop {
-            if self.stop_requested.load(Ordering::SeqCst) {
-                log::info!(self.logger, "Db fetcher thread stop requested.");
-                break;
-            }
-
-            // Each call to load_block_data attempts to load one block for each known
-            // invocation. We want to keep loading blocks as long as we have data to load,
-            // but that could take some time which is why the loop is also gated
-            // on the stop trigger in case a stop is requested during loading.
-            while self.load_block_data() && !self.stop_requested.load(Ordering::SeqCst) {
+            while self.load_block_data() {
             }
             std::thread::sleep(Self::POLLING_FREQUENCY);
         }
@@ -238,7 +172,8 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                 for key_image in block_contents
                     .key_images
                 {
-                    self.quotebook.remove_quotes_by_key_image(&key_image);
+                    let quotes_removed = self.quotebook.remove_quotes_by_key_image(&key_image);
+                    log::info!(self.logger, "Removed Quotes {:?}", quotes_removed);
                 }
                 self.next_block_index += 1;
             }
