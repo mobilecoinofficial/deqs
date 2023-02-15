@@ -177,10 +177,7 @@ impl<OB: QuoteBook> ClientService<OB> {
                 let mut resp = RemoveQuoteResponse::default();
                 resp.set_quote((&quote).into());
 
-                if let Err(err) = self
-                    .msg_bus_tx
-                    .blocking_send(Msg::SciQuoteRemoved(quote))
-                {
+                if let Err(err) = self.msg_bus_tx.blocking_send(Msg::SciQuoteRemoved(quote)) {
                     log::error!(
                         logger,
                         "Failed to send SCI quote {} removed message to message bus: {:?}",
@@ -189,7 +186,7 @@ impl<OB: QuoteBook> ClientService<OB> {
                     );
                 }
 
-               Ok(resp)
+                Ok(resp)
             }
             Err(QuoteBookError::QuoteNotFound) => Err(RpcStatus::new(RpcStatusCode::NOT_FOUND)),
             Err(err) => {
@@ -321,6 +318,7 @@ mod tests {
         sync::{mpsc::channel, Arc},
         thread,
     };
+    use tokio::select;
 
     fn create_test_client_and_server<OB: QuoteBook>(
         quote_book: &OB,
@@ -589,10 +587,10 @@ mod tests {
     }
 
     #[test_with_logger]
-    fn streaming_works(logger: Logger) {
+    fn streaming_works_without_filtering(logger: Logger) {
         let pair = Pair {
-            base_token_id: TokenId::from(1),
-            counter_token_id: TokenId::from(2),
+            base_token_id: TokenId::from(0),
+            counter_token_id: TokenId::from(1),
         };
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
         let quote_book = InMemoryQuoteBook::default();
@@ -603,9 +601,7 @@ mod tests {
 
         let thread_client_api = client_api.clone();
         let _join_handle = thread::spawn(move || {
-            let req = LiveUpdatesRequest {
-                ..Default::default()
-            };
+            let req = LiveUpdatesRequest::default();
             let mut stream = thread_client_api
                 .live_updates(&req)
                 .expect("stream quotes failed");
@@ -648,5 +644,134 @@ mod tests {
 
         let resp = rx.recv().expect("recv failed");
         assert_eq!(resp.get_quote_removed(), added_quote.get_id());
+    }
+
+    #[test_with_logger]
+    fn streaming_works_and_filters_correctly(logger: Logger) {
+        let pair1 = Pair {
+            base_token_id: TokenId::from(1),
+            counter_token_id: TokenId::from(2),
+        };
+        let pair2 = Pair {
+            base_token_id: TokenId::from(1),
+            counter_token_id: TokenId::from(3),
+        };
+
+        let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+        let quote_book = InMemoryQuoteBook::default();
+        let (client_api, _server, _msg_bus_rx) =
+            create_test_client_and_server(&quote_book, &logger);
+
+        let (tx1, rx1) = channel();
+        let (tx2, rx2) = channel();
+
+        let thread_client_api = client_api.clone();
+        let _join_handle = thread::spawn(move || {
+            let mut req1 = LiveUpdatesRequest::default();
+            req1.set_pair((&pair1).into()); // Filter only to pair1
+            let mut stream1 = thread_client_api
+                .live_updates(&req1)
+                .expect("stream quotes failed");
+
+            let mut req2 = LiveUpdatesRequest::default();
+            req2.set_pair((&pair2).into()); // Filter only to pair2
+            let mut stream2 = thread_client_api
+                .live_updates(&req2)
+                .expect("stream quotes failed");
+
+            block_on(async {
+                loop {
+                    select! {
+                        resp = stream1.next() => {
+                            match resp {
+                                Some(Ok(resp)) => {
+                                    tx1.send(resp).expect("send failed");
+                                }
+                                _ => {
+                                    break;
+                                }
+                            }
+                        }
+                        resp = stream2.next() => {
+                            match resp {
+                                Some(Ok(resp)) => {
+                                    tx2.send(resp).expect("send failed");
+                                }
+                                _ => {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
+        // Initially, the receivers should be empty.
+        assert!(rx1.try_recv().is_err());
+        assert!(rx2.try_recv().is_err());
+
+        let pair1_sci1 = create_sci(
+            pair1.base_token_id,
+            pair1.counter_token_id,
+            10,
+            20,
+            &mut rng,
+        );
+        let pair1_sci2 = create_sci(
+            pair1.base_token_id,
+            pair1.counter_token_id,
+            10,
+            20,
+            &mut rng,
+        );
+        let pair2_sci1 = create_sci(
+            pair2.base_token_id,
+            pair2.counter_token_id,
+            10,
+            20,
+            &mut rng,
+        );
+        let pair2_sci2 = create_sci(
+            pair2.base_token_id,
+            pair2.counter_token_id,
+            10,
+            20,
+            &mut rng,
+        );
+        let req = SubmitQuotesRequest {
+            quotes: vec![
+                (&pair1_sci1).into(),
+                (&pair1_sci2).into(),
+                (&pair2_sci1).into(),
+                (&pair2_sci2).into(),
+            ]
+            .into(),
+            ..Default::default()
+        };
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+        assert_eq!(
+            resp.status_codes,
+            vec![
+                QuoteStatusCode::CREATED,
+                QuoteStatusCode::CREATED,
+                QuoteStatusCode::CREATED,
+                QuoteStatusCode::CREATED
+            ]
+        );
+
+        // We should now see our two pair1 quotes arrive in the first stream.
+        let resp = rx1.recv().expect("recv failed");
+        assert_eq!(resp.get_quote_added().get_pair(), &(&pair1).into());
+
+        let resp = rx1.recv().expect("recv failed");
+        assert_eq!(resp.get_quote_added().get_pair(), &(&pair1).into());
+
+        // And pair2 quotes on the second stream
+        let resp = rx2.recv().expect("recv failed");
+        assert_eq!(resp.get_quote_added().get_pair(), &(&pair2).into());
+
+        let resp = rx2.recv().expect("recv failed");
+        assert_eq!(resp.get_quote_added().get_pair(), &(&pair2).into());
     }
 }
