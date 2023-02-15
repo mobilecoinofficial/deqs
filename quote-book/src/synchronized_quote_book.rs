@@ -174,8 +174,11 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                     .key_images
                 {
                     let quotes_removed = self.quotebook.remove_quotes_by_key_image(&key_image);
-                    log::info!(self.logger, "Removed Quotes {:?}", quotes_removed);
+                    log::info!(self.logger, "Removed Quotes due to key_image {:?}", quotes_removed);
                 }
+                let quotes_removed = self.quotebook.remove_quotes_by_tombstone_block(self.next_block_index);
+                log::info!(self.logger, "Removed Quotes due to tombstone_block {:?}", quotes_removed);
+                
                 self.next_block_index += 1;
             }
         }
