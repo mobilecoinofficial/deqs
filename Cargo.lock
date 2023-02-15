@@ -1128,6 +1128,7 @@ dependencies = [
  "mc-account-keys",
  "mc-blockchain-test-utils",
  "mc-blockchain-types",
+ "mc-common",
  "mc-crypto-digestible",
  "mc-crypto-ring-signature",
  "mc-crypto-ring-signature-signer",
