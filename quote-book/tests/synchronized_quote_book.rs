@@ -15,6 +15,8 @@ use mc_ledger_db::test_utils::{
 };
 use mc_transaction_builder::test_utils::get_transaction;
 use mc_transaction_core::TokenId;
+use mc_common::logger::{Logger, test_with_logger};
+
 
 fn create_and_initialize_test_ledger() -> LedgerDB {
     //Create a ledger_db
@@ -30,51 +32,51 @@ fn create_and_initialize_test_ledger() -> LedgerDB {
     ledger
 }
 
-#[test]
-fn basic_happy_flow() {
+#[test_with_logger]
+fn basic_happy_flow(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger);
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger, logger);
     common::basic_happy_flow(&synchronized_quote_book);
 }
 
-#[test]
-fn cannot_add_invalid_sci() {
+#[test_with_logger]
+fn cannot_add_invalid_sci(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger);
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger, logger);
     common::cannot_add_invalid_sci(&synchronized_quote_book);
 }
 
-#[test]
-fn get_quotes_filtering_works() {
+#[test_with_logger]
+fn get_quotes_filtering_works(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger);
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger, logger);
     common::get_quotes_filtering_works(&synchronized_quote_book);
 }
 
-#[test]
-fn get_quote_ids_works() {
+#[test_with_logger]
+fn get_quote_ids_works(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger);
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger, logger);
     common::get_quote_ids_works(&synchronized_quote_book);
 }
 
-#[test]
-fn get_quote_by_id_works() {
+#[test_with_logger]
+fn get_quote_by_id_works(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger);
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger, logger);
     common::get_quote_by_id_works(&synchronized_quote_book);
 }
 
-#[test]
-fn cannot_add_sci_with_key_image_in_ledger() {
+#[test_with_logger]
+fn cannot_add_sci_with_key_image_in_ledger(logger: Logger) {
     let mut ledger = create_and_initialize_test_ledger();
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone());
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), logger);
 
     let pair = common::pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
@@ -121,14 +123,14 @@ fn cannot_add_sci_with_key_image_in_ledger() {
     assert_eq!(quotes, vec![quote.clone()]);
 }
 
-#[test]
-fn cannot_add_sci_past_tombstone_block() {
+#[test_with_logger]
+fn cannot_add_sci_past_tombstone_block(logger: Logger) {
     let pair = common::pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
     let ledger = create_and_initialize_test_ledger();
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone());
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), logger);
 
     // Because the tombstone block is lower than the number blocks already in the
     // ledger, adding this sci should fail
