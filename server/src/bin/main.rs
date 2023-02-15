@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create quote book
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger_db);
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger_db, logger.clone());
 
     // Init p2p network
     let (mut p2p, mut p2p_events) = P2P::new(
