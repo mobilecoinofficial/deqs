@@ -173,21 +173,23 @@ impl<OB: QuoteBook> ClientService<OB> {
         match self.quote_book.remove_quote_by_id(&quote_id) {
             Ok(quote) => {
                 log::info!(self.logger, "Quote {} removed", quote.id());
+
+                let mut resp = RemoveQuoteResponse::default();
+                resp.set_quote((&quote).into());
+
                 if let Err(err) = self
                     .msg_bus_tx
-                    .blocking_send(Msg::SciQuoteRemoved(quote_id))
+                    .blocking_send(Msg::SciQuoteRemoved(quote))
                 {
                     log::error!(
                         logger,
                         "Failed to send SCI quote {} removed message to message bus: {:?}",
-                        quote.id(),
+                        quote_id,
                         err
                     );
                 }
 
-                let mut resp = RemoveQuoteResponse::default();
-                resp.set_quote((&quote).into());
-                Ok(resp)
+               Ok(resp)
             }
             Err(QuoteBookError::QuoteNotFound) => Err(RpcStatus::new(RpcStatusCode::NOT_FOUND)),
             Err(err) => {
@@ -198,14 +200,41 @@ impl<OB: QuoteBook> ClientService<OB> {
     }
 
     async fn live_updates_impl(
+        req: LiveUpdatesRequest,
         mut responses: ServerStreamingSink<LiveUpdate>,
         mut msg_bus_rx: Receiver<Msg>,
     ) -> Result<(), grpcio::Error> {
+        let filter_for_pair = {
+            let pair = Pair::from(req.get_pair());
+            if *pair.base_token_id == 0 && *pair.counter_token_id == 0 {
+                None
+            } else {
+                Some(pair)
+            }
+        };
+
         while let Some(msg) = msg_bus_rx.recv().await {
             let mut live_update = LiveUpdate::default();
             match msg {
-                Msg::SciQuoteAdded(quote) => live_update.set_quote_added((&quote).into()),
-                Msg::SciQuoteRemoved(quote) => live_update.set_quote_removed((&quote).into()),
+                Msg::SciQuoteAdded(quote) => {
+                    if let Some(pair) = filter_for_pair {
+                        if quote.pair() != &pair {
+                            continue;
+                        }
+                    }
+
+                    live_update.set_quote_added((&quote).into());
+                }
+
+                Msg::SciQuoteRemoved(quote) => {
+                    if let Some(pair) = filter_for_pair {
+                        if quote.pair() != &pair {
+                            continue;
+                        }
+                    }
+
+                    live_update.set_quote_removed(quote.id().into());
+                }
             };
             responses.send((live_update, WriteFlags::default())).await?;
         }
@@ -254,7 +283,7 @@ impl<OB: QuoteBook> DeqsClientApi for ClientService<OB> {
     fn live_updates(
         &mut self,
         ctx: RpcContext<'_>,
-        _req: LiveUpdatesRequest,
+        req: LiveUpdatesRequest,
         responses: ServerStreamingSink<LiveUpdate>,
     ) {
         let receiver = self.msg_bus_tx.subscribe();
@@ -262,11 +291,12 @@ impl<OB: QuoteBook> DeqsClientApi for ClientService<OB> {
         scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
             let logger = logger.clone();
 
-            let future = Self::live_updates_impl(responses, receiver).map(move |future_result| {
-                if let Err(err) = future_result {
-                    log::error!(logger, "live_updates_impl failed: {:?}", err);
-                }
-            });
+            let future =
+                Self::live_updates_impl(req, responses, receiver).map(move |future_result| {
+                    if let Err(err) = future_result {
+                        log::error!(logger, "live_updates_impl failed: {:?}", err);
+                    }
+                });
             ctx.spawn(future)
         })
     }
