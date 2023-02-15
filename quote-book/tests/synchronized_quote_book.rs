@@ -2,6 +2,8 @@
 
 mod common;
 
+use std::time::Duration;
+
 use deqs_quote_book::{Error, InMemoryQuoteBook, QuoteBook, SynchronizedQuoteBook};
 use mc_blockchain_types::BlockVersion;
 use mc_crypto_ring_signature_signer::NoKeysRingSigner;
@@ -121,6 +123,58 @@ fn cannot_add_sci_with_key_image_in_ledger(logger: Logger) {
 
     let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
     assert_eq!(quotes, vec![quote.clone()]);
+}
+
+#[test_with_logger]
+fn sci_that_are_added_to_ledger_are_removed_in_the_background(logger: Logger) {
+    let mut ledger = create_and_initialize_test_ledger();
+    let internal_quote_book = InMemoryQuoteBook::default();
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), logger);
+
+    let pair = common::pair();
+    let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+
+    let sci_builder = common::create_sci_builder(&pair, 10, 20, &mut rng);
+    let sci = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
+    let key_image =sci.key_image();
+    // Adding a quote that isn't already in the ledger should work
+    let quote = synchronized_quote_book.add_sci(sci, None).unwrap();
+
+    let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
+    assert_eq!(quotes, vec![quote.clone()]);
+    
+    let block_version = BlockVersion::MAX;
+    let fog_resolver = MockFogResolver::default();
+
+    let offerer_account = AccountKey::random(&mut rng);
+
+    let tx = get_transaction(
+        block_version,
+        TokenId::from(0),
+        2,
+        2,
+        &offerer_account,
+        &offerer_account,
+        fog_resolver,
+        &mut rng,
+    )
+    .unwrap();
+    add_txos_and_key_images_to_ledger(
+        &mut ledger,
+        BlockVersion::MAX,
+        tx.prefix.outputs,
+        vec![key_image],
+        &mut rng,
+    )
+    .unwrap();
+
+    // Because the key image is already in the ledger, adding this sci should be removed in the background after waiting for the quotebook to sync
+    std::thread::sleep(Duration::from_millis(1000));
+
+    let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
+    assert_eq!(quotes, vec![]);
+
+
 }
 
 #[test_with_logger]
