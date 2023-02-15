@@ -4,22 +4,74 @@ use crate::{Error as QuoteBookError, Pair, Quote, QuoteBook, QuoteId};
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
 use mc_ledger_db::Ledger;
+use mc_ledger_db::Error as LedgerError;
 use mc_transaction_extra::SignedContingentInput;
-use std::ops::RangeBounds;
+
+use std::{
+    ops::RangeBounds, 
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread::{Builder as ThreadBuilder, JoinHandle},
+    time::{Duration},
+};
+
+use mc_common::logger::{log, Logger};
 
 /// A wrapper for a quote book implementation that syncs quotes with the ledger
-#[derive(Clone)]
 pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + 'static> {
     /// Quotebook being synchronized to the ledger by the Synchronized Quotebook
     quote_book: Q,
 
+    /// Ledger
     ledger: L,
+
+    /// Join handle used to wait for the thread to terminate.
+    join_handle: Option<JoinHandle<()>>,
+
+    /// Stop request trigger, used to signal the thread to stop.
+    stop_requested: Arc<AtomicBool>,
 }
 
 impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, L> {
     /// Create a new Synchronized Quotebook
-    pub fn new(quote_book: Q, ledger: L) -> Self {
-        Self { quote_book, ledger }
+    pub fn new(quote_book: Q, ledger: L, logger: Logger) -> Self {
+        let stop_requested = Arc::new(AtomicBool::new(false));
+        let thread_stop_requested = stop_requested.clone();
+
+        let join_handle = Some(
+            ThreadBuilder::new()
+                .name("LedgerDbFetcher".to_owned())
+                .spawn(move || {
+                    DbFetcherThread::start(
+                        ledger.clone(),
+                        quote_book.clone(),
+                        thread_stop_requested,
+                        0,
+                        logger
+                    )
+                })
+                .expect("Could not spawn thread"),
+        );
+        Self { quote_book, ledger, join_handle, stop_requested}
+    }
+
+    /// Stop and join the db poll thread
+    pub fn stop(&mut self) -> Result<(), ()> {
+        if let Some(join_handle) = self.join_handle.take() {
+            self.stop_requested.store(true, Ordering::SeqCst);
+            join_handle.join().map_err(|_| ())?;
+        }
+
+        Ok(())
+    }
+}
+
+
+impl<Q: QuoteBook, L: Ledger + Clone + 'static> Clone for SynchronizedQuoteBook<Q, L> {
+    fn clone(&self) -> Self {
+        *self
     }
 }
 
@@ -88,6 +140,113 @@ where
         self.quote_book.get_quote_by_id(id)
     }
 }
+
+
+/// An object for managing background data fetches from the ledger database.
+pub struct DbFetcher {
+    /// Join handle used to wait for the thread to terminate.
+    join_handle: Option<JoinHandle<()>>,
+
+    /// Stop request trigger, used to signal the thread to stop.
+    stop_requested: Arc<AtomicBool>,
+}
+
+/// State that we want to expose from the db poll thread
+#[derive(Debug, Default)]
+pub struct DbPollSharedState {
+    /// The highest block count for which we can guarantee we have loaded all
+    /// available data.
+    pub highest_processed_block_count: u64,
+
+    /// The cumulative txo count of the last known block.
+    pub last_known_block_cumulative_txo_count: u64,
+
+    /// The latest value of `block_version` in the blockchain
+    pub latest_block_version: u32,
+}
+
+struct DbFetcherThread<DB: Ledger, Q: QuoteBook> {
+    db: DB,
+    quotebook: Q,
+    stop_requested: Arc<AtomicBool>,
+    next_block_index: u64,
+    logger: Logger,
+}
+
+/// Background worker thread implementation that takes care of periodically
+/// polling data out of the database. Add join handle
+impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
+    const POLLING_FREQUENCY: Duration = Duration::from_millis(10);
+    const ERROR_RETRY_FREQUENCY: Duration = Duration::from_millis(1000);
+
+    pub fn start(
+        db: DB,
+        quotebook: Q,
+        stop_requested: Arc<AtomicBool>,
+        next_block_index: u64,
+        logger: Logger,
+    ) {
+        let thread = Self {
+            db,
+            quotebook,
+            stop_requested,
+            next_block_index,
+            logger
+        };
+        thread.run();
+    }
+
+    fn run(mut self) {
+        log::info!(self.logger, "Db fetcher thread started.");
+        self.next_block_index = 0;
+        loop {
+            if self.stop_requested.load(Ordering::SeqCst) {
+                log::info!(self.logger, "Db fetcher thread stop requested.");
+                break;
+            }
+
+            // Each call to load_block_data attempts to load one block for each known
+            // invocation. We want to keep loading blocks as long as we have data to load,
+            // but that could take some time which is why the loop is also gated
+            // on the stop trigger in case a stop is requested during loading.
+            while self.load_block_data() && !self.stop_requested.load(Ordering::SeqCst) {
+            }
+            std::thread::sleep(Self::POLLING_FREQUENCY);
+        }
+    }
+
+    /// Attempt to load the next block that we
+    /// are aware of and remove quotes that match key images from it.
+    /// Returns true if we might have more block data to load.
+    fn load_block_data(&mut self) -> bool {
+        // Default to true: if there is an error, we may have more work, we don't know
+        let mut may_have_more_work = true;
+
+        match self.db.get_block_contents(self.next_block_index) {
+            Err(LedgerError::NotFound) => may_have_more_work = false,
+            Err(e) => {
+                log::error!(
+                    self.logger,
+                    "Unexpected error when checking for block data {}: {:?}",
+                    self.next_block_index,
+                    e
+                );
+                std::thread::sleep(Self::ERROR_RETRY_FREQUENCY);
+            }
+            Ok(block_contents) => {
+                // Filter keyimages in quotebook
+                for key_image in block_contents
+                    .key_images
+                {
+                    self.quotebook.remove_quotes_by_key_image(&key_image);
+                }
+                self.next_block_index += 1;
+            }
+        }
+        may_have_more_work
+    }
+}
+
 
 #[cfg(test)]
 mod tests {

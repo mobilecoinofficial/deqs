@@ -9,6 +9,7 @@ displaydoc = "0.2"
 hex = "0.4"
 
 mc-blockchain-types = { path = "../mobilecoin/blockchain/types" }
+mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
 mc-crypto-digestible = { path = "../mobilecoin/crypto/digestible" }
 mc-crypto-ring-signature = { path = "../mobilecoin/crypto/ring-signature" }
 mc-ledger-db = { path = "../mobilecoin/ledger/db", features = ["test_utils"] }
