@@ -14,7 +14,10 @@ use std::{
 };
 
 use mc_common::logger::{log, Logger};
-
+use postage::{
+    broadcast::Sender, prelude::Sink
+};
+use crate::{Msg};
 /// A wrapper for a quote book implementation that syncs quotes with the ledger
 #[derive(Clone)]
 pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + 'static> {
@@ -27,7 +30,7 @@ pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + 'static> {
 
 impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, L> {
     /// Create a new Synchronized Quotebook
-    pub fn new(quote_book: Q, ledger: L, logger: Logger) -> Self {
+    pub fn new(quote_book: Q, ledger: L, msg_bus_tx: Sender<Msg>, logger: Logger) -> Self {
         let ledger_clone = ledger.clone();
         let quote_book_clone = quote_book.clone();
         ThreadBuilder::new()
@@ -36,6 +39,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
                 DbFetcherThread::start(
                     ledger_clone,
                     quote_book_clone,
+                    msg_bus_tx,
                     0,
                     logger
                 )
@@ -115,6 +119,8 @@ where
 struct DbFetcherThread<DB: Ledger, Q: QuoteBook> {
     db: DB,
     quotebook: Q,
+    /// Message bus sender.
+    msg_bus_tx: Sender<Msg>,
     next_block_index: u64,
     logger: Logger,
 }
@@ -128,12 +134,14 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
     pub fn start(
         db: DB,
         quotebook: Q,
+        msg_bus_tx: Sender<Msg>,
         next_block_index: u64,
         logger: Logger,
     ) {
         let thread = Self {
             db,
             quotebook,
+            msg_bus_tx,
             next_block_index,
             logger
         };
@@ -148,9 +156,28 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
             while self.load_block_data() {
             }
             if self.next_block_index != starting_block_index
-            {
-                let quotes_removed = self.quotebook.remove_quotes_by_tombstone_block(self.next_block_index);
-                log::info!(self.logger, "Removed Quotes due to tombstone_block {:?}", quotes_removed);
+            {    
+                match self.quotebook.remove_quotes_by_tombstone_block(self.next_block_index) {
+                    Ok(quotes) => {
+                        for quote in quotes {
+                            log::info!(self.logger, "Quote {} removed", quote.id());
+                            if let Err(err) = self
+                                .msg_bus_tx
+                                .blocking_send(Msg::SciQuoteRemoved(*quote.id()))
+                            {
+                                log::error!(
+                                    self.logger,
+                                    "Failed to send SCI quote {} removed message to message bus: {:?}",
+                                    quote.id(),
+                                    err
+                                );
+                            }
+                        }
+                    }
+                    Err(err) => {
+                        log::error!(self.logger, "Failed to sync to block_index {}: {:?}", self.next_block_index, err);
+                    }
+                }
             }
             std::thread::sleep(Self::POLLING_FREQUENCY);
         }
@@ -179,8 +206,27 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                 for key_image in block_contents
                     .key_images
                 {
-                    let quotes_removed = self.quotebook.remove_quotes_by_key_image(&key_image);
-                    log::info!(self.logger, "Removed Quotes due to key_image {:?}", quotes_removed);
+                    match self.quotebook.remove_quotes_by_key_image(&key_image) {
+                        Ok(quotes) => {
+                            for quote in quotes {
+                                log::info!(self.logger, "Quote {} removed", quote.id());
+                                if let Err(err) = self
+                                    .msg_bus_tx
+                                    .blocking_send(Msg::SciQuoteRemoved(*quote.id()))
+                                {
+                                    log::error!(
+                                        self.logger,
+                                        "Failed to send SCI quote {} removed message to message bus: {:?}",
+                                        quote.id(),
+                                        err
+                                    );
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            log::error!(self.logger, "Failed to remove key_image {}: {:?}", key_image, err);
+                        }
+                    }
                 }                
                 self.next_block_index += 1;
             }

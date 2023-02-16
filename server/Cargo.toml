@@ -41,7 +41,6 @@ tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros", "time"
 
 [dev-dependencies]
 deqs-mc-test-utils = { path = "../mc-test-utils" }
-deqs-quote-book = { path = "../quote-book" , features = ["test_utils"]}
 
 mc-transaction-types = { path = "../mobilecoin/transaction/types" }
 rand_core = "0.6"
