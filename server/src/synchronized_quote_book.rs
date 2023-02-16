@@ -206,8 +206,27 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                 for key_image in block_contents
                     .key_images
                 {
-                    let quotes_removed = self.quotebook.remove_quotes_by_key_image(&key_image);
-                    log::info!(self.logger, "Removed Quotes due to key_image {:?}", quotes_removed);
+                    match self.quotebook.remove_quotes_by_key_image(&key_image) {
+                        Ok(quotes) => {
+                            for quote in quotes {
+                                log::info!(self.logger, "Quote {} removed", quote.id());
+                                if let Err(err) = self
+                                    .msg_bus_tx
+                                    .blocking_send(Msg::SciQuoteRemoved(*quote.id()))
+                                {
+                                    log::error!(
+                                        self.logger,
+                                        "Failed to send SCI quote {} removed message to message bus: {:?}",
+                                        quote.id(),
+                                        err
+                                    );
+                                }
+                            }
+                        }
+                        Err(err) => {
+                            log::error!(self.logger, "Failed to remove key_image {}: {:?}", key_image, err);
+                        }
+                    }
                 }                
                 self.next_block_index += 1;
             }
