@@ -18,7 +18,9 @@ deqs-p2p = { path = "../p2p" }
 deqs-quote-book = { path = "../quote-book" }
 
 mc-api = { path = "../mobilecoin/api" }
+mc-blockchain-types = { path = "../mobilecoin/blockchain/types" }
 mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
+mc-crypto-ring-signature = { path = "../mobilecoin/crypto/ring-signature" }
 mc-ledger-db = { path = "../mobilecoin/ledger/db" }
 mc-transaction-extra = { path = "../mobilecoin/transaction/extra" }
 mc-util-grpc = { path = "../mobilecoin/util/grpc" }
@@ -39,7 +41,14 @@ tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros", "time"
 
 [dev-dependencies]
 deqs-mc-test-utils = { path = "../mc-test-utils" }
+deqs-quote-book = { path = "../quote-book" , features = ["test_utils"]}
 
 mc-transaction-types = { path = "../mobilecoin/transaction/types" }
-
+rand_core = "0.6"
 rand = "0.8"
+
+mc-account-keys = { path = "../mobilecoin/account-keys" }
+mc-crypto-ring-signature-signer = { path = "../mobilecoin/crypto/ring-signature/signer", default-features = false }
+mc-fog-report-validation-test-utils = { path = "../mobilecoin/fog/report/validation/test-utils" }
+mc-transaction-builder = { path = "../mobilecoin/transaction/builder", features = ["test-only"] }
+mc-transaction-core = { path = "../mobilecoin/transaction/core" }
