@@ -1068,7 +1068,6 @@ dependencies = [
  "mc-blockchain-types",
  "mc-crypto-digestible",
  "mc-crypto-ring-signature",
- "mc-ledger-db",
  "mc-transaction-core",
  "mc-transaction-extra",
  "mc-transaction-types",
