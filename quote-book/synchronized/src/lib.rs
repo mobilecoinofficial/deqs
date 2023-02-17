@@ -211,7 +211,7 @@ mod tests {
         let quote = synchronized_quote_book.add_sci(sci, None).unwrap();
 
         let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
-        assert_eq!(quotes, vec![quote.clone()]);
+        assert_eq!(quotes, vec![quote]);
     }
 
     #[test]
@@ -254,7 +254,7 @@ mod tests {
         let quote3 = synchronized_quote_book.add_sci(sci3, None).unwrap();
 
         let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
-        assert_eq!(quotes, vec![quote2.clone(), quote3.clone()]);
+        assert_eq!(quotes, vec![quote2, quote3]);
 
         // Because the tombstone block is equal to the current block index, adding this
         // sci should fail
