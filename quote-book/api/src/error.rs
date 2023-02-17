@@ -6,7 +6,7 @@ use mc_transaction_extra::SignedContingentInputError;
 use std::sync::PoisonError;
 
 /// Type for common quote book errors
-#[derive(Clone, Debug, Display, Eq, PartialEq)]
+#[derive(Debug, Display)]
 pub enum Error {
     /// SCI: {0}
     Sci(SignedContingentInputError),

@@ -1,5 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+#![feature(assert_matches)]
+
 use deqs_quote_book_api::{Error, Pair, Quote, QuoteBook, QuoteId};
 use mc_account_keys::AccountKey;
 use mc_crypto_ring_signature::Error as RingSignatureError;
@@ -10,7 +12,7 @@ use mc_transaction_extra::{SignedContingentInput, SignedContingentInputError};
 use mc_transaction_types::{Amount, TokenId};
 use rand::{rngs::StdRng, SeedableRng};
 use rand_core::{CryptoRng, RngCore};
-use std::collections::HashSet;
+use std::{assert_matches::assert_matches, collections::HashSet};
 
 /// Default test pair
 pub fn pair() -> Pair {
@@ -104,9 +106,9 @@ pub fn basic_happy_flow(quote_book: &impl QuoteBook) {
     assert_eq!(quotes, vec![quote2.clone()]);
 
     // Can't remove the quote again
-    assert_eq!(
-        quote_book.remove_quote_by_id(quote.id()).unwrap_err(),
-        Error::QuoteNotFound
+    assert_matches!(
+        quote_book.remove_quote_by_id(quote.id()),
+        Err(Error::QuoteNotFound)
     );
     assert_eq!(
         quote_book
@@ -186,20 +188,22 @@ pub fn cannot_add_invalid_sci(quote_book: &impl QuoteBook) {
 
     let sci = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
 
-    assert_eq!(
-        quote_book.add_sci(sci, None).unwrap_err(),
-        Error::UnsupportedSci("Unsupported number of required/partial outputs 2/0".into())
+    assert_matches!(
+        quote_book.add_sci(sci, None),
+        Err(Error::UnsupportedSci(
+           err
+        )) if err == "Unsupported number of required/partial outputs 2/0"
     );
 
     // Make an SCI invalid by messing with the MLSAG
     let mut sci = create_sci(&pair, 10, 20, &mut rng);
     sci.mlsag.responses.pop();
 
-    assert_eq!(
-        quote_book.add_sci(sci, None).unwrap_err(),
-        Error::Sci(SignedContingentInputError::RingSignature(
-            RingSignatureError::LengthMismatch(22, 21),
-        ))
+    assert_matches!(
+        quote_book.add_sci(sci, None),
+        Err(Error::Sci(SignedContingentInputError::RingSignature(
+            RingSignatureError::LengthMismatch(provided, required),
+        ))) if provided == 22 && required == 21
     );
 }
 

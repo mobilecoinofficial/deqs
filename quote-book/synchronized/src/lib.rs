@@ -1,5 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+#![feature(assert_matches)]
+
 use deqs_quote_book_api::{Error, Pair, Quote, QuoteBook, QuoteId};
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
@@ -93,6 +95,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches::assert_matches;
+
     use super::*;
     use deqs_quote_book_in_memory::InMemoryQuoteBook;
     use deqs_quote_book_test_suite as test_suite;
@@ -201,9 +205,9 @@ mod tests {
         .unwrap();
 
         // Because the key image is already in the ledger, adding this sci should fail
-        assert_eq!(
-            synchronized_quote_book.add_sci(sci, None).unwrap_err(),
-            Error::QuoteIsStale
+        assert_matches!(
+            synchronized_quote_book.add_sci(sci, None),
+            Err(Error::QuoteIsStale)
         );
 
         // Adding a quote that isn't already in the ledger should work
@@ -230,9 +234,9 @@ mod tests {
         sci_builder.set_tombstone_block(ledger.num_blocks().unwrap() - 2);
         let sci = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
 
-        assert_eq!(
-            synchronized_quote_book.add_sci(sci, None).unwrap_err(),
-            Error::QuoteIsStale
+        assert_matches!(
+            synchronized_quote_book.add_sci(sci, None),
+            Err(Error::QuoteIsStale)
         );
 
         // Because the tombstone block is higher than the block index of the highest
@@ -262,9 +266,9 @@ mod tests {
         sci_builder4.set_tombstone_block(ledger.num_blocks().unwrap() - 1);
         let sci4 = sci_builder4.build(&NoKeysRingSigner {}, &mut rng).unwrap();
 
-        assert_eq!(
-            synchronized_quote_book.add_sci(sci4, None).unwrap_err(),
-            Error::QuoteIsStale
+        assert_matches!(
+            synchronized_quote_book.add_sci(sci4, None),
+            Err(Error::QuoteIsStale)
         );
     }
 }

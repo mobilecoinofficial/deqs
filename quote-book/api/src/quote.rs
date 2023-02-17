@@ -478,7 +478,7 @@ mod tests {
 
         // We can only calculate cost for the exact amount of base tokens since this is
         // not a partial fill.
-        assert_eq!(quote.counter_tokens_cost(10), Ok(20));
+        assert_eq!(quote.counter_tokens_cost(10).unwrap(), 20);
         assert!(quote.counter_tokens_cost(9).is_err());
         assert!(quote.counter_tokens_cost(11).is_err());
         assert!(quote.counter_tokens_cost(0).is_err());
@@ -493,9 +493,9 @@ mod tests {
         // Trading at a ratio of 1 base token to 10 counter tokens
         let sci = create_partial_sci(&pair, 10, 0, 0, 100, &mut rng);
         let quote = Quote::try_from(sci).unwrap();
-        assert_eq!(quote.counter_tokens_cost(10), Ok(100));
-        assert_eq!(quote.counter_tokens_cost(5), Ok(50));
-        assert_eq!(quote.counter_tokens_cost(0), Ok(0));
+        assert_eq!(quote.counter_tokens_cost(10).unwrap(), 100);
+        assert_eq!(quote.counter_tokens_cost(5).unwrap(), 50);
+        assert_eq!(quote.counter_tokens_cost(0).unwrap(), 0);
 
         assert!(quote.counter_tokens_cost(11).is_err());
         assert!(quote.counter_tokens_cost(u64::MAX).is_err());
@@ -503,13 +503,13 @@ mod tests {
         // Trading at a ratio of 10 base token to 1 counter tokens
         let sci = create_partial_sci(&pair, 100, 0, 0, 10, &mut rng);
         let quote = Quote::try_from(sci).unwrap();
-        assert_eq!(quote.counter_tokens_cost(100), Ok(10));
-        assert_eq!(quote.counter_tokens_cost(50), Ok(5));
-        assert_eq!(quote.counter_tokens_cost(51), Ok(5));
-        assert_eq!(quote.counter_tokens_cost(59), Ok(5));
-        assert_eq!(quote.counter_tokens_cost(60), Ok(6));
-        assert_eq!(quote.counter_tokens_cost(1), Ok(0)); // rounding down, 1 token is not enough to get any counter tokens
-        assert_eq!(quote.counter_tokens_cost(0), Ok(0));
+        assert_eq!(quote.counter_tokens_cost(100).unwrap(), 10);
+        assert_eq!(quote.counter_tokens_cost(50).unwrap(), 5);
+        assert_eq!(quote.counter_tokens_cost(51).unwrap(), 5);
+        assert_eq!(quote.counter_tokens_cost(59).unwrap(), 5);
+        assert_eq!(quote.counter_tokens_cost(60).unwrap(), 6);
+        assert_eq!(quote.counter_tokens_cost(1).unwrap(), 0); // rounding down, 1 token is not enough to get any counter tokens
+        assert_eq!(quote.counter_tokens_cost(0).unwrap(), 0);
 
         assert!(quote.counter_tokens_cost(101).is_err());
         assert!(quote.counter_tokens_cost(u64::MAX).is_err());
@@ -523,8 +523,8 @@ mod tests {
         // Trading at a ratio of 1 base token to 10 counter tokens
         let sci = create_partial_sci(&pair, 10, 7, 0, 100, &mut rng);
         let quote = Quote::try_from(sci).unwrap();
-        assert_eq!(quote.counter_tokens_cost(10), Ok(100));
-        assert_eq!(quote.counter_tokens_cost(7), Ok(70));
+        assert_eq!(quote.counter_tokens_cost(10).unwrap(), 100);
+        assert_eq!(quote.counter_tokens_cost(7).unwrap(), 70);
 
         assert!(quote.counter_tokens_cost(6).is_err()); // below the min fill amount
         assert!(quote.counter_tokens_cost(0).is_err()); // below the min fill amount
@@ -534,10 +534,10 @@ mod tests {
         // Trading at a ratio of 10 base token to 1 counter tokens
         let sci = create_partial_sci(&pair, 100, 55, 0, 10, &mut rng);
         let quote = Quote::try_from(sci).unwrap();
-        assert_eq!(quote.counter_tokens_cost(100), Ok(10));
-        assert_eq!(quote.counter_tokens_cost(55), Ok(5)); // rounding down
-        assert_eq!(quote.counter_tokens_cost(59), Ok(5)); // rounding down
-        assert_eq!(quote.counter_tokens_cost(60), Ok(6));
+        assert_eq!(quote.counter_tokens_cost(100).unwrap(), 10);
+        assert_eq!(quote.counter_tokens_cost(55).unwrap(), 5); // rounding down
+        assert_eq!(quote.counter_tokens_cost(59).unwrap(), 5); // rounding down
+        assert_eq!(quote.counter_tokens_cost(60).unwrap(), 6);
 
         assert!(quote.counter_tokens_cost(0).is_err()); // below the min fill amount
         assert!(quote.counter_tokens_cost(1).is_err()); // below the min fill amount
@@ -555,10 +555,10 @@ mod tests {
         // Trading at a ratio of 1 base token to 10 counter tokens
         let sci = create_partial_sci(&pair, 10, 0, 3, 100, &mut rng);
         let quote = Quote::try_from(sci).unwrap();
-        assert_eq!(quote.counter_tokens_cost(7), Ok(70));
-        assert_eq!(quote.counter_tokens_cost(6), Ok(60));
-        assert_eq!(quote.counter_tokens_cost(1), Ok(10));
-        assert_eq!(quote.counter_tokens_cost(0), Ok(0));
+        assert_eq!(quote.counter_tokens_cost(7).unwrap(), 70);
+        assert_eq!(quote.counter_tokens_cost(6).unwrap(), 60);
+        assert_eq!(quote.counter_tokens_cost(1).unwrap(), 10);
+        assert_eq!(quote.counter_tokens_cost(0).unwrap(), 0);
 
         assert!(quote.counter_tokens_cost(8).is_err()); // we need to be able to pay 3 out of the 10 back, 8 will only leave out 2
         assert!(quote.counter_tokens_cost(u64::MAX).is_err());
@@ -566,12 +566,12 @@ mod tests {
         // Trading at a ratio of 10 base token to 1 counter tokens
         let sci = create_partial_sci(&pair, 100, 0, 30, 10, &mut rng);
         let quote = Quote::try_from(sci).unwrap();
-        assert_eq!(quote.counter_tokens_cost(70), Ok(7));
-        assert_eq!(quote.counter_tokens_cost(60), Ok(6));
-        assert_eq!(quote.counter_tokens_cost(61), Ok(6));
-        assert_eq!(quote.counter_tokens_cost(69), Ok(6));
-        assert_eq!(quote.counter_tokens_cost(1), Ok(0)); // rounding down, 1 token is not enough to get any counter tokens
-        assert_eq!(quote.counter_tokens_cost(0), Ok(0));
+        assert_eq!(quote.counter_tokens_cost(70).unwrap(), 7);
+        assert_eq!(quote.counter_tokens_cost(60).unwrap(), 6);
+        assert_eq!(quote.counter_tokens_cost(61).unwrap(), 6);
+        assert_eq!(quote.counter_tokens_cost(69).unwrap(), 6);
+        assert_eq!(quote.counter_tokens_cost(1).unwrap(), 0); // rounding down, 1 token is not enough to get any counter tokens
+        assert_eq!(quote.counter_tokens_cost(0).unwrap(), 0);
 
         assert!(quote.counter_tokens_cost(71).is_err()); // exceeds max available (since we require a change of 30 this allows for up to
                                                          // 70 to be swapped)
@@ -589,9 +589,9 @@ mod tests {
         // and required change is 3, leaving 7)
         let sci = create_partial_sci(&pair, 10, 5, 3, 100, &mut rng);
         let quote = Quote::try_from(sci).unwrap();
-        assert_eq!(quote.counter_tokens_cost(7), Ok(70));
-        assert_eq!(quote.counter_tokens_cost(6), Ok(60));
-        assert_eq!(quote.counter_tokens_cost(5), Ok(50));
+        assert_eq!(quote.counter_tokens_cost(7).unwrap(), 70);
+        assert_eq!(quote.counter_tokens_cost(6).unwrap(), 60);
+        assert_eq!(quote.counter_tokens_cost(5).unwrap(), 50);
 
         assert!(quote.counter_tokens_cost(8).is_err()); // we need to be able to pay 3 out of the 10 back, 8 will only leave out 2
         assert!(quote.counter_tokens_cost(4).is_err()); // below the minimum of 5 required
@@ -602,10 +602,10 @@ mod tests {
         // and required change is 30, leaving up to 70)
         let sci = create_partial_sci(&pair, 100, 50, 30, 10, &mut rng);
         let quote = Quote::try_from(sci).unwrap();
-        assert_eq!(quote.counter_tokens_cost(70), Ok(7));
-        assert_eq!(quote.counter_tokens_cost(50), Ok(5));
-        assert_eq!(quote.counter_tokens_cost(51), Ok(5));
-        assert_eq!(quote.counter_tokens_cost(59), Ok(5));
+        assert_eq!(quote.counter_tokens_cost(70).unwrap(), 7);
+        assert_eq!(quote.counter_tokens_cost(50).unwrap(), 5);
+        assert_eq!(quote.counter_tokens_cost(51).unwrap(), 5);
+        assert_eq!(quote.counter_tokens_cost(59).unwrap(), 5);
         assert!(quote.counter_tokens_cost(71).is_err()); // exceeds max available (since we require a change of 30 this allows for up to
                                                          // 70 to be swapped)
         assert!(quote.counter_tokens_cost(101).is_err()); // exceeds max available
