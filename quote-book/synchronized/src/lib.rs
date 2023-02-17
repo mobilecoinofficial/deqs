@@ -36,7 +36,7 @@ where
         let current_block_index = self
             .ledger
             .num_blocks()
-            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?
+            .map_err(|err| Error::ImplementationSpecific(Box::new(err)))?
             - 1;
         if let Some(input_rules) = &sci.tx_in.input_rules {
             if input_rules.max_tombstone_block != 0
@@ -50,7 +50,7 @@ where
         if self
             .ledger
             .contains_key_image(&sci.key_image())
-            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?
+            .map_err(|err| Error::ImplementationSpecific(Box::new(err)))?
         {
             return Err(Error::QuoteIsStale);
         }

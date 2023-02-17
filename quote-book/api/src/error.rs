@@ -27,7 +27,7 @@ pub enum Error {
     InsufficientBaseTokens(u64),
 
     /// Implementation specific error: {0}
-    ImplementationSpecific(String),
+    ImplementationSpecific(Box<dyn std::error::Error + Send + Sync>),
 
     /// RevealedTxOut: {0}
     RevealedTxOut(RevealedTxOutError),
