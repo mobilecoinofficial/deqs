@@ -4,17 +4,17 @@ mod models;
 mod schema;
 mod sql_types;
 
-use std::{ops::Bound, path::Path, time::Duration};
-
 use deqs_quote_book_api::{Error, Quote, QuoteBook};
 use diesel::{
     connection::SimpleConnection,
     insert_into,
     prelude::*,
     r2d2::{ConnectionManager, Pool, PooledConnection},
+    result::DatabaseErrorKind,
     SqliteConnection,
 };
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+use std::{ops::Bound, path::Path, time::Duration};
 
 use crate::sql_types::VecU64;
 
@@ -109,12 +109,16 @@ impl QuoteBook for SqliteQuoteBook {
         let sql_quote = models::Quote::from(&quote);
 
         let mut conn = self.get_conn()?;
-        insert_into(schema::quotes::dsl::quotes)
+        match insert_into(schema::quotes::dsl::quotes)
             .values(&sql_quote)
             .execute(&mut conn)
-            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?; // TODO check for duplicate key violation
-
-        Ok(quote)
+        {
+            Ok(_) => Ok(quote),
+            Err(diesel::result::Error::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
+                Err(Error::QuoteAlreadyExists)
+            }
+            Err(err) => Err(Error::ImplementationSpecific(err.to_string())),
+        }
     }
 
     fn remove_quote_by_id(
@@ -322,6 +326,13 @@ mod tests {
         let dir = TempDir::new("quote_book_test").unwrap();
         let quote_book = create_quote_book(&dir);
         test_suite::basic_happy_flow(&quote_book);
+    }
+
+    #[test]
+    fn cannot_add_duplicate_sci() {
+        let dir = TempDir::new("quote_book_test").unwrap();
+        let quote_book = create_quote_book(&dir);
+        test_suite::cannot_add_duplicate_sci(&quote_book);
     }
 
     #[test]

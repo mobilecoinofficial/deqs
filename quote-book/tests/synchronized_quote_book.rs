@@ -39,6 +39,14 @@ fn basic_happy_flow() {
 }
 
 #[test]
+fn cannot_add_duplicate_sci() {
+    let ledger = create_and_initialize_test_ledger();
+    let internal_quote_book = InMemoryQuoteBook::default();
+    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger);
+    common::cannot_add_duplicate_sci(&synchronized_quote_book);
+}
+
+#[test]
 fn cannot_add_invalid_sci() {
     let ledger = create_and_initialize_test_ledger();
     let internal_quote_book = InMemoryQuoteBook::default();

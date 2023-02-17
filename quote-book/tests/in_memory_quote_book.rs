@@ -11,6 +11,12 @@ fn basic_happy_flow() {
 }
 
 #[test]
+fn cannot_add_duplicate_sci() {
+    let quote_book = InMemoryQuoteBook::default();
+    common::cannot_add_duplicate_sci(&quote_book);
+}
+
+#[test]
 fn cannot_add_invalid_sci() {
     let quote_book = InMemoryQuoteBook::default();
     common::cannot_add_invalid_sci(&quote_book);

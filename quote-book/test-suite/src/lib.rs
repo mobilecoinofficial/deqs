@@ -83,7 +83,7 @@ pub fn basic_happy_flow(quote_book: &impl QuoteBook) {
     let pair = pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
-    // Adding an quote should work
+    // Adding a quote should work
     let sci = create_sci(&pair, 10, 20, &mut rng);
     let quote = quote_book.add_sci(sci, None).unwrap();
 
@@ -165,6 +165,20 @@ pub fn basic_happy_flow(quote_book: &impl QuoteBook) {
             .remove_quotes_by_tombstone_block(quote1_tombstone)
             .unwrap(),
         vec![],
+    );
+}
+
+/// Test that we cannot add the same SCI twice
+pub fn cannot_add_duplicate_sci(quote_book: &impl QuoteBook) {
+    let pair = pair();
+    let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+
+    let sci = create_sci(&pair, 10, 20, &mut rng);
+    quote_book.add_sci(sci.clone(), None).unwrap();
+
+    assert_eq!(
+        quote_book.add_sci(sci, None).unwrap_err(),
+        Error::QuoteAlreadyExists
     );
 }
 
