@@ -1,15 +1,26 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use std::{path::Path, time::Duration};
+mod models;
+mod schema;
+mod sql_types;
 
-use deqs_quote_book_api::{Error, QuoteBook};
+use std::{
+    ops::{Bound, RangeBounds},
+    path::Path,
+    time::Duration,
+};
+
+use deqs_quote_book_api::{Error, Quote, QuoteBook};
 use diesel::{
     connection::SimpleConnection,
+    insert_into,
     prelude::*,
     r2d2::{ConnectionManager, Pool, PooledConnection},
-    sql_types, SqliteConnection,
+    SqliteConnection,
 };
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
+
+use crate::sql_types::VecU64;
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
 
@@ -97,14 +108,41 @@ impl QuoteBook for SqliteQuoteBook {
         sci: mc_transaction_extra::SignedContingentInput,
         timestamp: Option<u64>,
     ) -> Result<deqs_quote_book_api::Quote, Error> {
-        todo!()
+        // Convert SCI into an quote. This also validates it.
+        let quote = Quote::new(sci, timestamp)?;
+        let sql_quote = models::Quote::from(&quote);
+
+        let mut conn = self.get_conn()?;
+        insert_into(schema::quotes::dsl::quotes)
+            .values(&sql_quote)
+            .execute(&mut conn)
+            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?; // TODO check for duplicate key violation
+
+        Ok(quote)
     }
 
     fn remove_quote_by_id(
         &self,
         id: &deqs_quote_book_api::QuoteId,
     ) -> Result<deqs_quote_book_api::Quote, Error> {
-        todo!()
+        use schema::quotes::dsl;
+
+        // TODO do in transaction
+        let mut conn = self.get_conn()?;
+
+        let quote = self.get_quote_by_id(id)?.ok_or(Error::QuoteNotFound)?;
+
+        let num_deleted = diesel::delete(dsl::quotes.filter(dsl::id.eq(id.to_vec())))
+            .execute(&mut conn)
+            .expect("Error deleting posts"); // TODO
+
+        match num_deleted {
+            0 => Err(Error::QuoteNotFound),
+            1 => Ok(quote),
+            _ => Err(Error::ImplementationSpecific(
+                "Deleted more than one quote".to_string(),
+            )),
+        }
     }
 
     fn remove_quotes_by_key_image(
@@ -127,7 +165,34 @@ impl QuoteBook for SqliteQuoteBook {
         base_token_quantity: impl std::ops::RangeBounds<u64>,
         limit: usize,
     ) -> Result<Vec<deqs_quote_book_api::Quote>, Error> {
-        todo!()
+        use schema::quotes::dsl;
+
+        let mut conn = self.get_conn()?;
+
+        let sql_quotes = dsl::quotes
+            .filter(dsl::base_token_id.eq(*pair.base_token_id as i64))
+            .filter(dsl::counter_token_id.eq(*pair.counter_token_id as i64))
+            .load::<models::Quote>(&mut conn)
+            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
+
+        let quotes = sql_quotes
+            .iter()
+            .map(|sql_quote| Quote::try_from(sql_quote))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // TODO can this be done in SQL? if not, this whole thing needs to be
+        // re-thinked.
+        let mut quotes = quotes
+            .into_iter()
+            .filter(|quote| range_overlaps(&base_token_quantity, quote.base_range()))
+            .collect::<Vec<_>>();
+        quotes.sort();
+
+        if limit > 0 {
+            quotes.truncate(limit);
+        }
+
+        Ok(quotes)
     }
 
     fn get_quote_ids(
@@ -141,8 +206,46 @@ impl QuoteBook for SqliteQuoteBook {
         &self,
         id: &deqs_quote_book_api::QuoteId,
     ) -> Result<Option<deqs_quote_book_api::Quote>, Error> {
-        todo!()
+        let mut conn = self.get_conn()?;
+        let sql_quote = schema::quotes::dsl::quotes
+            .find(id.to_vec())
+            .first::<models::Quote>(&mut conn)
+            .optional()
+            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
+        let quote = sql_quote
+            .map(|sql_quote| Quote::try_from(&sql_quote))
+            .transpose()?;
+        Ok(quote)
     }
+}
+
+// TODO
+fn range_overlaps(x: &impl RangeBounds<u64>, y: &impl RangeBounds<u64>) -> bool {
+    let x1 = match x.start_bound() {
+        Bound::Included(start) => *start,
+        Bound::Excluded(start) => start.saturating_add(1),
+        Bound::Unbounded => 0,
+    };
+
+    let x2 = match x.end_bound() {
+        Bound::Included(end) => *end,
+        Bound::Excluded(end) => end.saturating_sub(1),
+        Bound::Unbounded => u64::MAX,
+    };
+
+    let y1 = match y.start_bound() {
+        Bound::Included(start) => *start,
+        Bound::Excluded(start) => start.saturating_add(1),
+        Bound::Unbounded => 0,
+    };
+
+    let y2 = match y.end_bound() {
+        Bound::Included(end) => *end,
+        Bound::Excluded(end) => end.saturating_sub(1),
+        Bound::Unbounded => u64::MAX,
+    };
+
+    x1 <= y2 && y1 <= x2
 }
 
 #[cfg(test)]
@@ -151,10 +254,9 @@ mod tests {
     use deqs_quote_book_test_suite as test_suite;
     use tempdir::TempDir;
 
-    #[test]
-    fn test_create_quote_book() {
-        let dir = TempDir::new("quote_book_test").unwrap();
-        let quote_book = create_quote_book(&dir);
+    fn create_quote_book(dir: &TempDir) -> SqliteQuoteBook {
+        let file_path = dir.path().join("quotes.db");
+        SqliteQuoteBook::new_from_file_path(&file_path, 10).unwrap()
     }
 
     #[test]

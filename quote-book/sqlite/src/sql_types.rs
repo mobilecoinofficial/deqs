@@ -1,20 +1,19 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-
-use diesel::backend::{self, Backend};
-use diesel::deserialize::{self, FromSql};
-use diesel::serialize::{self, Output, ToSql};
-use diesel::sqlite::{Sqlite, SqliteConnection};
-use diesel::{insert_into, prelude::*, AsExpression, FromSqlRow};
-use dotenvy::dotenv;
-use std::io::Write;
-use std::ops::Deref;
-use std::{env, fmt};
+use diesel::{
+    backend,
+    deserialize::{self, FromSql},
+    serialize::{self, Output, ToSql},
+    sqlite::Sqlite,
+    AsExpression, FromSqlRow,
+};
+use std::{fmt, ops::Deref};
 
 /// SQLite type wrapper for storing a u64 in a binary column.
-/// This helps us get around the limitation of SQLite not supporting unsigned 64 integers.
-/// By storing our u64s as its big endian bytes in a binary blob, we can still perform sorting
-/// and comparisons on the column, since SQLite uses memcmp() to compare binary blobs.
+/// This helps us get around the limitation of SQLite not supporting unsigned 64
+/// integers. By storing our u64s as its big endian bytes in a binary blob, we
+/// can still perform sorting and comparisons on the column, since SQLite uses
+/// memcmp() to compare binary blobs.
 #[derive(AsExpression, FromSqlRow, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
 #[sql_type = "diesel::sql_types::Binary"]
 pub struct VecU64(u64);

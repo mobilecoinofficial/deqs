@@ -1163,6 +1163,8 @@ dependencies = [
  "mc-transaction-builder",
  "mc-transaction-core",
  "mc-transaction-extra",
+ "mc-transaction-types",
+ "mc-util-serial",
  "tempdir",
 ]
 

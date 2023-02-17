@@ -15,7 +15,7 @@ CREATE TABLE quotes (
     id BINARY PRIMARY KEY NOT NULL,
 
     -- The SCI, protobuf-encoded
-    sci BINARY NOT NULL,
+    sci_protobuf BINARY NOT NULL,
 
     -- Base token id (stored as signed i64 since we can cast from rust and only do equality comparisons on it)
     base_token_id BIGINT NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE quotes (
     base_range_max BINARY NOT NULL,
 
     -- The number of counter tokens needed to trade the max amount of base tokens.
-    max_counter_amount BINARY NOT NULL,
+    max_counter_tokens BINARY NOT NULL,
 
     -- Timestamp at which the quote arrived
     timestamp BIGINT NOT NULL
