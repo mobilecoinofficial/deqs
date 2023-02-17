@@ -47,6 +47,13 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
             .expect("Could not spawn thread");
         Self { quote_book, ledger}
     }
+    pub fn get_current_block_index(
+        &self
+    ) -> Result<u64, QuoteBookError> {
+        let num_blocks = self.ledger.num_blocks()?;
+        Ok(num_blocks - 1)
+    }
+
 }
 
 impl<Q, L> QuoteBook for SynchronizedQuoteBook<Q, L>
@@ -61,7 +68,7 @@ where
     ) -> Result<Quote, QuoteBookError> {
         // Check to see if the current_block_index is already at or past the
         // max_tombstone_block for the sci.
-        let current_block_index = self.ledger.num_blocks()? - 1;
+        let current_block_index = self.get_current_block_index()?;
         if let Some(input_rules) = &sci.tx_in.input_rules {
             if input_rules.max_tombstone_block != 0
                 && current_block_index >= input_rules.max_tombstone_block
