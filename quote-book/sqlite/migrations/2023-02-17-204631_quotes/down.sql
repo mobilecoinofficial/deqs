@@ -1,0 +1,6 @@
+-- This file should undo anything in `up.sql`
+
+DROP INDEX idx__quotes__base_range;
+DROP INDEX idx__quotes__counter_token_id;
+DROP INDEX idx__quotes__base_token_id;
+DROP TABLE quotes;
