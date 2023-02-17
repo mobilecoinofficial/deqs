@@ -2,7 +2,7 @@
 
 mod common;
 
-use std::time::Duration;
+use std::{time::Duration, sync::Arc};
 
 use deqs_quote_book::{Error, InMemoryQuoteBook, Msg, QuoteBook, SynchronizedQuoteBook};
 use mc_blockchain_types::BlockVersion;
@@ -40,7 +40,7 @@ fn basic_happy_flow(logger: Logger) {
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book =
-        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+       Arc::new( SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger));
     common::basic_happy_flow(&synchronized_quote_book);
 }
 
@@ -50,7 +50,7 @@ fn cannot_add_invalid_sci(logger: Logger) {
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book =
-        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+       Arc::new( SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger));
     common::cannot_add_invalid_sci(&synchronized_quote_book);
 }
 
@@ -60,7 +60,7 @@ fn get_quotes_filtering_works(logger: Logger) {
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book =
-        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+       Arc::new( SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger));
     common::get_quotes_filtering_works(&synchronized_quote_book);
 }
 
@@ -70,7 +70,7 @@ fn get_quote_ids_works(logger: Logger) {
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book =
-        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+       Arc::new( SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger));
     common::get_quote_ids_works(&synchronized_quote_book);
 }
 
@@ -80,7 +80,7 @@ fn get_quote_by_id_works(logger: Logger) {
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book =
-        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+       Arc::new( SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger));
     common::get_quote_by_id_works(&synchronized_quote_book);
 }
 
@@ -90,7 +90,7 @@ fn cannot_add_sci_with_key_image_in_ledger(logger: Logger) {
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book =
-        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+       Arc::new( SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger));
 
     let pair = common::pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
@@ -143,7 +143,7 @@ fn sci_that_are_added_to_ledger_are_removed_in_the_background(logger: Logger) {
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book =
-        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+       Arc::new( SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger));
 
     let pair = common::pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
@@ -200,7 +200,7 @@ fn cannot_add_sci_past_tombstone_block(logger: Logger) {
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book =
-        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+       Arc::new( SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger));
 
     // Because the tombstone block is lower than the number blocks already in the
     // ledger, adding this sci should fail
@@ -257,7 +257,7 @@ fn sci_past_tombstone_block_get_removed_in_the_background(logger: Logger) {
     let internal_quote_book = InMemoryQuoteBook::default();
     let starting_blocks = ledger.num_blocks().unwrap();
     let synchronized_quote_book =
-        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+       Arc::new( SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger));
 
     // Because the tombstone block is lower than the number blocks already in the
     // ledger, adding this sci should fail

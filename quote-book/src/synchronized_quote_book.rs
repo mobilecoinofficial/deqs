@@ -12,7 +12,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
-    thread::Builder as ThreadBuilder,
+    thread::{Builder as ThreadBuilder, JoinHandle},
     time::Duration,
 };
 
@@ -20,7 +20,6 @@ use crate::Msg;
 use mc_common::logger::{log, Logger};
 use postage::{broadcast::Sender, prelude::Sink};
 /// A wrapper for a quote book implementation that syncs quotes with the ledger
-#[derive(Clone)]
 pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> {
     /// Quotebook being synchronized to the ledger by the Synchronized Quotebook
     quote_book: Q,
@@ -30,6 +29,9 @@ pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'stati
 
     /// Shared state
     shared_state: Arc<Mutex<DbPollSharedState>>,
+
+    /// Join handle used to wait for the thread to terminate.
+    join_handle: Option<JoinHandle<()>>,
 
     /// Stop request trigger, used to signal the thread to stop.
     stop_requested: Arc<AtomicBool>,
@@ -44,7 +46,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
         let thread_state = shared_state.clone();
         let stop_requested = Arc::new(AtomicBool::new(false));
         let thread_stop_requested = stop_requested.clone();
-        ThreadBuilder::new()
+        let join_handle = Some(ThreadBuilder::new()
             .name("LedgerDbFetcher".to_owned())
             .spawn(move || {
                 DbFetcherThread::start(
@@ -57,11 +59,12 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
                     logger,
                 )
             })
-            .expect("Could not spawn thread");
+            .expect("Could not spawn thread"));
         Self {
             quote_book,
             ledger,
             shared_state,
+            join_handle,
             stop_requested,
         }
     }
@@ -72,7 +75,11 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
 
     /// Stop and join the db poll thread
     pub fn stop(&mut self) -> Result<(), ()> {
-        self.stop_requested.store(true, Ordering::SeqCst);
+        if let Some(join_handle) = self.join_handle.take() {
+            self.stop_requested.store(true, Ordering::SeqCst);
+            join_handle.join().map_err(|_| ())?;
+        }
+
         Ok(())
     }
 }
@@ -87,7 +94,7 @@ where
     }
 }
 
-impl<Q, L> QuoteBook for SynchronizedQuoteBook<Q, L>
+impl<Q, L> QuoteBook for Arc<SynchronizedQuoteBook<Q, L>>
 where
     Q: QuoteBook,
     L: Ledger + Clone + Sync + 'static,
@@ -152,7 +159,7 @@ where
     fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, QuoteBookError> {
         self.quote_book.get_quote_by_id(id)
     }
-}
+} 
 
 /// State that we want to expose from the db poll thread
 #[derive(Debug, Default)]
