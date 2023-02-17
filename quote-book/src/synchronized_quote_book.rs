@@ -46,20 +46,22 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
         let thread_state = shared_state.clone();
         let stop_requested = Arc::new(AtomicBool::new(false));
         let thread_stop_requested = stop_requested.clone();
-        let join_handle = Some(ThreadBuilder::new()
-            .name("LedgerDbFetcher".to_owned())
-            .spawn(move || {
-                DbFetcherThread::start(
-                    ledger_clone,
-                    quote_book_clone,
-                    msg_bus_tx,
-                    0,
-                    thread_state,
-                    thread_stop_requested,
-                    logger,
-                )
-            })
-            .expect("Could not spawn thread"));
+        let join_handle = Some(
+            ThreadBuilder::new()
+                .name("LedgerDbFetcher".to_owned())
+                .spawn(move || {
+                    DbFetcherThread::start(
+                        ledger_clone,
+                        quote_book_clone,
+                        msg_bus_tx,
+                        0,
+                        thread_state,
+                        thread_stop_requested,
+                        logger,
+                    )
+                })
+                .expect("Could not spawn thread"),
+        );
         Self {
             quote_book,
             ledger,
@@ -159,7 +161,7 @@ where
     fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, QuoteBookError> {
         self.quote_book.get_quote_by_id(id)
     }
-} 
+}
 
 /// State that we want to expose from the db poll thread
 #[derive(Debug, Default)]
