@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{Error as QuoteBookError, Pair, Quote, QuoteBook, QuoteId};
+use deqs_quote_book_api::{Error, Pair, Quote, QuoteBook, QuoteId};
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
 use mc_ledger_db::Ledger;
@@ -32,7 +32,7 @@ where
         &self,
         sci: SignedContingentInput,
         timestamp: Option<u64>,
-    ) -> Result<Quote, QuoteBookError> {
+    ) -> Result<Quote, Error> {
         // Check to see if the current_block_index is already at or past the
         // max_tombstone_block for the sci.
         let current_block_index = self.ledger.num_blocks()? - 1;
@@ -40,34 +40,34 @@ where
             if input_rules.max_tombstone_block != 0
                 && current_block_index >= input_rules.max_tombstone_block
             {
-                return Err(QuoteBookError::QuoteIsStale);
+                return Err(Error::QuoteIsStale);
             }
         }
         // Check the ledger to see if the quote is stale before adding it to the
         // quotebook.
         if self.ledger.contains_key_image(&sci.key_image())? {
-            return Err(QuoteBookError::QuoteIsStale);
+            return Err(Error::QuoteIsStale);
         }
 
         // Try adding to quote book.
         self.quote_book.add_sci(sci, timestamp)
     }
 
-    fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, QuoteBookError> {
+    fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, Error> {
         self.quote_book.remove_quote_by_id(id)
     }
 
     fn remove_quotes_by_key_image(
         &self,
         key_image: &KeyImage,
-    ) -> Result<Vec<Quote>, QuoteBookError> {
+    ) -> Result<Vec<Quote>, Error> {
         self.quote_book.remove_quotes_by_key_image(key_image)
     }
 
     fn remove_quotes_by_tombstone_block(
         &self,
         current_block_index: BlockIndex,
-    ) -> Result<Vec<Quote>, QuoteBookError> {
+    ) -> Result<Vec<Quote>, Error> {
         self.quote_book
             .remove_quotes_by_tombstone_block(current_block_index)
     }
@@ -77,19 +77,19 @@ where
         pair: &Pair,
         base_token_quantity: impl RangeBounds<u64>,
         limit: usize,
-    ) -> Result<Vec<Quote>, QuoteBookError> {
+    ) -> Result<Vec<Quote>, Error> {
         self.quote_book.get_quotes(pair, base_token_quantity, limit)
     }
 
-    fn get_quote_ids(&self, pair: Option<&Pair>) -> Result<Vec<QuoteId>, QuoteBookError> {
+    fn get_quote_ids(&self, pair: Option<&Pair>) -> Result<Vec<QuoteId>, Error> {
         self.quote_book.get_quote_ids(pair)
     }
 
-    fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, QuoteBookError> {
+    fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, Error> {
         self.quote_book.get_quote_by_id(id)
     }
 
-    fn num_scis(&self) -> Result<u64, QuoteBookError> {
+    fn num_scis(&self) -> Result<u64, Error> {
         self.quote_book.num_scis()
     }
 }
