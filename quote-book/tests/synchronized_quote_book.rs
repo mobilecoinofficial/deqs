@@ -177,11 +177,12 @@ fn sci_that_are_added_to_ledger_are_removed_in_the_background(logger: Logger) {
     .unwrap();
 
     // Because the key image is already in the ledger, this sci should be removed in the background after waiting for the quotebook to sync
+    while synchronized_quote_book.get_current_block_index() < (ledger.num_blocks().unwrap()-1)
+    {    
     std::thread::sleep(Duration::from_millis(1000));
-
+    }
     let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
     assert_eq!(quotes, vec![]);
-
 
 }
 
@@ -293,6 +294,4 @@ fn sci_past_tombstone_block_get_removed_in_the_background(logger: Logger) {
 
     let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
     assert_eq!(quotes, vec![]);
-    
-
 }
