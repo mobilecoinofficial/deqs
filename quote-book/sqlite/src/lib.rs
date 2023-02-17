@@ -4,11 +4,7 @@ mod models;
 mod schema;
 mod sql_types;
 
-use std::{
-    ops::{Bound, RangeBounds},
-    path::Path,
-    time::Duration,
-};
+use std::{ops::Bound, path::Path, time::Duration};
 
 use deqs_quote_book_api::{Error, Quote, QuoteBook};
 use diesel::{
@@ -211,23 +207,48 @@ impl QuoteBook for SqliteQuoteBook {
         use schema::quotes::dsl;
         let mut conn = self.get_conn()?;
 
-        let sql_quotes = dsl::quotes
+        let base_tokens_start = VecU64::from(match base_token_quantity.start_bound() {
+            Bound::Included(start) => *start,
+            Bound::Excluded(start) => start.saturating_add(1),
+            Bound::Unbounded => 0,
+        });
+        let base_tokens_end = VecU64::from(match base_token_quantity.end_bound() {
+            Bound::Included(end) => *end,
+            Bound::Excluded(end) => end.saturating_sub(1),
+            Bound::Unbounded => u64::MAX,
+        });
+
+        println!("{}-{}", base_tokens_start, base_tokens_end);
+
+        let all_quotes = dsl::quotes
             .filter(dsl::base_token_id.eq(*pair.base_token_id as i64))
             .filter(dsl::counter_token_id.eq(*pair.counter_token_id as i64))
             .load::<models::Quote>(&mut conn)
             .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
+        for q in all_quotes {
+            println!("{:?}", q.base_range());
+        }
 
-        let quotes = sql_quotes
+        let sql_quotes = dsl::quotes
+            .filter(dsl::base_token_id.eq(*pair.base_token_id as i64))
+            .filter(dsl::counter_token_id.eq(*pair.counter_token_id as i64))
+            // TODO see InMemoryQuoteBook::range_overlaps for why this makes sense
+            .filter(dsl::base_range_min.le(base_tokens_end))
+            .filter(dsl::base_range_max.ge(base_tokens_start))
+            .load::<models::Quote>(&mut conn)
+            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
+
+        let mut quotes = sql_quotes
             .iter()
             .map(|sql_quote| Quote::try_from(sql_quote))
             .collect::<Result<Vec<_>, _>>()?;
 
         // TODO can this be done in SQL? if not, this whole thing needs to be
         // re-thinked.
-        let mut quotes = quotes
-            .into_iter()
-            .filter(|quote| range_overlaps(&base_token_quantity, quote.base_range()))
-            .collect::<Vec<_>>();
+        // let mut quotes = quotes
+        //     .into_iter()
+        //     .filter(|quote| range_overlaps(&base_token_quantity, quote.base_range()))
+        //     .collect::<Vec<_>>();
         quotes.sort();
 
         if limit > 0 {
@@ -241,16 +262,40 @@ impl QuoteBook for SqliteQuoteBook {
         &self,
         pair: Option<&deqs_quote_book_api::Pair>,
     ) -> Result<Vec<deqs_quote_book_api::QuoteId>, Error> {
-        todo!()
+        use schema::quotes::dsl;
+        let mut conn = self.get_conn()?;
+        let quote_ids = if let Some(pair) = pair {
+            dsl::quotes
+                .filter(dsl::base_token_id.eq(*pair.base_token_id as i64))
+                .filter(dsl::counter_token_id.eq(*pair.counter_token_id as i64))
+                .select(dsl::id)
+                .load::<Vec<u8>>(&mut conn)
+                .map_err(|err| Error::ImplementationSpecific(err.to_string()))?
+        } else {
+            dsl::quotes
+                .select(dsl::id)
+                .load::<Vec<u8>>(&mut conn)
+                .map_err(|err| Error::ImplementationSpecific(err.to_string()))?
+        };
+
+        quote_ids
+            .into_iter()
+            .map(|quote_id| {
+                deqs_quote_book_api::QuoteId::try_from(&quote_id[..]).map_err(|err| {
+                    Error::ImplementationSpecific(format!("Invalid quote id: {}", err))
+                })
+            })
+            .collect::<Result<Vec<_>, _>>()
     }
 
     fn get_quote_by_id(
         &self,
         id: &deqs_quote_book_api::QuoteId,
     ) -> Result<Option<deqs_quote_book_api::Quote>, Error> {
+        use schema::quotes::dsl;
         let mut conn = self.get_conn()?;
-        let sql_quote = schema::quotes::dsl::quotes
-            .find(id.to_vec())
+        let sql_quote = dsl::quotes
+            .filter(dsl::id.eq(id.to_vec()))
             .first::<models::Quote>(&mut conn)
             .optional()
             .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
@@ -259,35 +304,6 @@ impl QuoteBook for SqliteQuoteBook {
             .transpose()?;
         Ok(quote)
     }
-}
-
-// TODO
-fn range_overlaps(x: &impl RangeBounds<u64>, y: &impl RangeBounds<u64>) -> bool {
-    let x1 = match x.start_bound() {
-        Bound::Included(start) => *start,
-        Bound::Excluded(start) => start.saturating_add(1),
-        Bound::Unbounded => 0,
-    };
-
-    let x2 = match x.end_bound() {
-        Bound::Included(end) => *end,
-        Bound::Excluded(end) => end.saturating_sub(1),
-        Bound::Unbounded => u64::MAX,
-    };
-
-    let y1 = match y.start_bound() {
-        Bound::Included(start) => *start,
-        Bound::Excluded(start) => start.saturating_add(1),
-        Bound::Unbounded => 0,
-    };
-
-    let y2 = match y.end_bound() {
-        Bound::Included(end) => *end,
-        Bound::Excluded(end) => end.saturating_sub(1),
-        Bound::Unbounded => u64::MAX,
-    };
-
-    x1 <= y2 && y1 <= x2
 }
 
 #[cfg(test)]

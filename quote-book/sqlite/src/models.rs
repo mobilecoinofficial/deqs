@@ -110,19 +110,3 @@ impl TryFrom<&Quote> for deqs_quote_book_api::Quote {
         ))
     }
 }
-
-// use crate::schema::test;
-// #[derive(Insertable)]
-// #[diesel(table_name = test)]
-// pub struct NewTest {
-//     pub b64: VecU64,
-//     pub n64: i64,
-// }
-// impl From<u64> for NewTest {
-//     fn from(u: u64) -> Self {
-//         Self {
-//             b64: u.into(),
-//             n64: u as i64,
-//         }
-//     }
-// }

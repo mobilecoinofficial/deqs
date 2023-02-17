@@ -24,6 +24,7 @@ CREATE TABLE quotes (
     counter_token_id BIGINT NOT NULL,
 
     -- The range of base tokens offered by this quote. Stored as big endian bytes so that we don't run into signed/unsigned issues.
+    -- These are the raw values from the quote.
     base_range_min BINARY NOT NULL,
     base_range_max BINARY NOT NULL,
 

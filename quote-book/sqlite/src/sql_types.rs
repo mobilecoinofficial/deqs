@@ -15,7 +15,7 @@ use std::{fmt, ops::Deref};
 /// can still perform sorting and comparisons on the column, since SQLite uses
 /// memcmp() to compare binary blobs.
 #[derive(AsExpression, FromSqlRow, Clone, Debug, Eq, PartialEq, Ord, PartialOrd, Hash)]
-#[sql_type = "diesel::sql_types::Binary"]
+#[diesel(sql_type = diesel::sql_types::Binary)]
 pub struct VecU64(u64);
 
 impl Deref for VecU64 {
