@@ -7,6 +7,8 @@ use mc_ledger_db::Ledger;
 use mc_ledger_db::Error as LedgerError;
 use mc_transaction_extra::SignedContingentInput;
 
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::{
     ops::RangeBounds, 
     thread::{Builder as ThreadBuilder},
@@ -26,6 +28,9 @@ pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + 'static> {
 
     /// Ledger
     ledger: L,
+
+    /// Shared state
+    shared_state: Arc<Mutex<DbPollSharedState>>,
 }
 
 impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, L> {
@@ -33,6 +38,8 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
     pub fn new(quote_book: Q, ledger: L, msg_bus_tx: Sender<Msg>, logger: Logger) -> Self {
         let ledger_clone = ledger.clone();
         let quote_book_clone = quote_book.clone();
+        let shared_state = Arc::new(Mutex::new(DbPollSharedState::default()));
+        let thread_state = shared_state.clone();
         ThreadBuilder::new()
             .name("LedgerDbFetcher".to_owned())
             .spawn(move || {
@@ -41,17 +48,18 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
                     quote_book_clone,
                     msg_bus_tx,
                     0,
+                    thread_state,
                     logger
                 )
             })
             .expect("Could not spawn thread");
-        Self { quote_book, ledger}
+        Self { quote_book, ledger, shared_state}
     }
     pub fn get_current_block_index(
         &self
-    ) -> Result<u64, QuoteBookError> {
-        let num_blocks = self.ledger.num_blocks()?;
-        Ok(num_blocks - 1)
+    ) -> u64 {
+        let shared_state = self.shared_state.lock().expect("mutex poisoned");
+        shared_state.highest_processed_block_index
     }
 
 }
@@ -68,7 +76,7 @@ where
     ) -> Result<Quote, QuoteBookError> {
         // Check to see if the current_block_index is already at or past the
         // max_tombstone_block for the sci.
-        let current_block_index = self.get_current_block_index()?;
+        let current_block_index = self.get_current_block_index();
         if let Some(input_rules) = &sci.tx_in.input_rules {
             if input_rules.max_tombstone_block != 0
                 && current_block_index >= input_rules.max_tombstone_block
@@ -123,12 +131,21 @@ where
     }
 }
 
+/// State that we want to expose from the db poll thread
+#[derive(Debug, Default)]
+pub struct DbPollSharedState {
+    /// The highest block index for which we can guarantee we have loaded all
+    /// available data.
+    pub highest_processed_block_index: u64,
+
+}
 struct DbFetcherThread<DB: Ledger, Q: QuoteBook> {
     db: DB,
     quotebook: Q,
     /// Message bus sender.
     msg_bus_tx: Sender<Msg>,
     next_block_index: u64,
+    shared_state: Arc<Mutex<DbPollSharedState>>,
     logger: Logger,
 }
 
@@ -143,6 +160,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
         quotebook: Q,
         msg_bus_tx: Sender<Msg>,
         next_block_index: u64,
+        shared_state: Arc<Mutex<DbPollSharedState>>,
         logger: Logger,
     ) {
         let thread = Self {
@@ -150,6 +168,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
             quotebook,
             msg_bus_tx,
             next_block_index,
+            shared_state,
             logger
         };
         thread.run();
@@ -164,7 +183,8 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
             }
             if self.next_block_index != starting_block_index
             {    
-                match self.quotebook.remove_quotes_by_tombstone_block(self.next_block_index) {
+                let last_processed_block_index = self.next_block_index - 1;
+                match self.quotebook.remove_quotes_by_tombstone_block(last_processed_block_index) {
                     Ok(quotes) => {
                         for quote in quotes {
                             log::info!(self.logger, "Quote {} removed", quote.id());
@@ -182,9 +202,14 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                         }
                     }
                     Err(err) => {
-                        log::error!(self.logger, "Failed to sync to block_index {}: {:?}", self.next_block_index, err);
+                        log::error!(self.logger, "Failed to sync to block_index {}: {:?}", last_processed_block_index, err);
                     }
                 }
+                let mut shared_state =
+                self.shared_state.lock().expect("mutex poisoned");
+                // this is next_block_index because next_block_index is actually the block
+                // we just processed
+                shared_state.highest_processed_block_index = last_processed_block_index;
             }
             std::thread::sleep(Self::POLLING_FREQUENCY);
         }

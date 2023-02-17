@@ -246,7 +246,7 @@ fn sci_past_tombstone_block_get_removed_in_the_background(logger: Logger) {
 
     let mut ledger = create_and_initialize_test_ledger();
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
-    
+
     let internal_quote_book = InMemoryQuoteBook::default();
     let starting_blocks = ledger.num_blocks().unwrap();
     let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
@@ -286,7 +286,10 @@ fn sci_past_tombstone_block_get_removed_in_the_background(logger: Logger) {
     .unwrap();
     assert_eq!(ledger.num_blocks().unwrap(), starting_blocks+1);
     // Because the ledger has advanced, this sci should be removed in the background after waiting for the quotebook to sync
+    while synchronized_quote_book.get_current_block_index() < (ledger.num_blocks().unwrap()-1)
+    {
     std::thread::sleep(Duration::from_millis(1000));
+    }
 
     let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
     assert_eq!(quotes, vec![]);
