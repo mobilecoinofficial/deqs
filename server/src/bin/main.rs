@@ -2,7 +2,8 @@
 
 use clap::Parser;
 use deqs_p2p::libp2p::identity::Keypair;
-use deqs_quote_book::{InMemoryQuoteBook, SynchronizedQuoteBook};
+use deqs_quote_book_in_memory::InMemoryQuoteBook;
+use deqs_quote_book_synchronized::SynchronizedQuoteBook;
 use deqs_server::{Msg, Server, ServerConfig, P2P};
 use mc_common::logger::{log, o};
 use mc_ledger_db::{Ledger, LedgerDB};

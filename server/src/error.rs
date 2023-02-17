@@ -27,7 +27,7 @@ pub enum Error {
     P2PRpc(RpcError),
 
     /// Quote book: {0}
-    QuoteBook(deqs_quote_book::Error),
+    QuoteBook(deqs_quote_book_api::Error),
 
     /// Task join error
     TaskJoin(JoinError),
@@ -69,8 +69,8 @@ impl From<RpcError> for Error {
     }
 }
 
-impl From<deqs_quote_book::Error> for Error {
-    fn from(src: deqs_quote_book::Error) -> Self {
+impl From<deqs_quote_book_api::Error> for Error {
+    fn from(src: deqs_quote_book_api::Error) -> Self {
         Self::QuoteBook(src)
     }
 }

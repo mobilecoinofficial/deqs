@@ -15,7 +15,7 @@ use deqs_p2p::{
     },
     Behaviour, Client, Network, NetworkBuilder, NetworkEvent, NetworkEventLoopHandle,
 };
-use deqs_quote_book::{Error as QuoteBookError, Quote, QuoteBook, QuoteId};
+use deqs_quote_book_api::{Error as QuoteBookError, Quote, QuoteBook, QuoteId};
 use futures::{stream, StreamExt};
 use mc_common::logger::{log, Logger};
 use rpc::{Request, Response, RpcClient};
