@@ -1,13 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-// This module is reused by various tests, and Rust is annoying since each test
-// file is compiled as an independent crate which makes Rust think methods in
-// this file are unused if they are not called by each and every test file :/
-#![allow(dead_code)]
-
-use std::collections::HashSet;
-
-use deqs_quote_book::{Error, Pair, Quote, QuoteBook, QuoteId};
+use deqs_quote_book_api::{Error, Pair, Quote, QuoteBook, QuoteId};
 use mc_account_keys::AccountKey;
 use mc_crypto_ring_signature::Error as RingSignatureError;
 use mc_crypto_ring_signature_signer::NoKeysRingSigner;
@@ -17,6 +10,7 @@ use mc_transaction_extra::{SignedContingentInput, SignedContingentInputError};
 use mc_transaction_types::{Amount, TokenId};
 use rand::{rngs::StdRng, SeedableRng};
 use rand_core::{CryptoRng, RngCore};
+use std::collections::HashSet;
 
 /// Default test pair
 pub fn pair() -> Pair {

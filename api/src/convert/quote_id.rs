@@ -3,7 +3,7 @@
 //! Convert to/from QuoteId.
 
 use crate::deqs as api;
-use deqs_quote_book::QuoteId;
+use deqs_quote_book_api::QuoteId;
 use mc_api::ConversionError;
 
 /// Convert Rust QuoteId to Protobuf QuoteId.
