@@ -3,16 +3,11 @@
 use clap::Parser;
 use deqs_p2p::libp2p::identity::Keypair;
 use deqs_quote_book::{InMemoryQuoteBook, SynchronizedQuoteBook};
-use deqs_server::{Msg, Server, ServerConfig, P2P};
-use mc_common::logger::{log, o};
+use deqs_server::{Server, ServerConfig};
+use mc_common::logger::o;
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
-use postage::{broadcast, prelude::Stream};
 use std::sync::Arc;
-use tokio::select;
-
-/// Maximum number of messages that can be queued in the message bus.
-const MSG_BUS_QUEUE_SIZE: usize = 1000;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -21,8 +16,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (logger, _global_logger_guard) = mc_common::logger::create_app_logger(o!());
     mc_common::setup_panic_handler();
 
-    let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
-
     // Open the ledger db
     let ledger_db = LedgerDB::open(&config.ledger_db).expect("Could not open ledger db");
     let num_blocks = ledger_db
@@ -30,36 +23,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Could not compute num_blocks");
     assert_ne!(0, num_blocks);
 
+    // Read keypair, if provided.
+    let keypair = config
+        .p2p_keypair_path
+        .as_ref()
+        .map(|path| -> Result<Keypair, Box<dyn std::error::Error>> {
+            let bytes = std::fs::read(path)?;
+            Ok(Keypair::from_protobuf_encoding(&bytes)?)
+        })
+        .transpose()?;
+
     // Create quote book
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger_db);
-
-    // Init p2p network
-    let (mut p2p, mut p2p_events) = P2P::new(
-        synchronized_quote_book.clone(),
-        config.p2p_bootstrap_peers.clone(),
-        config.p2p_listen.clone(),
-        config.p2p_external_address.clone(),
-        config
-            .p2p_keypair_path
-            .as_ref()
-            .map(|path| -> Result<Keypair, Box<dyn std::error::Error>> {
-                let bytes = std::fs::read(path)?;
-                Ok(Keypair::from_protobuf_encoding(&bytes)?)
-            })
-            .transpose()?,
-        logger.clone(),
-    )
-    .await?;
-
-    // Start GRPC server
-    let mut server = Server::new(
-        msg_bus_tx,
-        synchronized_quote_book,
-        config.client_listen_uri.clone(),
-        logger.clone(),
-    );
-    server.start().expect("Failed starting client GRPC server");
 
     // Start admin server
     let config_json = serde_json::to_string(&config).expect("failed to serialize config to JSON");
@@ -77,41 +53,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed starting admin server")
     });
 
-    // Event loop
-    loop {
-        select! {
-            msg = msg_bus_rx.recv() => {
-                match msg {
-                    Some(Msg::SciQuoteAdded(quote)) => {
-                        if let Err(err) = p2p.broadcast_sci_quote_added(quote).await {
-                            log::info!(logger, "broadcast_sci_quote_added failed: {:?}", err)
-                        }
-                    }
+    // Start deqs server. Stays alive as long as it remains in scope.
+    let _deqs_server = Server::start(
+        synchronized_quote_book,
+        config.client_listen_uri,
+        config.p2p_bootstrap_peers,
+        config.p2p_listen,
+        config.p2p_external_address,
+        keypair,
+        logger.clone(),
+    )
+    .await?;
 
-                    Some(Msg::SciQuoteRemoved(quote_id)) => {
-                        if let Err(err) = p2p.broadcast_sci_quote_removed(quote_id).await {
-                            log::info!(logger, "broadcast_sci_quote_removed failed: {:?}", err)
-                        }
-                    }
-
-                    None => {
-                            log::info!(logger, "msg_bus_rx stream closed");
-                            break;
-                    }
-                }
-            }
-
-            event = p2p_events.recv() => {
-                match event {
-                    Some(event) => p2p.handle_network_event(event).await,
-                    None => {
-                        log::info!(logger, "p2p_events stream closed");
-                        break;
-                    }
-                }
-            }
-        }
-    }
+    // Wait until we are asked to quit.
+    tokio::signal::ctrl_c().await?;
 
     Ok(())
 }

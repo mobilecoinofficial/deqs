@@ -1,119 +1,138 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{ClientService, Error, Msg};
+use crate::{Error, GrpcServer, Msg, P2P};
 use deqs_api::DeqsClientUri;
+use deqs_p2p::libp2p::{identity::Keypair, Multiaddr};
 use deqs_quote_book::QuoteBook;
-use futures::executor::block_on;
 use mc_common::logger::{log, Logger};
-use mc_util_grpc::ConnectionUriGrpcioServer;
-use mc_util_uri::ConnectionUri;
-use postage::broadcast::Sender;
-use std::sync::Arc;
+use postage::{broadcast, prelude::Stream};
+use tokio::{select, sync::mpsc};
 
-/// DEQS server
-pub struct Server<OB: QuoteBook> {
-    /// Message bus sender.
-    msg_bus_tx: Sender<Msg>,
+/// Maximum number of messages that can be queued in the message bus.
+const MSG_BUS_QUEUE_SIZE: usize = 1000;
 
-    /// Quote book.
-    quote_book: OB,
+pub struct Server<QB: QuoteBook> {
+    /// Shutdown sender, used to signal the event loop to shutdown.
+    shutdown_tx: mpsc::UnboundedSender<()>,
 
-    /// Client listen URI.
-    client_listen_uri: DeqsClientUri,
+    /// Shutdown acknowledged receiver.
+    shutdown_ack_rx: mpsc::UnboundedReceiver<()>,
 
-    /// Logger.
-    logger: Logger,
+    /// Must hold a reference to the grpc server, otherwise it will be dropped.
+    grpc_server: GrpcServer<QB>,
 
-    /// Client GRPC server.
-    server: Option<grpcio::Server>,
+    /// Addresses the peer to peer network is listening on.
+    p2p_listen_addrs: Vec<Multiaddr>,
 }
 
-impl<OB: QuoteBook> Server<OB> {
-    pub fn new(
-        msg_bus_tx: Sender<Msg>,
-        quote_book: OB,
-        client_listen_uri: DeqsClientUri,
+impl<QB: QuoteBook> Server<QB> {
+    pub async fn start(
+        quote_book: QB,
+        grpc_listen_address: DeqsClientUri,
+        p2p_bootstrap_peers: Vec<Multiaddr>,
+        p2p_listen_address: Option<Multiaddr>,
+        p2p_external_address: Option<Multiaddr>,
+        p2p_keypair: Option<Keypair>,
         logger: Logger,
-    ) -> Self {
-        Self {
-            msg_bus_tx,
-            quote_book,
-            client_listen_uri,
-            logger,
-            server: None,
-        }
-    }
+    ) -> Result<Self, Error> {
+        let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
+        let (shutdown_tx, mut shutdown_rx) = mpsc::unbounded_channel();
+        let (shutdown_ack_tx, shutdown_ack_rx) = mpsc::unbounded_channel();
 
-    /// Start all the grpc services and threads in the server
-    pub fn start(&mut self) -> Result<(), Error> {
-        let ret = self.start_helper();
-        if let Err(ref err) = ret {
-            log::error!(self.logger, "Server failed to start: {}", err);
-            self.stop();
-        }
-        ret
-    }
-
-    /// Helper which gathers errors when starting server
-    fn start_helper(&mut self) -> Result<(), Error> {
-        self.start_client_rpc_server()?;
-        Ok(())
-    }
-
-    /// Start the client RPC server
-    fn start_client_rpc_server(&mut self) -> Result<(), Error> {
-        log::info!(
-            self.logger,
-            "Starting client RPC server on {}",
-            self.client_listen_uri
-        );
-
-        let health_service =
-            mc_util_grpc::HealthService::new(None, self.logger.clone()).into_service();
-
-        let client_service = ClientService::new(
-            self.msg_bus_tx.clone(),
-            self.quote_book.clone(),
-            self.logger.clone(),
+        // Init p2p network
+        let (mut p2p, mut p2p_events) = P2P::new(
+            quote_book.clone(),
+            p2p_bootstrap_peers,
+            p2p_listen_address,
+            p2p_external_address,
+            p2p_keypair,
+            logger.clone(),
         )
-        .into_service();
+        .await?;
 
-        let grpc_env = Arc::new(
-            grpcio::EnvBuilder::new()
-                .name_prefix("Deqs-Client-RPC".to_string())
-                .build(),
-        );
+        // Get p2p listening addresses
+        let p2p_listen_addrs = p2p.listen_addrs().await?;
 
-        let server_builder = grpcio::ServerBuilder::new(grpc_env)
-            .register_service(health_service)
-            .register_service(client_service);
+        // Start GRPC server
+        let mut grpc_server =
+            GrpcServer::new(msg_bus_tx, quote_book, grpc_listen_address, logger.clone());
+        grpc_server
+            .start()
+            .expect("Failed starting client GRPC server");
 
-        let mut server =
-            server_builder.build_using_uri(&self.client_listen_uri, self.logger.clone())?;
-        server.start();
+        // Event loop
+        tokio::spawn(async move {
+            log::info!(logger, "Server event loop started");
 
-        log::info!(
-            self.logger,
-            "Deqs Client GRPC API listening on {}",
-            self.client_listen_uri.addr(),
-        );
+            loop {
+                select! {
+                    msg = msg_bus_rx.recv() => {
+                        match msg {
+                            Some(Msg::SciQuoteAdded(quote)) => {
+                                if let Err(err) = p2p.broadcast_sci_quote_added(quote).await {
+                                    log::info!(logger, "broadcast_sci_quote_added failed: {:?}", err)
+                                }
+                            }
 
-        self.server = Some(server);
-        Ok(())
+                            Some(Msg::SciQuoteRemoved(quote_id)) => {
+                                if let Err(err) = p2p.broadcast_sci_quote_removed(quote_id).await {
+                                    log::info!(logger, "broadcast_sci_quote_removed failed: {:?}", err)
+                                }
+                            }
+
+                            None => {
+                                    log::info!(logger, "msg_bus_rx stream closed");
+                                    break;
+                            }
+                        }
+                    }
+
+                    event = p2p_events.recv() => {
+                        match event {
+                            Some(event) => p2p.handle_network_event(event).await,
+                            None => {
+                                log::info!(logger, "p2p_events stream closed");
+                                break;
+                            }
+                        }
+                    }
+
+                    _ = shutdown_rx.recv() => {
+                        log::info!(logger, "Server shutdown requested");
+                        break
+                    }
+
+                }
+            }
+
+            // This will cause the receiver to become ready (and return None when recv() is
+            // called)
+            drop(shutdown_ack_tx);
+        });
+
+        Ok(Self {
+            shutdown_tx,
+            shutdown_ack_rx,
+            grpc_server,
+            p2p_listen_addrs,
+        })
     }
 
-    /// Stop the servers and threads
-    /// They cannot be restarted, so this should normally be done only just
-    /// before tearing down the whole server.
-    pub fn stop(&mut self) {
-        if let Some(mut server) = self.server.take() {
-            block_on(server.shutdown()).expect("Could not stop client grpc server");
+    pub async fn shutdown(&mut self) {
+        if self.shutdown_tx.send(()).is_err() {
+            // Shutdown already requested
+            return;
         }
-    }
-}
 
-impl<OB: QuoteBook> Drop for Server<OB> {
-    fn drop(&mut self) {
-        self.stop();
+        // Wait for the event loop to drop the ack sender.
+        let _ = self.shutdown_ack_rx.recv().await;
+    }
+
+    pub fn grpc_listen_uri(&self) -> Option<DeqsClientUri> {
+        self.grpc_server.actual_listen_uri()
+    }
+
+    pub fn p2p_listen_addrs(&self) -> Vec<Multiaddr> {
+        self.p2p_listen_addrs.clone()
     }
 }
