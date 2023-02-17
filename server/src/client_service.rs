@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{SVC_COUNTERS};
+use crate::SVC_COUNTERS;
 use deqs_api::{
     deqs::{
         GetQuotesRequest, GetQuotesResponse, LiveUpdate, LiveUpdatesRequest, QuoteStatusCode,

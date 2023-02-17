@@ -2,7 +2,7 @@
 
 use clap::Parser;
 use deqs_p2p::libp2p::identity::Keypair;
-use deqs_quote_book::{Msg, InMemoryQuoteBook, SynchronizedQuoteBook};
+use deqs_quote_book::{InMemoryQuoteBook, Msg, SynchronizedQuoteBook};
 use deqs_server::{Server, ServerConfig, P2P};
 use mc_common::logger::{log, o};
 use mc_ledger_db::{Ledger, LedgerDB};
@@ -32,7 +32,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Create quote book
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger_db, msg_bus_tx.clone(), logger.clone());
+    let synchronized_quote_book = SynchronizedQuoteBook::new(
+        internal_quote_book,
+        ledger_db,
+        msg_bus_tx.clone(),
+        logger.clone(),
+    );
 
     // Init p2p network
     let (mut p2p, mut p2p_events) = P2P::new(

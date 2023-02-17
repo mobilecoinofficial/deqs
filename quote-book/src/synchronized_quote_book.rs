@@ -3,25 +3,22 @@
 use crate::{Error as QuoteBookError, Pair, Quote, QuoteBook, QuoteId};
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
-use mc_ledger_db::Ledger;
-use mc_ledger_db::Error as LedgerError;
+use mc_ledger_db::{Error as LedgerError, Ledger};
 use mc_transaction_extra::SignedContingentInput;
 
-use std::sync::Arc;
-use std::sync::Mutex;
-use std::sync::atomic::AtomicBool;
-use std::sync::atomic::Ordering;
 use std::{
-    ops::RangeBounds, 
-    thread::{Builder as ThreadBuilder},
-    time::{Duration},
+    ops::RangeBounds,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+    thread::Builder as ThreadBuilder,
+    time::Duration,
 };
 
+use crate::Msg;
 use mc_common::logger::{log, Logger};
-use postage::{
-    broadcast::Sender, prelude::Sink
-};
-use crate::{Msg};
+use postage::{broadcast::Sender, prelude::Sink};
 /// A wrapper for a quote book implementation that syncs quotes with the ledger
 #[derive(Clone)]
 pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> {
@@ -57,15 +54,18 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
                     0,
                     thread_state,
                     thread_stop_requested,
-                    logger
+                    logger,
                 )
             })
             .expect("Could not spawn thread");
-        Self { quote_book, ledger, shared_state, stop_requested}
+        Self {
+            quote_book,
+            ledger,
+            shared_state,
+            stop_requested,
+        }
     }
-    pub fn get_current_block_index(
-        &self
-    ) -> u64 {
+    pub fn get_current_block_index(&self) -> u64 {
         let shared_state = self.shared_state.lock().expect("mutex poisoned");
         shared_state.highest_processed_block_index
     }
@@ -75,19 +75,17 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
         self.stop_requested.store(true, Ordering::SeqCst);
         Ok(())
     }
-
 }
 
-impl <Q,L> Drop for SynchronizedQuoteBook<Q, L> 
+impl<Q, L> Drop for SynchronizedQuoteBook<Q, L>
 where
-Q: QuoteBook,
-L: Ledger + Clone + Sync + 'static,
+    Q: QuoteBook,
+    L: Ledger + Clone + Sync + 'static,
 {
     fn drop(&mut self) {
         let _ = self.stop();
     }
 }
-
 
 impl<Q, L> QuoteBook for SynchronizedQuoteBook<Q, L>
 where
@@ -162,7 +160,6 @@ pub struct DbPollSharedState {
     /// The highest block index for which we can guarantee we have loaded all
     /// available data.
     pub highest_processed_block_index: u64,
-
 }
 struct DbFetcherThread<DB: Ledger, Q: QuoteBook> {
     db: DB,
@@ -197,7 +194,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
             next_block_index,
             shared_state,
             stop_requested,
-            logger
+            logger,
         };
         thread.run();
     }
@@ -211,12 +208,13 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                 break;
             }
             let starting_block_index = self.next_block_index;
-            while self.load_block_data() && !self.stop_requested.load(Ordering::SeqCst) {
-            }
-            if self.next_block_index != starting_block_index
-            {    
+            while self.load_block_data() && !self.stop_requested.load(Ordering::SeqCst) {}
+            if self.next_block_index != starting_block_index {
                 let last_processed_block_index = self.next_block_index - 1;
-                match self.quotebook.remove_quotes_by_tombstone_block(last_processed_block_index) {
+                match self
+                    .quotebook
+                    .remove_quotes_by_tombstone_block(last_processed_block_index)
+                {
                     Ok(quotes) => {
                         for quote in quotes {
                             log::info!(self.logger, "Quote {} removed", quote.id());
@@ -234,11 +232,15 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                         }
                     }
                     Err(err) => {
-                        log::error!(self.logger, "Failed to sync to block_index {}: {:?}", last_processed_block_index, err);
+                        log::error!(
+                            self.logger,
+                            "Failed to sync to block_index {}: {:?}",
+                            last_processed_block_index,
+                            err
+                        );
                     }
                 }
-                let mut shared_state =
-                self.shared_state.lock().expect("mutex poisoned");
+                let mut shared_state = self.shared_state.lock().expect("mutex poisoned");
                 // this is next_block_index because next_block_index is actually the block
                 // we just processed
                 shared_state.highest_processed_block_index = last_processed_block_index;
@@ -267,9 +269,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
             }
             Ok(block_contents) => {
                 // Filter keyimages in quotebook
-                for key_image in block_contents
-                    .key_images
-                {
+                for key_image in block_contents.key_images {
                     match self.quotebook.remove_quotes_by_key_image(&key_image) {
                         Ok(quotes) => {
                             for quote in quotes {
@@ -288,17 +288,21 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                             }
                         }
                         Err(err) => {
-                            log::error!(self.logger, "Failed to remove key_image {}: {:?}", key_image, err);
+                            log::error!(
+                                self.logger,
+                                "Failed to remove key_image {}: {:?}",
+                                key_image,
+                                err
+                            );
                         }
                     }
-                }                
+                }
                 self.next_block_index += 1;
             }
         }
         may_have_more_work
     }
 }
-
 
 #[cfg(test)]
 mod tests {

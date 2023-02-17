@@ -4,7 +4,7 @@ mod common;
 
 use std::time::Duration;
 
-use deqs_quote_book::{Error, InMemoryQuoteBook, QuoteBook, SynchronizedQuoteBook, Msg};
+use deqs_quote_book::{Error, InMemoryQuoteBook, Msg, QuoteBook, SynchronizedQuoteBook};
 use mc_blockchain_types::BlockVersion;
 use mc_crypto_ring_signature_signer::NoKeysRingSigner;
 use mc_ledger_db::{Ledger, LedgerDB};
@@ -12,14 +12,13 @@ use postage::broadcast;
 use rand::{rngs::StdRng, SeedableRng};
 
 use mc_account_keys::AccountKey;
+use mc_common::logger::{test_with_logger, Logger};
 use mc_fog_report_validation_test_utils::MockFogResolver;
-use mc_ledger_db::test_utils::{ add_txos_to_ledger,
-    add_txos_and_key_images_to_ledger, create_ledger, initialize_ledger,
+use mc_ledger_db::test_utils::{
+    add_txos_and_key_images_to_ledger, add_txos_to_ledger, create_ledger, initialize_ledger,
 };
 use mc_transaction_builder::test_utils::get_transaction;
 use mc_transaction_core::TokenId;
-use mc_common::logger::{Logger, test_with_logger};
-
 
 fn create_and_initialize_test_ledger() -> LedgerDB {
     //Create a ledger_db
@@ -40,7 +39,8 @@ fn basic_happy_flow(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+    let synchronized_quote_book =
+        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
     common::basic_happy_flow(&synchronized_quote_book);
 }
 
@@ -49,7 +49,8 @@ fn cannot_add_invalid_sci(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+    let synchronized_quote_book =
+        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
     common::cannot_add_invalid_sci(&synchronized_quote_book);
 }
 
@@ -58,7 +59,8 @@ fn get_quotes_filtering_works(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+    let synchronized_quote_book =
+        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
     common::get_quotes_filtering_works(&synchronized_quote_book);
 }
 
@@ -67,7 +69,8 @@ fn get_quote_ids_works(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+    let synchronized_quote_book =
+        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
     common::get_quote_ids_works(&synchronized_quote_book);
 }
 
@@ -76,7 +79,8 @@ fn get_quote_by_id_works(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+    let synchronized_quote_book =
+        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
     common::get_quote_by_id_works(&synchronized_quote_book);
 }
 
@@ -85,7 +89,8 @@ fn cannot_add_sci_with_key_image_in_ledger(logger: Logger) {
     let mut ledger = create_and_initialize_test_ledger();
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+    let synchronized_quote_book =
+        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
 
     let pair = common::pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
@@ -137,20 +142,21 @@ fn sci_that_are_added_to_ledger_are_removed_in_the_background(logger: Logger) {
     let mut ledger = create_and_initialize_test_ledger();
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+    let synchronized_quote_book =
+        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
 
     let pair = common::pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
     let sci_builder = common::create_sci_builder(&pair, 10, 20, &mut rng);
     let sci = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
-    let key_image =sci.key_image();
+    let key_image = sci.key_image();
     // Adding a quote that isn't already in the ledger should work
     let quote = synchronized_quote_book.add_sci(sci, None).unwrap();
 
     let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
     assert_eq!(quotes, vec![quote.clone()]);
-    
+
     let block_version = BlockVersion::MAX;
     let fog_resolver = MockFogResolver::default();
 
@@ -176,14 +182,13 @@ fn sci_that_are_added_to_ledger_are_removed_in_the_background(logger: Logger) {
     )
     .unwrap();
 
-    // Because the key image is already in the ledger, this sci should be removed in the background after waiting for the quotebook to sync
-    while synchronized_quote_book.get_current_block_index() < (ledger.num_blocks().unwrap()-1)
-    {    
-    std::thread::sleep(Duration::from_millis(1000));
+    // Because the key image is already in the ledger, this sci should be removed in
+    // the background after waiting for the quotebook to sync
+    while synchronized_quote_book.get_current_block_index() < (ledger.num_blocks().unwrap() - 1) {
+        std::thread::sleep(Duration::from_millis(1000));
     }
     let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
     assert_eq!(quotes, vec![]);
-
 }
 
 #[test_with_logger]
@@ -194,7 +199,8 @@ fn cannot_add_sci_past_tombstone_block(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
     let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+    let synchronized_quote_book =
+        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
 
     // Because the tombstone block is lower than the number blocks already in the
     // ledger, adding this sci should fail
@@ -250,7 +256,8 @@ fn sci_past_tombstone_block_get_removed_in_the_background(logger: Logger) {
 
     let internal_quote_book = InMemoryQuoteBook::default();
     let starting_blocks = ledger.num_blocks().unwrap();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
+    let synchronized_quote_book =
+        SynchronizedQuoteBook::new(internal_quote_book, ledger.clone(), msg_bus_tx, logger);
 
     // Because the tombstone block is lower than the number blocks already in the
     // ledger, adding this sci should fail
@@ -260,7 +267,10 @@ fn sci_past_tombstone_block_get_removed_in_the_background(logger: Logger) {
 
     let quote = synchronized_quote_book.add_sci(sci, None).unwrap();
 
-    assert_eq!(synchronized_quote_book.get_quotes(&pair, .., 0).unwrap(), vec![quote.clone()]);
+    assert_eq!(
+        synchronized_quote_book.get_quotes(&pair, .., 0).unwrap(),
+        vec![quote.clone()]
+    );
 
     let block_version = BlockVersion::MAX;
     let fog_resolver = MockFogResolver::default();
@@ -278,18 +288,12 @@ fn sci_past_tombstone_block_get_removed_in_the_background(logger: Logger) {
         &mut rng,
     )
     .unwrap();
-    add_txos_to_ledger(
-        &mut ledger,
-        BlockVersion::MAX,
-        &tx.prefix.outputs,
-        &mut rng,
-    )
-    .unwrap();
-    assert_eq!(ledger.num_blocks().unwrap(), starting_blocks+1);
-    // Because the ledger has advanced, this sci should be removed in the background after waiting for the quotebook to sync
-    while synchronized_quote_book.get_current_block_index() < (ledger.num_blocks().unwrap()-1)
-    {
-    std::thread::sleep(Duration::from_millis(1000));
+    add_txos_to_ledger(&mut ledger, BlockVersion::MAX, &tx.prefix.outputs, &mut rng).unwrap();
+    assert_eq!(ledger.num_blocks().unwrap(), starting_blocks + 1);
+    // Because the ledger has advanced, this sci should be removed in the background
+    // after waiting for the quotebook to sync
+    while synchronized_quote_book.get_current_block_index() < (ledger.num_blocks().unwrap() - 1) {
+        std::thread::sleep(Duration::from_millis(1000));
     }
 
     let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();

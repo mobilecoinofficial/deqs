@@ -2,7 +2,7 @@
 
 use crate::{ClientService, Error};
 use deqs_api::DeqsClientUri;
-use deqs_quote_book::{QuoteBook, Msg};
+use deqs_quote_book::{Msg, QuoteBook};
 use futures::executor::block_on;
 use mc_common::logger::{log, Logger};
 use mc_util_grpc::ConnectionUriGrpcioServer;
