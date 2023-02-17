@@ -9,8 +9,8 @@ members = [
     "quote-book/in-memory",
     "quote-book/synchronized",
     "quote-book/test-suite",
-#    "server",
-#    "test-cli",
+    "server",
+    "test-cli",
 ]
 exclude = [
     "mobilecoin/",

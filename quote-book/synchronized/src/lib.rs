@@ -28,11 +28,7 @@ where
     Q: QuoteBook,
     L: Ledger + Clone + Sync + 'static,
 {
-    fn add_sci(
-        &self,
-        sci: SignedContingentInput,
-        timestamp: Option<u64>,
-    ) -> Result<Quote, Error> {
+    fn add_sci(&self, sci: SignedContingentInput, timestamp: Option<u64>) -> Result<Quote, Error> {
         // Check to see if the current_block_index is already at or past the
         // max_tombstone_block for the sci.
         let current_block_index = self
@@ -65,10 +61,7 @@ where
         self.quote_book.remove_quote_by_id(id)
     }
 
-    fn remove_quotes_by_key_image(
-        &self,
-        key_image: &KeyImage,
-    ) -> Result<Vec<Quote>, Error> {
+    fn remove_quotes_by_key_image(&self, key_image: &KeyImage) -> Result<Vec<Quote>, Error> {
         self.quote_book.remove_quotes_by_key_image(key_image)
     }
 
