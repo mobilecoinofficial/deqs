@@ -9,6 +9,8 @@ use mc_transaction_extra::SignedContingentInput;
 
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+use std::sync::atomic::Ordering;
 use std::{
     ops::RangeBounds, 
     thread::{Builder as ThreadBuilder},
@@ -22,7 +24,7 @@ use postage::{
 use crate::{Msg};
 /// A wrapper for a quote book implementation that syncs quotes with the ledger
 #[derive(Clone)]
-pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + 'static> {
+pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> {
     /// Quotebook being synchronized to the ledger by the Synchronized Quotebook
     quote_book: Q,
 
@@ -31,6 +33,9 @@ pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + 'static> {
 
     /// Shared state
     shared_state: Arc<Mutex<DbPollSharedState>>,
+
+    /// Stop request trigger, used to signal the thread to stop.
+    stop_requested: Arc<AtomicBool>,
 }
 
 impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, L> {
@@ -40,6 +45,8 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
         let quote_book_clone = quote_book.clone();
         let shared_state = Arc::new(Mutex::new(DbPollSharedState::default()));
         let thread_state = shared_state.clone();
+        let stop_requested = Arc::new(AtomicBool::new(false));
+        let thread_stop_requested = stop_requested.clone();
         ThreadBuilder::new()
             .name("LedgerDbFetcher".to_owned())
             .spawn(move || {
@@ -49,11 +56,12 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
                     msg_bus_tx,
                     0,
                     thread_state,
+                    thread_stop_requested,
                     logger
                 )
             })
             .expect("Could not spawn thread");
-        Self { quote_book, ledger, shared_state}
+        Self { quote_book, ledger, shared_state, stop_requested}
     }
     pub fn get_current_block_index(
         &self
@@ -62,7 +70,24 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
         shared_state.highest_processed_block_index
     }
 
+    /// Stop and join the db poll thread
+    pub fn stop(&mut self) -> Result<(), ()> {
+        self.stop_requested.store(true, Ordering::SeqCst);
+        Ok(())
+    }
+
 }
+
+impl <Q,L> Drop for SynchronizedQuoteBook<Q, L> 
+where
+Q: QuoteBook,
+L: Ledger + Clone + Sync + 'static,
+{
+    fn drop(&mut self) {
+        let _ = self.stop();
+    }
+}
+
 
 impl<Q, L> QuoteBook for SynchronizedQuoteBook<Q, L>
 where
@@ -146,6 +171,7 @@ struct DbFetcherThread<DB: Ledger, Q: QuoteBook> {
     msg_bus_tx: Sender<Msg>,
     next_block_index: u64,
     shared_state: Arc<Mutex<DbPollSharedState>>,
+    stop_requested: Arc<AtomicBool>,
     logger: Logger,
 }
 
@@ -161,6 +187,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
         msg_bus_tx: Sender<Msg>,
         next_block_index: u64,
         shared_state: Arc<Mutex<DbPollSharedState>>,
+        stop_requested: Arc<AtomicBool>,
         logger: Logger,
     ) {
         let thread = Self {
@@ -169,6 +196,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
             msg_bus_tx,
             next_block_index,
             shared_state,
+            stop_requested,
             logger
         };
         thread.run();
@@ -178,8 +206,12 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
         log::info!(self.logger, "Db fetcher thread started.");
         self.next_block_index = 0;
         loop {
+            if self.stop_requested.load(Ordering::SeqCst) {
+                log::info!(self.logger, "Db fetcher thread stop requested.");
+                break;
+            }
             let starting_block_index = self.next_block_index;
-            while self.load_block_data() {
+            while self.load_block_data() && !self.stop_requested.load(Ordering::SeqCst) {
             }
             if self.next_block_index != starting_block_index
             {    
