@@ -92,15 +92,25 @@ impl SqliteQuoteBook {
 }
 
 impl QuoteBook for SqliteQuoteBook {
-    fn add_sci(&self, sci: mc_transaction_extra::SignedContingentInput, timestamp: Option<u64>) -> Result<deqs_quote_book_api::Quote, Error> {
+    fn add_sci(
+        &self,
+        sci: mc_transaction_extra::SignedContingentInput,
+        timestamp: Option<u64>,
+    ) -> Result<deqs_quote_book_api::Quote, Error> {
         todo!()
     }
 
-    fn remove_quote_by_id(&self, id: &deqs_quote_book_api::QuoteId) -> Result<deqs_quote_book_api::Quote, Error> {
+    fn remove_quote_by_id(
+        &self,
+        id: &deqs_quote_book_api::QuoteId,
+    ) -> Result<deqs_quote_book_api::Quote, Error> {
         todo!()
     }
 
-    fn remove_quotes_by_key_image(&self, key_image: &mc_crypto_ring_signature::KeyImage) -> Result<Vec<deqs_quote_book_api::Quote>, Error> {
+    fn remove_quotes_by_key_image(
+        &self,
+        key_image: &mc_crypto_ring_signature::KeyImage,
+    ) -> Result<Vec<deqs_quote_book_api::Quote>, Error> {
         todo!()
     }
 
@@ -120,11 +130,17 @@ impl QuoteBook for SqliteQuoteBook {
         todo!()
     }
 
-    fn get_quote_ids(&self, pair: Option<&deqs_quote_book_api::Pair>) -> Result<Vec<deqs_quote_book_api::QuoteId>, Error> {
+    fn get_quote_ids(
+        &self,
+        pair: Option<&deqs_quote_book_api::Pair>,
+    ) -> Result<Vec<deqs_quote_book_api::QuoteId>, Error> {
         todo!()
     }
 
-    fn get_quote_by_id(&self, id: &deqs_quote_book_api::QuoteId) -> Result<Option<deqs_quote_book_api::Quote>, Error> {
+    fn get_quote_by_id(
+        &self,
+        id: &deqs_quote_book_api::QuoteId,
+    ) -> Result<Option<deqs_quote_book_api::Quote>, Error> {
         todo!()
     }
 }
@@ -132,16 +148,47 @@ impl QuoteBook for SqliteQuoteBook {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use deqs_quote_book_test_suite as test_suite;
     use tempdir::TempDir;
-
-    fn create_quote_book(dir: &TempDir) -> SqliteQuoteBook {
-        let file_path = dir.path().join("quotes.db");
-        SqliteQuoteBook::new_from_file_path(&file_path, 10).unwrap()
-    }
 
     #[test]
     fn test_create_quote_book() {
         let dir = TempDir::new("quote_book_test").unwrap();
         let quote_book = create_quote_book(&dir);
+    }
+
+    #[test]
+    fn basic_happy_flow() {
+        let dir = TempDir::new("quote_book_test").unwrap();
+        let quote_book = create_quote_book(&dir);
+        test_suite::basic_happy_flow(&quote_book);
+    }
+
+    #[test]
+    fn cannot_add_invalid_sci() {
+        let dir = TempDir::new("quote_book_test").unwrap();
+        let quote_book = create_quote_book(&dir);
+        test_suite::cannot_add_invalid_sci(&quote_book);
+    }
+
+    #[test]
+    fn get_quotes_filtering_works() {
+        let dir = TempDir::new("quote_book_test").unwrap();
+        let quote_book = create_quote_book(&dir);
+        test_suite::get_quotes_filtering_works(&quote_book);
+    }
+
+    #[test]
+    fn get_quote_ids_works() {
+        let dir = TempDir::new("quote_book_test").unwrap();
+        let quote_book = create_quote_book(&dir);
+        test_suite::get_quote_ids_works(&quote_book);
+    }
+
+    #[test]
+    fn get_quote_by_id_works() {
+        let dir = TempDir::new("quote_book_test").unwrap();
+        let quote_book = create_quote_book(&dir);
+        test_suite::get_quote_by_id_works(&quote_book);
     }
 }
