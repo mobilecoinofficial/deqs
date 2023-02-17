@@ -149,14 +149,57 @@ impl QuoteBook for SqliteQuoteBook {
         &self,
         key_image: &mc_crypto_ring_signature::KeyImage,
     ) -> Result<Vec<deqs_quote_book_api::Quote>, Error> {
-        todo!()
+        use schema::quotes::dsl;
+        // TODO must run in a transaction
+        let mut conn = self.get_conn()?;
+        let key_image_bytes = key_image.as_bytes().to_vec();
+
+        let sql_quotes = dsl::quotes
+            .filter(dsl::key_image.eq(&key_image_bytes))
+            .load::<models::Quote>(&mut conn)
+            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
+
+        let quotes = sql_quotes
+            .iter()
+            .map(|sql_quote| Quote::try_from(sql_quote))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        let num_deleted = diesel::delete(dsl::quotes.filter(dsl::key_image.eq(key_image_bytes)))
+            .execute(&mut conn)
+            .expect("Error deleting posts"); // TODO
+                                             // TODO
+        assert_eq!(num_deleted, quotes.len());
+
+        Ok(quotes)
     }
 
     fn remove_quotes_by_tombstone_block(
         &self,
         current_block_index: mc_blockchain_types::BlockIndex,
     ) -> Result<Vec<deqs_quote_book_api::Quote>, Error> {
-        todo!()
+        use schema::quotes::dsl;
+        // TODO must run in a transaction
+        let mut conn = self.get_conn()?;
+
+        let sql_quotes = dsl::quotes
+            .filter(dsl::tombstone_block.le(current_block_index as i64))
+            .load::<models::Quote>(&mut conn)
+            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
+
+        let quotes = sql_quotes
+            .iter()
+            .map(|sql_quote| Quote::try_from(sql_quote))
+            .collect::<Result<Vec<_>, _>>()?;
+
+        // TODO is le current? 0 tombstone block
+        let num_deleted =
+            diesel::delete(dsl::quotes.filter(dsl::tombstone_block.le(current_block_index as i64)))
+                .execute(&mut conn)
+                .expect("Error deleting posts"); // TODO
+                                                 // TODO
+        assert_eq!(num_deleted, quotes.len());
+
+        Ok(quotes)
     }
 
     fn get_quotes(
@@ -166,7 +209,6 @@ impl QuoteBook for SqliteQuoteBook {
         limit: usize,
     ) -> Result<Vec<deqs_quote_book_api::Quote>, Error> {
         use schema::quotes::dsl;
-
         let mut conn = self.get_conn()?;
 
         let sql_quotes = dsl::quotes

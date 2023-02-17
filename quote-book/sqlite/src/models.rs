@@ -19,6 +19,8 @@ pub struct Quote {
     base_range_max: VecU64,
     max_counter_tokens: VecU64,
     timestamp: i64,
+    key_image: Vec<u8>,
+    tombstone_block: i64,
 }
 
 impl Quote {
@@ -65,6 +67,14 @@ impl From<&deqs_quote_book_api::Quote> for Quote {
         let base_range_max = quote.base_range().end().into();
         let max_counter_tokens = quote.max_counter_tokens().into();
         let timestamp = quote.timestamp() as i64;
+        let key_image = quote.sci().key_image().to_vec();
+        let tombstone_block = quote
+            .sci()
+            .tx_in
+            .input_rules
+            .as_ref()
+            .map(|input_rules| input_rules.max_tombstone_block)
+            .unwrap_or(0) as i64; // TODO is 0 a sane default? probably not
         Self {
             id,
             sci_protobuf,
@@ -74,6 +84,8 @@ impl From<&deqs_quote_book_api::Quote> for Quote {
             base_range_max,
             max_counter_tokens,
             timestamp,
+            key_image,
+            tombstone_block,
         }
     }
 }

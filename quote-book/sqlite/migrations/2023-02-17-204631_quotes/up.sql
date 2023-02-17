@@ -31,9 +31,17 @@ CREATE TABLE quotes (
     max_counter_tokens BINARY NOT NULL,
 
     -- Timestamp at which the quote arrived
-    timestamp BIGINT NOT NULL
+    timestamp BIGINT NOT NULL,
+
+    -- The key image of the quote.
+    key_image BINARY NOT NULL,
+
+    -- The tombstone block of the quote
+    tombstone_block BIGINT NOT NULL
 );
 
 CREATE INDEX idx__quotes__base_token_id ON quotes (base_token_id);
 CREATE INDEX idx__quotes__counter_token_id ON quotes (counter_token_id);
 CREATE INDEX idx__quotes__base_range ON quotes (base_range_min, base_range_max);
+CREATE INDEX idx__quotes__key_image ON quotes (key_image);
+CREATE INDEX idx__quotes__tombstone_block ON quotes (tombstone_block);

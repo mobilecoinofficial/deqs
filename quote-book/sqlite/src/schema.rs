@@ -13,5 +13,7 @@ diesel::table! {
         base_range_max -> Binary,
         max_counter_tokens -> Binary,
         timestamp -> BigInt,
+        key_image -> Binary,
+        tombstone_block -> BigInt,
     }
 }
