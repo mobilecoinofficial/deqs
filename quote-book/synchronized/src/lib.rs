@@ -31,7 +31,11 @@ where
     fn add_sci(&self, sci: SignedContingentInput, timestamp: Option<u64>) -> Result<Quote, Error> {
         // Check to see if the current_block_index is already at or past the
         // max_tombstone_block for the sci.
-        let current_block_index = self.ledger.num_blocks()? - 1;
+        let current_block_index = self
+            .ledger
+            .num_blocks()
+            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?
+            - 1;
         if let Some(input_rules) = &sci.tx_in.input_rules {
             if input_rules.max_tombstone_block != 0
                 && current_block_index >= input_rules.max_tombstone_block
@@ -41,7 +45,11 @@ where
         }
         // Check the ledger to see if the quote is stale before adding it to the
         // quotebook.
-        if self.ledger.contains_key_image(&sci.key_image())? {
+        if self
+            .ledger
+            .contains_key_image(&sci.key_image())
+            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?
+        {
             return Err(Error::QuoteIsStale);
         }
 
