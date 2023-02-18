@@ -30,6 +30,11 @@ pub enum Command<REQ: RpcRequest, RESP: RpcResponse> {
         response_sender: oneshot::Sender<Vec<Multiaddr>>,
     },
 
+    /// Instruct the network to provide the list of peers it is connected to
+    ConnectedPeerList {
+        response_sender: oneshot::Sender<Vec<PeerId>>,
+    },
+
     /// Send a gossip message
     PublishGossip {
         /// The topic to publish to
@@ -148,7 +153,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Client<REQ, RESP> {
 
     /// Respond to an incoming RPC request.
     pub async fn rpc_response(
-        &mut self,
+        &self,
         response: RESP,
         channel: ResponseChannel<RESP>,
     ) -> Result<(), Error> {
@@ -158,7 +163,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Client<REQ, RESP> {
     }
 
     /// Subscribe to a gossip topic.
-    pub async fn subscribe_gossip(&mut self, topic: IdentTopic) -> Result<bool, Error> {
+    pub async fn subscribe_gossip(&self, topic: IdentTopic) -> Result<bool, Error> {
         let (response_sender, response_receiver) = oneshot::channel();
 
         self.sender.send(Command::SubscribeGossip {
@@ -171,7 +176,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Client<REQ, RESP> {
 
     /// Publish a message to a gossip topic.
     pub async fn publish_gossip(
-        &mut self,
+        &self,
         topic: IdentTopic,
         msg: Vec<u8>,
     ) -> Result<MessageId, Error> {
@@ -187,7 +192,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Client<REQ, RESP> {
     }
 
     /// Get list of known peers.
-    pub async fn peer_list(&mut self) -> Result<Vec<PeerId>, Error> {
+    pub async fn peer_list(&self) -> Result<Vec<PeerId>, Error> {
         let (response_sender, response_receiver) = oneshot::channel();
 
         self.sender.send(Command::PeerList { response_sender })?;
@@ -196,11 +201,21 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Client<REQ, RESP> {
     }
 
     //// Get list of listening addresses.
-    pub async fn listen_addrs(&mut self) -> Result<Vec<Multiaddr>, Error> {
+    pub async fn listen_addrs(&self) -> Result<Vec<Multiaddr>, Error> {
         let (response_sender, response_receiver) = oneshot::channel();
 
         self.sender
             .send(Command::ListenAddrList { response_sender })?;
+
+        Ok(response_receiver.await?)
+    }
+
+    //// Get list of connected peers.
+    pub async fn connected_peers(&self) -> Result<Vec<PeerId>, Error> {
+        let (response_sender, response_receiver) = oneshot::channel();
+
+        self.sender
+            .send(Command::ConnectedPeerList { response_sender })?;
 
         Ok(response_receiver.await?)
     }

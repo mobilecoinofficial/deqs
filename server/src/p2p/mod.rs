@@ -1,8 +1,10 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+mod metrics;
 mod rpc;
 mod rpc_error;
 
+pub use metrics::P2PRpcMetrics;
 pub use rpc_error::{RpcError, RpcQuoteBookError};
 
 use crate::Error;
@@ -22,6 +24,8 @@ use rpc::{Request, Response, RpcClient};
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 use tokio::sync::mpsc::UnboundedReceiver;
+
+use self::metrics::P2P_RPC_METRICS;
 
 /// Gossip topic for message-bus traffic.
 const MSG_BUS_TOPIC: &str = "mc/deqs/server/msg-bus";
@@ -97,7 +101,7 @@ impl<QB: QuoteBook> P2P<QB> {
         let Network {
             event_loop_handle,
             events,
-            mut client,
+            client,
         } = network_builder.build()?;
 
         client.subscribe_gossip(msg_bus_topic.clone()).await?;
@@ -179,6 +183,11 @@ impl<QB: QuoteBook> P2P<QB> {
         }
     }
 
+    /// Get list of connected peers.
+    pub async fn connected_peers(&self) -> Result<Vec<PeerId>, Error> {
+        Ok(self.client.connected_peers().await?)
+    }
+
     /// Async network event: connection established with a peer.
     async fn handle_connection_established(&mut self, peer_id: PeerId) -> Result<(), Error> {
         log::info!(self.logger, "Connection established with peer: {}", peer_id);
@@ -203,6 +212,8 @@ impl<QB: QuoteBook> P2P<QB> {
         request: Request,
         channel: ResponseChannel<Response>,
     ) -> Result<(), Error> {
+        let (_timer, method_name) = P2P_RPC_METRICS.req(&request);
+
         let response = match request {
             Request::GetAllQuoteIds => self
                 .quote_book
@@ -223,6 +234,8 @@ impl<QB: QuoteBook> P2P<QB> {
                 }
             }
         };
+
+        P2P_RPC_METRICS.resp(method_name, &response);
 
         self.client.rpc_response(response, channel).await?;
 

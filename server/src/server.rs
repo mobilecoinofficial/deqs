@@ -1,12 +1,16 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{Error, GrpcServer, Msg, P2P};
+use crate::{update_periodic_metrics, Error, GrpcServer, Msg, METRICS_POLL_INTERVAL, P2P};
 use deqs_api::DeqsClientUri;
 use deqs_p2p::libp2p::{identity::Keypair, Multiaddr};
 use deqs_quote_book::QuoteBook;
 use mc_common::logger::{log, Logger};
 use postage::{broadcast, prelude::Stream};
-use tokio::{select, sync::mpsc};
+use tokio::{
+    select,
+    sync::mpsc,
+    time::{interval, MissedTickBehavior},
+};
 
 /// Maximum number of messages that can be queued in the message bus.
 const MSG_BUS_QUEUE_SIZE: usize = 1000;
@@ -54,13 +58,20 @@ impl<QB: QuoteBook> Server<QB> {
         let p2p_listen_addrs = p2p.listen_addrs().await?;
 
         // Start GRPC server
-        let mut grpc_server =
-            GrpcServer::new(msg_bus_tx, quote_book, grpc_listen_address, logger.clone());
+        let mut grpc_server = GrpcServer::new(
+            msg_bus_tx,
+            quote_book.clone(),
+            grpc_listen_address,
+            logger.clone(),
+        );
         grpc_server
             .start()
             .expect("Failed starting client GRPC server");
 
         // Event loop
+        let mut metrics_interval = interval(METRICS_POLL_INTERVAL);
+        metrics_interval.set_missed_tick_behavior(MissedTickBehavior::Skip);
+
         tokio::spawn(async move {
             log::info!(logger, "Server event loop started");
 
@@ -100,6 +111,12 @@ impl<QB: QuoteBook> Server<QB> {
                     _ = shutdown_rx.recv() => {
                         log::info!(logger, "Server shutdown requested");
                         break
+                    }
+
+                    _ = metrics_interval.tick() => {
+                        if let Err(err) = update_periodic_metrics(&quote_book, &p2p).await {
+                            log::error!(logger, "update_periodic_metrics failed: {:?}", err)
+                        }
                     }
 
                 }
