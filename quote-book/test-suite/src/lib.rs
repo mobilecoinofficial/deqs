@@ -203,6 +203,19 @@ pub fn cannot_add_invalid_sci(quote_book: &impl QuoteBook) {
     );
 }
 
+pub fn cannot_add_duplicate_sci(quote_book: &impl QuoteBook) {
+    let pair = pair();
+    let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+
+    let sci = create_sci(&pair, 10, 20, &mut rng);
+    quote_book.add_sci(sci.clone(), None).unwrap();
+
+    assert_eq!(
+        quote_book.add_sci(sci, None).unwrap_err(),
+        Error::QuoteAlreadyExists
+    );
+}
+
 /// Test that get_quotes filter correctly.
 pub fn get_quotes_filtering_works(quote_book: &impl QuoteBook) {
     let pair1 = pair();
