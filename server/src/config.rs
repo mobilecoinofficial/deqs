@@ -13,6 +13,10 @@ use std::path::PathBuf;
 #[derive(Parser, Serialize)]
 #[clap(version)]
 pub struct ServerConfig {
+    /// Path to sqlite database
+    #[clap(long)]
+    pub db_path: PathBuf,
+
     /// gRPC listening URI for client requests.
     #[clap(long, env = "MC_CLIENT_LISTEN_URI")]
     pub client_listen_uri: DeqsClientUri,
