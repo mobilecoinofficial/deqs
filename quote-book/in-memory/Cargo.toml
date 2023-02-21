@@ -11,7 +11,7 @@ mc-blockchain-types = { path = "../../mobilecoin/blockchain/types" }
 mc-crypto-ring-signature = { path = "../../mobilecoin/crypto/ring-signature" }
 mc-transaction-core = { path = "../../mobilecoin/transaction/core" }
 mc-transaction-extra = { path = "../../mobilecoin/transaction/extra" }
- mc-transaction-types = { path = "../../mobilecoin/transaction/types" }
+mc-transaction-types = { path = "../../mobilecoin/transaction/types" }
 
 rand = "0.8" # build fails without this
 
