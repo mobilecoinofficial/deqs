@@ -107,7 +107,7 @@ fn get_quote_by_id_works(logger: Logger) {
 #[test_with_logger]
 fn cannot_add_sci_with_key_image_in_ledger(logger: Logger) {
     let mut ledger = create_and_initialize_test_ledger();
-    let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
+    let (msg_bus_tx, _msg_bus_rx) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = Arc::new(SynchronizedQuoteBook::new(
         internal_quote_book,
@@ -164,7 +164,7 @@ fn cannot_add_sci_with_key_image_in_ledger(logger: Logger) {
 #[test_with_logger]
 fn sci_that_are_added_to_ledger_are_removed_in_the_background(logger: Logger) {
     let mut ledger = create_and_initialize_test_ledger();
-    let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
+    let (msg_bus_tx, _msg_bus_rx) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = Arc::new(SynchronizedQuoteBook::new(
         internal_quote_book,
@@ -225,7 +225,7 @@ fn cannot_add_sci_past_tombstone_block(logger: Logger) {
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
     let ledger = create_and_initialize_test_ledger();
-    let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
+    let (msg_bus_tx, _msg_bus_rx) = broadcast::channel::<Msg>(1000);
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = Arc::new(SynchronizedQuoteBook::new(
         internal_quote_book,
@@ -284,7 +284,7 @@ fn sci_past_tombstone_block_get_removed_in_the_background(logger: Logger) {
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
     let mut ledger = create_and_initialize_test_ledger();
-    let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
+    let (msg_bus_tx, _msg_bus_rx) = broadcast::channel::<Msg>(1000);
 
     let internal_quote_book = InMemoryQuoteBook::default();
     let starting_blocks = ledger.num_blocks().unwrap();

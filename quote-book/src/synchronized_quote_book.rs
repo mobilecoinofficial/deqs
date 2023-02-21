@@ -231,13 +231,8 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                                 .msg_bus_tx
                                 .blocking_send(Msg::SciQuoteRemoved(*quote.id()))
                             {
-                                log::error!(
-                                    self.logger,
-                                    "Failed to send SCI quote {} removed message to message bus: {:?}",
-                                    quote.id(),
-                                    err
-                                );
-                            }
+                                    // Panics because an error in the msgbus is not recoverable.
+                                    panic!("Failed to send SCI quote {} removed message to message bus while filtering by tombstone block: {:?}", quote.id(), err);                            }
                         }
                     }
                     Err(err) => {
@@ -287,12 +282,8 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                                     .msg_bus_tx
                                     .blocking_send(Msg::SciQuoteRemoved(*quote.id()))
                                 {
-                                    log::error!(
-                                        self.logger,
-                                        "Failed to send SCI quote {} removed message to message bus: {:?}",
-                                        quote.id(),
-                                        err
-                                    );
+                                    // Panics because an error in the msgbus is not recoverable.
+                                    panic!("Failed to send SCI quote {} removed message to message bus while filtering key images: {:?}", quote.id(), err);
                                 }
                             }
                         }
