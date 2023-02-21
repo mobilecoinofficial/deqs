@@ -227,12 +227,9 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                     Ok(quotes) => {
                         for quote in quotes {
                             log::debug!(self.logger, "Quote {} removed", quote.id());
-                            if let Err(err) = self
+                            self
                                 .msg_bus_tx
-                                .blocking_send(Msg::SciQuoteRemoved(*quote.id()))
-                            {
-                                    // Panics because an error in the msgbus is not recoverable.
-                                    panic!("Failed to send SCI quote {} removed message to message bus while filtering by tombstone block: {:?}", quote.id(), err);                            }
+                                .blocking_send(Msg::SciQuoteRemoved(*quote.id())).expect(&format!("Failed to send SCI quote {} removed message to message bus while filtering by tombstone block", quote.id()));
                         }
                     }
                     Err(err) => {
@@ -282,14 +279,10 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                     let quotes = backoff::retry(backoff, f).expect("Could not remove quotes by key_image after retries");
                     for quote in quotes {
                         log::debug!(self.logger, "Quote {} removed", quote.id());
-                        if let Err(err) = self
-                            .msg_bus_tx
-                            .blocking_send(Msg::SciQuoteRemoved(*quote.id()))
-                        {
-                            // Panics because an error in the msgbus is not recoverable.
-                            panic!("Failed to send SCI quote {} removed message to message bus while filtering key images: {:?}", quote.id(), err);
-                        }
-                    }
+                        self
+                        .msg_bus_tx
+                        .blocking_send(Msg::SciQuoteRemoved(*quote.id())).expect(&format!("Failed to send SCI quote {} removed message to message bus while filtering by key_image", quote.id()));
+            }
                 }
                 self.next_block_index += 1;
             }
