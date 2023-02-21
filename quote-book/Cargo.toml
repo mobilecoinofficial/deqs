@@ -5,6 +5,7 @@ authors = ["MobileCoin"]
 edition = "2021"
 
 [dependencies]
+backoff = "0.4"
 displaydoc = "0.2"
 hex = "0.4"
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }

@@ -1,5 +1,5 @@
 // Copyright (c) 2023 MobileCoin Inc.
-
+use backoff::{Error as BackoffError, ExponentialBackoff};
 use crate::{Error as QuoteBookError, Pair, Quote, QuoteBook, QuoteId};
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
@@ -274,26 +274,20 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
             Ok(block_contents) => {
                 // Filter keyimages in quotebook
                 for key_image in block_contents.key_images {
-                    match self.quotebook.remove_quotes_by_key_image(&key_image) {
-                        Ok(quotes) => {
-                            for quote in quotes {
-                                log::debug!(self.logger, "Quote {} removed", quote.id());
-                                if let Err(err) = self
-                                    .msg_bus_tx
-                                    .blocking_send(Msg::SciQuoteRemoved(*quote.id()))
-                                {
-                                    // Panics because an error in the msgbus is not recoverable.
-                                    panic!("Failed to send SCI quote {} removed message to message bus while filtering key images: {:?}", quote.id(), err);
-                                }
-                            }
-                        }
-                        Err(err) => {
-                            log::error!(
-                                self.logger,
-                                "Failed to remove key_image {}: {:?}",
-                                key_image,
-                                err
-                            );
+                    let backoff = ExponentialBackoff::default();
+                    let working_quotebook = self.quotebook.clone();
+                    let f = &move || -> Result<Vec<Quote>, BackoffError<QuoteBookError>> {
+                        working_quotebook.remove_quotes_by_key_image(&key_image).map_err(|e| BackoffError::Transient { err: e, retry_after: None })
+                    };
+                    let quotes = backoff::retry(backoff, f).expect("Could not remove quotes by key_image after retries");
+                    for quote in quotes {
+                        log::debug!(self.logger, "Quote {} removed", quote.id());
+                        if let Err(err) = self
+                            .msg_bus_tx
+                            .blocking_send(Msg::SciQuoteRemoved(*quote.id()))
+                        {
+                            // Panics because an error in the msgbus is not recoverable.
+                            panic!("Failed to send SCI quote {} removed message to message bus while filtering key images: {:?}", quote.id(), err);
                         }
                     }
                 }
