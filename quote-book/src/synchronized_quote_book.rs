@@ -226,7 +226,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                 {
                     Ok(quotes) => {
                         for quote in quotes {
-                            log::info!(self.logger, "Quote {} removed", quote.id());
+                            log::debug!(self.logger, "Quote {} removed", quote.id());
                             if let Err(err) = self
                                 .msg_bus_tx
                                 .blocking_send(Msg::SciQuoteRemoved(*quote.id()))
@@ -282,7 +282,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                     match self.quotebook.remove_quotes_by_key_image(&key_image) {
                         Ok(quotes) => {
                             for quote in quotes {
-                                log::info!(self.logger, "Quote {} removed", quote.id());
+                                log::debug!(self.logger, "Quote {} removed", quote.id());
                                 if let Err(err) = self
                                     .msg_bus_tx
                                     .blocking_send(Msg::SciQuoteRemoved(*quote.id()))
