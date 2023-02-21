@@ -52,6 +52,11 @@ impl diesel::r2d2::CustomizeConnection<SqliteConnection, diesel::r2d2::Error>
     }
 }
 
+/// A quote book that stores quotes in a SQLite database.
+/// It does not query quotes from SQL since implementing proper sorting is
+/// tricky due to the swap rate requiring either two quotes to compare (not
+/// available in SQL ORDER BY), or floating point math (inaccurate). Instead, it
+/// uses an underlying quotebook to query quotes.
 #[derive(Clone)]
 pub struct SqliteQuoteBook<QB: QuoteBook> {
     pool: Pool<ConnectionManager<SqliteConnection>>,
@@ -59,6 +64,9 @@ pub struct SqliteQuoteBook<QB: QuoteBook> {
 }
 
 impl<QB: QuoteBook> SqliteQuoteBook<QB> {
+    /// Instantiate a new SqliteQuoteBook from a path pointing to a SQLite
+    /// database. Upon instantiation, all existing quotes in the database
+    /// will be loaded into the underlying quote book.
     pub fn new(
         pool: Pool<ConnectionManager<SqliteConnection>>,
         quote_book: QB,
