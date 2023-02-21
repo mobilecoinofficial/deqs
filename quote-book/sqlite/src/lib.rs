@@ -88,10 +88,10 @@ impl SqliteQuoteBook {
             .into_iter()
             .enumerate()
         {
-            let percent_loaded = (i + 1) / num_quotes;
+            let percent_loaded = (i + 1) * 100 / num_quotes;
 
-            // Log every ~10% of quotes loaded
-            if percent_loaded > last_percents_loaded + 10 {
+            // Log every 10% of quotes loaded
+            if percent_loaded >= last_percents_loaded + 10 {
                 log::info!(
                     logger,
                     "SqliteQuoteBook: {}% ({}/{}) quotes loaded from database",
@@ -105,10 +105,13 @@ impl SqliteQuoteBook {
             quote_book.add_quote((&quote).try_into()?)?;
         }
 
-        Ok(Self {
-            pool,
-            quote_book,
-        })
+        log::info!(
+            logger,
+            "SqliteQuoteBook: {} quotes loaded from database",
+            num_quotes
+        );
+
+        Ok(Self { pool, quote_book })
     }
 
     pub fn new_from_file_path(
