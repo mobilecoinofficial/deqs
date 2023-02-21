@@ -233,7 +233,9 @@ impl<QB: QuoteBook> QuoteBook for SqliteQuoteBook<QB> {
         Ok(
             conn.immediate_transaction(|conn| -> Result<Vec<Quote>, Error> {
                 let num_deleted = diesel::delete(
-                    dsl::quotes.filter(dsl::tombstone_block.le(current_block_index as i64)),
+                    dsl::quotes
+                        .filter(dsl::tombstone_block.gt(0))
+                        .filter(dsl::tombstone_block.le(current_block_index as i64)),
                 )
                 .execute(conn)?;
 

@@ -24,10 +24,16 @@ pub struct Quote {
 }
 
 impl Quote {
-    pub fn id(&self) -> QuoteId {
+    pub fn id(&self) -> Result<QuoteId, Error> {
+        if self.id.len() != 32 {
+            return Err(Error::ImplementationSpecific(format!(
+                "Expected 32 bytes quote id, found {} bytes instead",
+                self.id.len(),
+            )));
+        }
         let mut id = [0u8; 32];
-        id.copy_from_slice(&self.id); // TODO: check length
-        QuoteId(id)
+        id.copy_from_slice(&self.id);
+        Ok(QuoteId(id))
     }
     pub fn decode_sci(&self) -> Result<SignedContingentInput, Error> {
         decode(&self.sci_protobuf).map_err(|e| Error::ImplementationSpecific(e.to_string()))
@@ -94,7 +100,7 @@ impl TryFrom<&Quote> for deqs_quote_book_api::Quote {
     type Error = Error;
 
     fn try_from(quote: &Quote) -> Result<Self, Self::Error> {
-        let id = quote.id();
+        let id = quote.id()?;
         let sci = quote.decode_sci()?;
         let pair = quote.pair();
         let base_range = quote.base_range();
