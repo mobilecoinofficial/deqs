@@ -6,7 +6,6 @@ mod schema;
 mod sql_types;
 
 use deqs_quote_book_api::{Error as QuoteBookError, Quote, QuoteBook};
-use deqs_quote_book_in_memory::InMemoryQuoteBook;
 use diesel::{
     connection::SimpleConnection,
     insert_into,
@@ -54,22 +53,21 @@ impl diesel::r2d2::CustomizeConnection<SqliteConnection, diesel::r2d2::Error>
 }
 
 #[derive(Clone)]
-pub struct SqliteQuoteBook {
+pub struct SqliteQuoteBook<QB: QuoteBook> {
     pool: Pool<ConnectionManager<SqliteConnection>>,
-    quote_book: InMemoryQuoteBook,
+    quote_book: QB,
 }
 
-impl SqliteQuoteBook {
+impl<QB: QuoteBook> SqliteQuoteBook<QB> {
     pub fn new(
         pool: Pool<ConnectionManager<SqliteConnection>>,
+        quote_book: QB,
         logger: Logger,
     ) -> Result<Self, QuoteBookError> {
         let mut conn = pool.get().map_err(Error::from)?;
         conn.run_pending_migrations(MIGRATIONS).map_err(|err| {
             QuoteBookError::ImplementationSpecific(format!("run pending migrations: {}", err))
         })?;
-
-        let quote_book = InMemoryQuoteBook::default();
 
         let num_quotes = schema::quotes::table
             .count()
@@ -102,7 +100,7 @@ impl SqliteQuoteBook {
                 last_percents_loaded = percent_loaded;
             }
 
-            quote_book.add_quote((&quote).try_into()?)?;
+            quote_book.add_quote(&((&quote).try_into()?))?;
         }
 
         log::info!(
@@ -117,6 +115,7 @@ impl SqliteQuoteBook {
     pub fn new_from_file_path(
         file_path: &impl AsRef<Path>,
         db_connections: u32,
+        quote_book: QB,
         logger: Logger,
     ) -> Result<Self, QuoteBookError> {
         let manager =
@@ -133,23 +132,17 @@ impl SqliteQuoteBook {
             .build(manager)
             .map_err(Error::from)?;
 
-        Self::new(pool, logger)
+        Self::new(pool, quote_book, logger)
     }
 
     pub fn get_conn(&self) -> Result<Conn, Error> {
-        Ok(self.pool.get().map_err(Error::from)?)
+        self.pool.get().map_err(Error::from)
     }
 }
 
-impl QuoteBook for SqliteQuoteBook {
-    fn add_sci(
-        &self,
-        sci: mc_transaction_extra::SignedContingentInput,
-        timestamp: Option<u64>,
-    ) -> Result<deqs_quote_book_api::Quote, QuoteBookError> {
-        // Convert SCI into an quote. This also validates it.
-        let quote = Quote::new(sci, timestamp)?;
-        let sql_quote = models::Quote::from(&quote);
+impl<QB: QuoteBook> QuoteBook for SqliteQuoteBook<QB> {
+    fn add_quote(&self, quote: &Quote) -> Result<(), QuoteBookError> {
+        let sql_quote = models::Quote::from(quote);
 
         let mut conn = self.get_conn()?;
         conn.immediate_transaction(|conn| -> Result<(), Error> {
@@ -170,12 +163,12 @@ impl QuoteBook for SqliteQuoteBook {
 
             // Try to add to our in-memory quote book. If this fails, we will rollback the
             // transaction.
-            self.quote_book.add_quote(quote.clone())?;
+            self.quote_book.add_quote(quote)?;
 
             Ok(())
         })?;
 
-        Ok(quote)
+        Ok(())
     }
 
     fn remove_quote_by_id(
@@ -231,7 +224,6 @@ impl QuoteBook for SqliteQuoteBook {
 
         Ok(
             conn.immediate_transaction(|conn| -> Result<Vec<Quote>, Error> {
-                // TODO is le correct ? 0 tombstone block
                 let num_deleted = diesel::delete(
                     dsl::quotes.filter(dsl::tombstone_block.le(current_block_index as i64)),
                 )
@@ -277,13 +269,15 @@ impl QuoteBook for SqliteQuoteBook {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use deqs_quote_book_in_memory::InMemoryQuoteBook;
     use deqs_quote_book_test_suite as test_suite;
     use mc_common::logger::{test_with_logger, Logger};
     use tempdir::TempDir;
 
-    fn create_quote_book(dir: &TempDir, logger: Logger) -> SqliteQuoteBook {
+    fn create_quote_book(dir: &TempDir, logger: Logger) -> SqliteQuoteBook<InMemoryQuoteBook> {
         let file_path = dir.path().join("quotes.db");
-        SqliteQuoteBook::new_from_file_path(&file_path, 10, logger).unwrap()
+        SqliteQuoteBook::new_from_file_path(&file_path, 10, InMemoryQuoteBook::default(), logger)
+            .unwrap()
     }
 
     #[test_with_logger]

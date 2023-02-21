@@ -2,6 +2,7 @@
 
 use clap::Parser;
 use deqs_p2p::libp2p::identity::Keypair;
+use deqs_quote_book_in_memory::InMemoryQuoteBook;
 use deqs_quote_book_sqlite::SqliteQuoteBook;
 use deqs_quote_book_synchronized::{RemoveQuoteCallback, SynchronizedQuoteBook};
 use deqs_server::{Msg, Server, ServerConfig};
@@ -46,9 +47,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     );
 
     // Create quote book
-    let internal_quote_book =
-        SqliteQuoteBook::new_from_file_path(&config.db_path, 10, logger.clone())
-            .expect("failed initializing database");
+    let internal_quote_book = SqliteQuoteBook::new_from_file_path(
+        &config.db_path,
+        10,
+        InMemoryQuoteBook::default(),
+        logger.clone(),
+    )
+    .expect("failed initializing database");
     let synchronized_quote_book = SynchronizedQuoteBook::new(
         internal_quote_book,
         ledger_db,

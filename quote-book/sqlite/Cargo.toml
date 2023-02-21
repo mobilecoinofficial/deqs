@@ -6,7 +6,6 @@ edition = "2021"
 
 [dependencies]
 deqs-quote-book-api = { path = "../api" }
-deqs-quote-book-in-memory = { path = "../in-memory" }
 
 mc-blockchain-types = { path = "../../mobilecoin/blockchain/types" }
 mc-common = { path = "../../mobilecoin/common" }
@@ -22,6 +21,7 @@ r2d2 = "0.8"
 
 [dev-dependencies]
 deqs-mc-test-utils = { path = "../../mc-test-utils" }
+deqs-quote-book-in-memory = { path = "../in-memory" }
 deqs-quote-book-test-suite = { path = "../test-suite" }
 
 mc-account-keys = { path = "../../mobilecoin/account-keys" }
