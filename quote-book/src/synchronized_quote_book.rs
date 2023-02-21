@@ -76,13 +76,11 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
     }
 
     /// Stop and join the db poll thread
-    pub fn stop(&mut self) -> Result<(), ()> {
+    pub fn stop(&mut self) {
         if let Some(join_handle) = self.join_handle.take() {
             self.stop_requested.store(true, Ordering::SeqCst);
             join_handle.join().expect("SynchronizedQuoteBookThread join failed");        
         }
-
-        Ok(())
     }
 }
 
@@ -106,9 +104,9 @@ where
         sci: SignedContingentInput,
         timestamp: Option<u64>,
     ) -> Result<Quote, QuoteBookError> {
-        // Check to see if the current_block_index is already at or past the
+        // Check to see if the ledger's current block index is already at or past the
         // max_tombstone_block for the sci.
-        let current_block_index = self.get_current_block_index();
+        let current_block_index = self.ledger.num_blocks()? - 1;
         if let Some(input_rules) = &sci.tx_in.input_rules {
             if input_rules.max_tombstone_block != 0
                 && current_block_index >= input_rules.max_tombstone_block
