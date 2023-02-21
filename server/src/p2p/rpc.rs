@@ -2,7 +2,7 @@
 
 use crate::{p2p::RpcError, Error};
 use deqs_p2p::{libp2p::PeerId, Client};
-use deqs_quote_book::{Quote, QuoteId};
+use deqs_quote_book_api::{Quote, QuoteId};
 use mc_common::logger::{log, Logger};
 use serde::{Deserialize, Serialize};
 

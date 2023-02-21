@@ -1,0 +1,27 @@
+[package]
+name = "deqs-quote-book-synchronized"
+version = "1.3.0-pre0"
+authors = ["MobileCoin"]
+edition = "2021"
+
+[dependencies]
+deqs-quote-book-api = { path = "../api" }
+
+mc-blockchain-types = { path = "../../mobilecoin/blockchain/types" }
+mc-crypto-ring-signature = { path = "../../mobilecoin/crypto/ring-signature" }
+mc-ledger-db = { path = "../../mobilecoin/ledger/db", features = ["test_utils"] }
+mc-transaction-extra = { path = "../../mobilecoin/transaction/extra" }
+
+rand = "0.8" # build fails without this
+
+[dev-dependencies]
+deqs-mc-test-utils = { path = "../../mc-test-utils" }
+deqs-quote-book-in-memory = { path = "../in-memory" }
+
+deqs-quote-book-test-suite = { path = "../test-suite" }
+
+mc-account-keys = { path = "../../mobilecoin/account-keys" }
+mc-crypto-ring-signature-signer = { path = "../../mobilecoin/crypto/ring-signature/signer", default-features = false }
+mc-fog-report-validation-test-utils = { path = "../../mobilecoin/fog/report/validation/test-utils" }
+mc-transaction-builder = { path = "../../mobilecoin/transaction/builder", features = ["test-only"] }
+mc-transaction-core = { path = "../../mobilecoin/transaction/core" }

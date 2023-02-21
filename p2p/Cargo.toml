@@ -22,4 +22,6 @@ void = "1"
 rand = "0.8"
 
 [dev-dependencies]
+mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
+
 clap = { version = "4.0", features = ["derive", "env"] }

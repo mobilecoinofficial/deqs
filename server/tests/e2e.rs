@@ -1,13 +1,13 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use std::{collections::BTreeSet, str::FromStr, sync::Arc, time::Duration};
-
 use deqs_api::{
     deqs::{RemoveQuoteRequest, SubmitQuotesRequest},
     deqs_grpc::DeqsClientApiClient,
     DeqsClientUri,
 };
-use deqs_quote_book::{InMemoryQuoteBook, Pair, Quote, QuoteBook, QuoteId, SynchronizedQuoteBook};
+use deqs_quote_book_api::{Pair, Quote, QuoteBook, QuoteId};
+use deqs_quote_book_in_memory::InMemoryQuoteBook;
+use deqs_quote_book_synchronized::SynchronizedQuoteBook;
 use deqs_server::Server;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_account_keys::AccountKey;
@@ -20,6 +20,7 @@ use mc_transaction_extra::SignedContingentInput;
 use mc_transaction_types::{BlockVersion, TokenId};
 use mc_util_grpc::ConnectionUriGrpcioChannel;
 use rand::{rngs::StdRng, SeedableRng};
+use std::{collections::BTreeSet, str::FromStr, sync::Arc, time::Duration};
 use tokio_retry::{strategy::FixedInterval, Retry};
 
 fn create_and_initialize_test_ledger() -> LedgerDB {

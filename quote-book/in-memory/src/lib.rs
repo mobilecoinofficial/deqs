@@ -1,6 +1,8 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{Error as QuoteBookError, Pair, Quote, QuoteBook, QuoteId};
+#![feature(btree_drain_filter)]
+
+use deqs_quote_book_api::{Error as QuoteBookError, Pair, Quote, QuoteBook, QuoteId};
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
 use mc_transaction_core::validation::validate_tombstone;
@@ -209,7 +211,36 @@ fn range_overlaps(x: &impl RangeBounds<u64>, y: &impl RangeBounds<u64>) -> bool 
 
 #[cfg(test)]
 mod tests {
-    // Tests for this are under the tests/ directory since we want to be able to
-    // re-use some test code between implementations and that seems to be the
-    // way to make Rust do that.
+    use super::*;
+    use deqs_quote_book_test_suite as test_suite;
+
+    #[test]
+    fn basic_happy_flow() {
+        let quote_book = InMemoryQuoteBook::default();
+        test_suite::basic_happy_flow(&quote_book);
+    }
+
+    #[test]
+    fn cannot_add_invalid_sci() {
+        let quote_book = InMemoryQuoteBook::default();
+        test_suite::cannot_add_invalid_sci(&quote_book);
+    }
+
+    #[test]
+    fn get_quotes_filtering_works() {
+        let quote_book = InMemoryQuoteBook::default();
+        test_suite::get_quotes_filtering_works(&quote_book);
+    }
+
+    #[test]
+    fn get_quote_ids_works() {
+        let quote_book = InMemoryQuoteBook::default();
+        test_suite::get_quote_ids_works(&quote_book);
+    }
+
+    #[test]
+    fn get_quote_by_id_works() {
+        let quote_book = InMemoryQuoteBook::default();
+        test_suite::get_quote_by_id_works(&quote_book);
+    }
 }

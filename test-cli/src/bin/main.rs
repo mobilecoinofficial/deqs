@@ -7,7 +7,7 @@ use deqs_api::{
     DeqsClientUri,
 };
 use deqs_mc_test_utils::{create_partial_sci, create_sci};
-use deqs_quote_book::{Quote, QuoteId};
+use deqs_quote_book_api::{Quote, QuoteId};
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_common::logger::{log, o};
 use mc_transaction_types::TokenId;

@@ -1,7 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use crate::deqs as api;
-use deqs_quote_book::Error;
+use deqs_quote_book_api::Error;
 
 impl From<&Error> for api::QuoteStatusCode {
     fn from(src: &Error) -> Self {

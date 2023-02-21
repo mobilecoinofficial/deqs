@@ -8,7 +8,7 @@ use deqs_api::{
     },
     deqs_grpc::{create_deqs_client_api, DeqsClientApi},
 };
-use deqs_quote_book::{Error as QuoteBookError, Pair, QuoteBook, QuoteId};
+use deqs_quote_book_api::{Error as QuoteBookError, Pair, QuoteBook, QuoteId};
 use futures::{FutureExt, SinkExt};
 use grpcio::{
     RpcContext, RpcStatus, RpcStatusCode, ServerStreamingSink, Service, UnarySink, WriteFlags,
@@ -118,8 +118,7 @@ impl<OB: QuoteBook> ClientService<OB> {
                 }
                 Err(err) => {
                     error_messages.push(err.to_string());
-                    let quote_book_error: deqs_quote_book::Error = err;
-                    status_codes.push((&quote_book_error).into());
+                    status_codes.push((&err).into());
                     quotes.push(Default::default());
                 }
             }
@@ -278,7 +277,8 @@ mod tests {
     use super::*;
     use deqs_api::{deqs_grpc::DeqsClientApiClient, DeqsClientUri};
     use deqs_mc_test_utils::create_sci;
-    use deqs_quote_book::{InMemoryQuoteBook, Quote};
+    use deqs_quote_book_api::Quote;
+    use deqs_quote_book_in_memory::InMemoryQuoteBook;
     use futures::{executor::block_on, StreamExt};
     use grpcio::{ChannelBuilder, EnvBuilder, Server, ServerBuilder, ServerCredentials};
     use mc_common::logger::test_with_logger;
@@ -313,7 +313,7 @@ mod tests {
         let client_env = Arc::new(EnvBuilder::new().build());
         let ch = ChannelBuilder::default_channel_builder(client_env).connect_to_uri(
             &DeqsClientUri::from_str(&format!("insecure-deqs://127.0.0.1:{}", port)).unwrap(),
-            &logger,
+            logger,
         );
         let client_api = DeqsClientApiClient::new(ch);
 
@@ -447,11 +447,11 @@ mod tests {
 
         let scis = [&sci1, &sci2, &sci3, &sci4]
             .into_iter()
-            .map(|sci| mc_api::external::SignedContingentInput::from(sci))
+            .map(mc_api::external::SignedContingentInput::from)
             .collect::<Vec<_>>();
 
         let req = SubmitQuotesRequest {
-            quotes: scis.clone().into(),
+            quotes: scis.into(),
             ..Default::default()
         };
         client_api.submit_quotes(&req).expect("submit quote failed");

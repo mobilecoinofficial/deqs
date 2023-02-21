@@ -3,7 +3,7 @@
 use crate::{update_periodic_metrics, Error, GrpcServer, Msg, METRICS_POLL_INTERVAL, P2P};
 use deqs_api::DeqsClientUri;
 use deqs_p2p::libp2p::{identity::Keypair, Multiaddr};
-use deqs_quote_book::QuoteBook;
+use deqs_quote_book_api::QuoteBook;
 use mc_common::logger::{log, Logger};
 use postage::{broadcast, prelude::Stream};
 use tokio::{
