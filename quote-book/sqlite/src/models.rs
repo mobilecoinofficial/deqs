@@ -36,7 +36,9 @@ impl Quote {
         Ok(QuoteId(id))
     }
     pub fn decode_sci(&self) -> Result<SignedContingentInput, Error> {
-        decode(&self.sci_protobuf).map_err(|e| Error::ImplementationSpecific(e.to_string()))
+        decode(&self.sci_protobuf).map_err(|e| {
+            Error::ImplementationSpecific(format!("failed decoding SCI protobuf: {}", e))
+        })
     }
     pub fn base_token_id(&self) -> TokenId {
         TokenId::from(self.base_token_id as u64)
