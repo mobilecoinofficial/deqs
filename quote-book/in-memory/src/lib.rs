@@ -29,15 +29,10 @@ impl Default for InMemoryQuoteBook {
     }
 }
 
-impl QuoteBook for InMemoryQuoteBook {
-    fn add_sci(
-        &self,
-        sci: SignedContingentInput,
-        timestamp: Option<u64>,
-    ) -> Result<Quote, QuoteBookError> {
-        // Convert SCI into an quote. This also validates it.
-        let quote = Quote::new(sci, timestamp)?;
-
+impl InMemoryQuoteBook {
+    /// Add a pre-existing quote to the quote book.
+    /// Thios assumes the quote is valid.
+    pub fn add_quote(&self, quote: Quote) -> Result<Quote, QuoteBookError> {
         // Try adding to quote book.
         let mut scis = self.scis.write()?;
         let quotes = scis.entry(*quote.pair()).or_insert_with(Default::default);
@@ -58,6 +53,18 @@ impl QuoteBook for InMemoryQuoteBook {
         // due to the key image check above.
         assert!(quotes.insert(quote.clone()));
         Ok(quote)
+    }
+}
+
+impl QuoteBook for InMemoryQuoteBook {
+    fn add_sci(
+        &self,
+        sci: SignedContingentInput,
+        timestamp: Option<u64>,
+    ) -> Result<Quote, QuoteBookError> {
+        // Convert SCI into an quote. This also validates it.
+        let quote = Quote::new(sci, timestamp)?;
+        self.add_quote(quote)
     }
 
     fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, QuoteBookError> {

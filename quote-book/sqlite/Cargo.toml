@@ -6,8 +6,10 @@ edition = "2021"
 
 [dependencies]
 deqs-quote-book-api = { path = "../api" }
+deqs-quote-book-in-memory = { path = "../in-memory" }
 
 mc-blockchain-types = { path = "../../mobilecoin/blockchain/types" }
+mc-common = { path = "../../mobilecoin/common" }
 mc-crypto-ring-signature = { path = "../../mobilecoin/crypto/ring-signature" }
 mc-ledger-db = { path = "../../mobilecoin/ledger/db", features = ["test_utils"] }
 mc-transaction-extra = { path = "../../mobilecoin/transaction/extra" }
@@ -16,13 +18,14 @@ mc-util-serial = { path = "../../mobilecoin/util/serial" }
 
 diesel = { version = "2.0.0", features = ["sqlite", "r2d2"] }
 diesel_migrations = "2.0.0"
+r2d2 = "0.8"
 
 [dev-dependencies]
 deqs-mc-test-utils = { path = "../../mc-test-utils" }
-deqs-quote-book-in-memory = { path = "../in-memory" }
 deqs-quote-book-test-suite = { path = "../test-suite" }
 
 mc-account-keys = { path = "../../mobilecoin/account-keys" }
+mc-common = { path = "../../mobilecoin/common", features = ["loggers"] }
 mc-crypto-ring-signature-signer = { path = "../../mobilecoin/crypto/ring-signature/signer", default-features = false }
 mc-fog-report-validation-test-utils = { path = "../../mobilecoin/fog/report/validation/test-utils" }
 mc-transaction-builder = { path = "../../mobilecoin/transaction/builder", features = ["test-only"] }
