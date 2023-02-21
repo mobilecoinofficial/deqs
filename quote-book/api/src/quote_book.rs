@@ -14,7 +14,15 @@ pub trait QuoteBook: Clone + Send + Sync + 'static {
     /// * `sci` - The SCI to add.
     /// * `timestamp` - The timestamp of the block containing the SCI. If not
     ///   provided, the current system time is used.
-    fn add_sci(&self, sci: SignedContingentInput, timestamp: Option<u64>) -> Result<Quote, Error>;
+    fn add_sci(&self, sci: SignedContingentInput, timestamp: Option<u64>) -> Result<Quote, Error> {
+        // Convert SCI into an quote. This also validates it.
+        let quote = Quote::new(sci, timestamp)?;
+        self.add_quote(&quote)?;
+        Ok(quote)
+    }
+
+    /// Add a pre-existing quote to the quote book.
+    fn add_quote(&self, quote: &Quote) -> Result<(), Error>;
 
     /// Remove a single quote from the book, identified by its id.
     /// Returns the removed quote if it was found
