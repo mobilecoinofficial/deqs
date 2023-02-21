@@ -1,10 +1,12 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+mod error;
 mod models;
 mod schema;
 mod sql_types;
 
-use deqs_quote_book_api::{Error, Quote, QuoteBook};
+use deqs_quote_book_api::{Error as QuoteBookError, Quote, QuoteBook};
+use deqs_quote_book_in_memory::InMemoryQuoteBook;
 use diesel::{
     connection::SimpleConnection,
     insert_into,
@@ -14,9 +16,9 @@ use diesel::{
     SqliteConnection,
 };
 use diesel_migrations::{embed_migrations, EmbeddedMigrations, MigrationHarness};
-use std::{ops::Bound, path::Path, time::Duration};
-
-use crate::sql_types::VecU64;
+use error::Error;
+use mc_common::logger::{log, Logger};
+use std::{path::Path, time::Duration};
 
 pub const MIGRATIONS: EmbeddedMigrations = embed_migrations!("migrations/");
 
@@ -54,29 +56,70 @@ impl diesel::r2d2::CustomizeConnection<SqliteConnection, diesel::r2d2::Error>
 #[derive(Clone)]
 pub struct SqliteQuoteBook {
     pool: Pool<ConnectionManager<SqliteConnection>>,
+    quote_book: InMemoryQuoteBook,
 }
 
 impl SqliteQuoteBook {
-    pub fn new(pool: Pool<ConnectionManager<SqliteConnection>>) -> Result<Self, Error> {
-        let mut conn = pool
-            .get()
-            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
-        conn.run_pending_migrations(MIGRATIONS)
-            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
+    pub fn new(
+        pool: Pool<ConnectionManager<SqliteConnection>>,
+        logger: Logger,
+    ) -> Result<Self, QuoteBookError> {
+        let mut conn = pool.get().map_err(Error::from)?;
+        conn.run_pending_migrations(MIGRATIONS).map_err(|err| {
+            QuoteBookError::ImplementationSpecific(format!("run pending migrations: {}", err))
+        })?;
 
-        Ok(Self { pool })
+        let quote_book = InMemoryQuoteBook::default();
+
+        let num_quotes = schema::quotes::table
+            .count()
+            .get_result::<i64>(&mut conn)
+            .map_err(Error::from)? as usize;
+        log::info!(
+            logger,
+            "SqliteQuoteBook: loading {} quotes from database",
+            num_quotes
+        );
+
+        let mut last_percents_loaded = 0;
+        for (i, quote) in schema::quotes::table
+            .load::<models::Quote>(&mut conn)
+            .map_err(Error::from)?
+            .into_iter()
+            .enumerate()
+        {
+            let percent_loaded = (i + 1) / num_quotes;
+
+            // Log every ~10% of quotes loaded
+            if percent_loaded > last_percents_loaded + 10 {
+                log::info!(
+                    logger,
+                    "SqliteQuoteBook: {}% ({}/{}) quotes loaded from database",
+                    percent_loaded,
+                    i + 1,
+                    num_quotes,
+                );
+                last_percents_loaded = percent_loaded;
+            }
+
+            quote_book.add_quote((&quote).try_into()?)?;
+        }
+
+        Ok(Self {
+            pool,
+            quote_book,
+        })
     }
 
     pub fn new_from_file_path(
         file_path: &impl AsRef<Path>,
         db_connections: u32,
-    ) -> Result<Self, Error> {
-        let manager = ConnectionManager::<SqliteConnection>::new(
-            file_path
-                .as_ref()
-                .to_str()
-                .ok_or_else(|| Error::ImplementationSpecific("Invalid file path".to_string()))?,
-        );
+        logger: Logger,
+    ) -> Result<Self, QuoteBookError> {
+        let manager =
+            ConnectionManager::<SqliteConnection>::new(file_path.as_ref().to_str().ok_or_else(
+                || QuoteBookError::ImplementationSpecific("Invalid file path".to_string()),
+            )?);
         let pool = Pool::builder()
             .max_size(db_connections)
             .connection_customizer(Box::new(ConnectionOptions {
@@ -85,16 +128,13 @@ impl SqliteQuoteBook {
             }))
             .test_on_check_out(true)
             .build(manager)
-            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
+            .map_err(Error::from)?;
 
-        Self::new(pool)
+        Self::new(pool, logger)
     }
 
     pub fn get_conn(&self) -> Result<Conn, Error> {
-        Ok(self
-            .pool
-            .get()
-            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?)
+        Ok(self.pool.get().map_err(Error::from)?)
     }
 }
 
@@ -103,103 +143,104 @@ impl QuoteBook for SqliteQuoteBook {
         &self,
         sci: mc_transaction_extra::SignedContingentInput,
         timestamp: Option<u64>,
-    ) -> Result<deqs_quote_book_api::Quote, Error> {
+    ) -> Result<deqs_quote_book_api::Quote, QuoteBookError> {
         // Convert SCI into an quote. This also validates it.
         let quote = Quote::new(sci, timestamp)?;
         let sql_quote = models::Quote::from(&quote);
 
         let mut conn = self.get_conn()?;
-        match insert_into(schema::quotes::dsl::quotes)
-            .values(&sql_quote)
-            .execute(&mut conn)
-        {
-            Ok(_) => Ok(quote),
-            Err(diesel::result::Error::DatabaseError(DatabaseErrorKind::UniqueViolation, _)) => {
-                Err(Error::QuoteAlreadyExists)
-            }
-            Err(err) => Err(Error::ImplementationSpecific(err.to_string())),
-        }
+        conn.immediate_transaction(|conn| -> Result<(), Error> {
+            // First, try to store the quote in SQL. However since we are inside a
+            // transaction, it will not be committed.
+            insert_into(schema::quotes::dsl::quotes)
+                .values(&sql_quote)
+                .execute(conn)
+                .map_err(|err| -> Error {
+                    match err {
+                        diesel::result::Error::DatabaseError(
+                            DatabaseErrorKind::UniqueViolation,
+                            _,
+                        ) => QuoteBookError::QuoteAlreadyExists.into(),
+                        err => err.into(),
+                    }
+                })?;
+
+            // Try to add to our in-memory quote book. If this fails, we will rollback the
+            // transaction.
+            self.quote_book.add_quote(quote.clone())?;
+
+            Ok(())
+        })?;
+
+        Ok(quote)
     }
 
     fn remove_quote_by_id(
         &self,
         id: &deqs_quote_book_api::QuoteId,
-    ) -> Result<deqs_quote_book_api::Quote, Error> {
+    ) -> Result<deqs_quote_book_api::Quote, QuoteBookError> {
         use schema::quotes::dsl;
 
-        // TODO do in transaction
         let mut conn = self.get_conn()?;
+        Ok(conn.immediate_transaction(|conn| -> Result<Quote, Error> {
+            let num_deleted =
+                diesel::delete(dsl::quotes.filter(dsl::id.eq(id.to_vec()))).execute(conn)?;
 
-        let quote = self.get_quote_by_id(id)?.ok_or(Error::QuoteNotFound)?;
+            match num_deleted {
+                0 => Err(QuoteBookError::QuoteNotFound),
+                1 => Ok(()),
+                _ => Err(QuoteBookError::ImplementationSpecific(
+                    "Deleted more than one quote".to_string(),
+                )),
+            }?;
 
-        let num_deleted = diesel::delete(dsl::quotes.filter(dsl::id.eq(id.to_vec())))
-            .execute(&mut conn)
-            .expect("Error deleting posts"); // TODO
-
-        match num_deleted {
-            0 => Err(Error::QuoteNotFound),
-            1 => Ok(quote),
-            _ => Err(Error::ImplementationSpecific(
-                "Deleted more than one quote".to_string(),
-            )),
-        }
+            Ok(self.quote_book.remove_quote_by_id(id)?)
+        })?)
     }
 
     fn remove_quotes_by_key_image(
         &self,
         key_image: &mc_crypto_ring_signature::KeyImage,
-    ) -> Result<Vec<deqs_quote_book_api::Quote>, Error> {
+    ) -> Result<Vec<deqs_quote_book_api::Quote>, QuoteBookError> {
         use schema::quotes::dsl;
-        // TODO must run in a transaction
-        let mut conn = self.get_conn()?;
         let key_image_bytes = key_image.as_bytes().to_vec();
 
-        let sql_quotes = dsl::quotes
-            .filter(dsl::key_image.eq(&key_image_bytes))
-            .load::<models::Quote>(&mut conn)
-            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
+        let mut conn = self.get_conn()?;
+        Ok(
+            conn.immediate_transaction(|conn| -> Result<Vec<Quote>, Error> {
+                let num_deleted =
+                    diesel::delete(dsl::quotes.filter(dsl::key_image.eq(key_image_bytes)))
+                        .execute(conn)?;
 
-        let quotes = sql_quotes
-            .iter()
-            .map(|sql_quote| Quote::try_from(sql_quote))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        let num_deleted = diesel::delete(dsl::quotes.filter(dsl::key_image.eq(key_image_bytes)))
-            .execute(&mut conn)
-            .expect("Error deleting posts"); // TODO
-                                             // TODO
-        assert_eq!(num_deleted, quotes.len());
-
-        Ok(quotes)
+                let quotes = self.quote_book.remove_quotes_by_key_image(key_image)?;
+                assert_eq!(quotes.len(), num_deleted);
+                Ok(quotes)
+            })?,
+        )
     }
 
     fn remove_quotes_by_tombstone_block(
         &self,
         current_block_index: mc_blockchain_types::BlockIndex,
-    ) -> Result<Vec<deqs_quote_book_api::Quote>, Error> {
+    ) -> Result<Vec<deqs_quote_book_api::Quote>, QuoteBookError> {
         use schema::quotes::dsl;
-        // TODO must run in a transaction
         let mut conn = self.get_conn()?;
 
-        let sql_quotes = dsl::quotes
-            .filter(dsl::tombstone_block.le(current_block_index as i64))
-            .load::<models::Quote>(&mut conn)
-            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
+        Ok(
+            conn.immediate_transaction(|conn| -> Result<Vec<Quote>, Error> {
+                // TODO is le correct ? 0 tombstone block
+                let num_deleted = diesel::delete(
+                    dsl::quotes.filter(dsl::tombstone_block.le(current_block_index as i64)),
+                )
+                .execute(conn)?;
 
-        let quotes = sql_quotes
-            .iter()
-            .map(|sql_quote| Quote::try_from(sql_quote))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        // TODO is le current? 0 tombstone block
-        let num_deleted =
-            diesel::delete(dsl::quotes.filter(dsl::tombstone_block.le(current_block_index as i64)))
-                .execute(&mut conn)
-                .expect("Error deleting posts"); // TODO
-                                                 // TODO
-        assert_eq!(num_deleted, quotes.len());
-
-        Ok(quotes)
+                let quotes = self
+                    .quote_book
+                    .remove_quotes_by_tombstone_block(current_block_index)?;
+                assert_eq!(quotes.len(), num_deleted);
+                Ok(quotes)
+            })?,
+        )
     }
 
     fn get_quotes(
@@ -207,110 +248,26 @@ impl QuoteBook for SqliteQuoteBook {
         pair: &deqs_quote_book_api::Pair,
         base_token_quantity: impl std::ops::RangeBounds<u64>,
         limit: usize,
-    ) -> Result<Vec<deqs_quote_book_api::Quote>, Error> {
-        use schema::quotes::dsl;
-        let mut conn = self.get_conn()?;
-
-        let base_tokens_start = VecU64::from(match base_token_quantity.start_bound() {
-            Bound::Included(start) => *start,
-            Bound::Excluded(start) => start.saturating_add(1),
-            Bound::Unbounded => 0,
-        });
-        let base_tokens_end = VecU64::from(match base_token_quantity.end_bound() {
-            Bound::Included(end) => *end,
-            Bound::Excluded(end) => end.saturating_sub(1),
-            Bound::Unbounded => u64::MAX,
-        });
-
-        println!("{}-{}", base_tokens_start, base_tokens_end);
-
-        let all_quotes = dsl::quotes
-            .filter(dsl::base_token_id.eq(*pair.base_token_id as i64))
-            .filter(dsl::counter_token_id.eq(*pair.counter_token_id as i64))
-            .load::<models::Quote>(&mut conn)
-            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
-        for q in all_quotes {
-            println!("{:?}", q.base_range());
-        }
-
-        let sql_quotes = dsl::quotes
-            .filter(dsl::base_token_id.eq(*pair.base_token_id as i64))
-            .filter(dsl::counter_token_id.eq(*pair.counter_token_id as i64))
-            // TODO see InMemoryQuoteBook::range_overlaps for why this makes sense
-            .filter(dsl::base_range_min.le(base_tokens_end))
-            .filter(dsl::base_range_max.ge(base_tokens_start))
-            .load::<models::Quote>(&mut conn)
-            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
-
-        let mut quotes = sql_quotes
-            .iter()
-            .map(|sql_quote| Quote::try_from(sql_quote))
-            .collect::<Result<Vec<_>, _>>()?;
-
-        // TODO can this be done in SQL? if not, this whole thing needs to be
-        // re-thinked.
-        // let mut quotes = quotes
-        //     .into_iter()
-        //     .filter(|quote| range_overlaps(&base_token_quantity, quote.base_range()))
-        //     .collect::<Vec<_>>();
-        quotes.sort();
-
-        if limit > 0 {
-            quotes.truncate(limit);
-        }
-
-        Ok(quotes)
+    ) -> Result<Vec<deqs_quote_book_api::Quote>, QuoteBookError> {
+        self.quote_book.get_quotes(pair, base_token_quantity, limit)
     }
 
     fn get_quote_ids(
         &self,
         pair: Option<&deqs_quote_book_api::Pair>,
-    ) -> Result<Vec<deqs_quote_book_api::QuoteId>, Error> {
-        use schema::quotes::dsl;
-        let mut conn = self.get_conn()?;
-        let quote_ids = if let Some(pair) = pair {
-            dsl::quotes
-                .filter(dsl::base_token_id.eq(*pair.base_token_id as i64))
-                .filter(dsl::counter_token_id.eq(*pair.counter_token_id as i64))
-                .select(dsl::id)
-                .load::<Vec<u8>>(&mut conn)
-                .map_err(|err| Error::ImplementationSpecific(err.to_string()))?
-        } else {
-            dsl::quotes
-                .select(dsl::id)
-                .load::<Vec<u8>>(&mut conn)
-                .map_err(|err| Error::ImplementationSpecific(err.to_string()))?
-        };
-
-        quote_ids
-            .into_iter()
-            .map(|quote_id| {
-                deqs_quote_book_api::QuoteId::try_from(&quote_id[..]).map_err(|err| {
-                    Error::ImplementationSpecific(format!("Invalid quote id: {}", err))
-                })
-            })
-            .collect::<Result<Vec<_>, _>>()
+    ) -> Result<Vec<deqs_quote_book_api::QuoteId>, QuoteBookError> {
+        self.quote_book.get_quote_ids(pair)
     }
 
     fn get_quote_by_id(
         &self,
         id: &deqs_quote_book_api::QuoteId,
-    ) -> Result<Option<deqs_quote_book_api::Quote>, Error> {
-        use schema::quotes::dsl;
-        let mut conn = self.get_conn()?;
-        let sql_quote = dsl::quotes
-            .filter(dsl::id.eq(id.to_vec()))
-            .first::<models::Quote>(&mut conn)
-            .optional()
-            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
-        let quote = sql_quote
-            .map(|sql_quote| Quote::try_from(&sql_quote))
-            .transpose()?;
-        Ok(quote)
+    ) -> Result<Option<deqs_quote_book_api::Quote>, QuoteBookError> {
+        self.quote_book.get_quote_by_id(id)
     }
 
-    fn num_scis(&self) -> Result<u64, Error> {
-        todo!()
+    fn num_scis(&self) -> Result<u64, QuoteBookError> {
+        self.quote_book.num_scis()
     }
 }
 
@@ -318,52 +275,53 @@ impl QuoteBook for SqliteQuoteBook {
 mod tests {
     use super::*;
     use deqs_quote_book_test_suite as test_suite;
+    use mc_common::logger::{test_with_logger, Logger};
     use tempdir::TempDir;
 
-    fn create_quote_book(dir: &TempDir) -> SqliteQuoteBook {
+    fn create_quote_book(dir: &TempDir, logger: Logger) -> SqliteQuoteBook {
         let file_path = dir.path().join("quotes.db");
-        SqliteQuoteBook::new_from_file_path(&file_path, 10).unwrap()
+        SqliteQuoteBook::new_from_file_path(&file_path, 10, logger).unwrap()
     }
 
-    #[test]
-    fn basic_happy_flow() {
+    #[test_with_logger]
+    fn basic_happy_flow(logger: Logger) {
         let dir = TempDir::new("quote_book_test").unwrap();
-        let quote_book = create_quote_book(&dir);
+        let quote_book = create_quote_book(&dir, logger);
         test_suite::basic_happy_flow(&quote_book);
     }
 
-    #[test]
-    fn cannot_add_duplicate_sci() {
+    #[test_with_logger]
+    fn cannot_add_duplicate_sci(logger: Logger) {
         let dir = TempDir::new("quote_book_test").unwrap();
-        let quote_book = create_quote_book(&dir);
+        let quote_book = create_quote_book(&dir, logger);
         test_suite::cannot_add_duplicate_sci(&quote_book);
     }
 
-    #[test]
-    fn cannot_add_invalid_sci() {
+    #[test_with_logger]
+    fn cannot_add_invalid_sci(logger: Logger) {
         let dir = TempDir::new("quote_book_test").unwrap();
-        let quote_book = create_quote_book(&dir);
+        let quote_book = create_quote_book(&dir, logger);
         test_suite::cannot_add_invalid_sci(&quote_book);
     }
 
-    #[test]
-    fn get_quotes_filtering_works() {
+    #[test_with_logger]
+    fn get_quotes_filtering_works(logger: Logger) {
         let dir = TempDir::new("quote_book_test").unwrap();
-        let quote_book = create_quote_book(&dir);
+        let quote_book = create_quote_book(&dir, logger);
         test_suite::get_quotes_filtering_works(&quote_book);
     }
 
-    #[test]
-    fn get_quote_ids_works() {
+    #[test_with_logger]
+    fn get_quote_ids_works(logger: Logger) {
         let dir = TempDir::new("quote_book_test").unwrap();
-        let quote_book = create_quote_book(&dir);
+        let quote_book = create_quote_book(&dir, logger);
         test_suite::get_quote_ids_works(&quote_book);
     }
 
-    #[test]
-    fn get_quote_by_id_works() {
+    #[test_with_logger]
+    fn get_quote_by_id_works(logger: Logger) {
         let dir = TempDir::new("quote_book_test").unwrap();
-        let quote_book = create_quote_book(&dir);
+        let quote_book = create_quote_book(&dir, logger);
         test_suite::get_quote_by_id_works(&quote_book);
     }
 }
