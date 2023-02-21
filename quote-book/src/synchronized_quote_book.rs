@@ -9,8 +9,8 @@ use mc_transaction_extra::SignedContingentInput;
 use std::{
     ops::RangeBounds,
     sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc, Mutex,
+        atomic::{AtomicBool, Ordering, AtomicU64},
+        Arc,
     },
     thread::{Builder as ThreadBuilder, JoinHandle},
     time::Duration,
@@ -28,7 +28,7 @@ pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'stati
     ledger: L,
 
     /// Shared state
-    shared_state: Arc<Mutex<DbPollSharedState>>,
+    highest_processed_block_index: Arc<AtomicU64>,
 
     /// Join handle used to wait for the thread to terminate.
     join_handle: Option<JoinHandle<()>>,
@@ -42,8 +42,8 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
     pub fn new(quote_book: Q, ledger: L, msg_bus_tx: Sender<Msg>, logger: Logger) -> Self {
         let ledger_clone = ledger.clone();
         let quote_book_clone = quote_book.clone();
-        let shared_state = Arc::new(Mutex::new(DbPollSharedState::default()));
-        let thread_state = shared_state.clone();
+        let highest_processed_block_index= Arc::new(AtomicU64::new(0));
+        let thread_highest_processed_block_index = highest_processed_block_index.clone();
         let stop_requested = Arc::new(AtomicBool::new(false));
         let thread_stop_requested = stop_requested.clone();
         let join_handle = Some(
@@ -54,8 +54,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
                         ledger_clone,
                         quote_book_clone,
                         msg_bus_tx,
-                        0,
-                        thread_state,
+                        thread_highest_processed_block_index,
                         thread_stop_requested,
                         logger,
                     )
@@ -65,14 +64,13 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
         Self {
             quote_book,
             ledger,
-            shared_state,
+            highest_processed_block_index,
             join_handle,
             stop_requested,
         }
     }
     pub fn get_current_block_index(&self) -> u64 {
-        let shared_state = self.shared_state.lock().expect("mutex poisoned");
-        shared_state.highest_processed_block_index
+        self.highest_processed_block_index.load(Ordering::SeqCst) 
     }
 
     /// Stop and join the db poll thread
@@ -161,20 +159,13 @@ where
     }
 }
 
-/// State that we want to expose from the db poll thread
-#[derive(Debug, Default)]
-pub struct DbPollSharedState {
-    /// The highest block index for which we can guarantee we have loaded all
-    /// available data.
-    pub highest_processed_block_index: u64,
-}
 struct DbFetcherThread<DB: Ledger, Q: QuoteBook> {
     db: DB,
     quotebook: Q,
     /// Message bus sender.
     msg_bus_tx: Sender<Msg>,
     next_block_index: u64,
-    shared_state: Arc<Mutex<DbPollSharedState>>,
+    highest_processed_block_index: Arc<AtomicU64>,
     stop_requested: Arc<AtomicBool>,
     logger: Logger,
 }
@@ -189,17 +180,17 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
         db: DB,
         quotebook: Q,
         msg_bus_tx: Sender<Msg>,
-        next_block_index: u64,
-        shared_state: Arc<Mutex<DbPollSharedState>>,
+        highest_processed_block_index: Arc<AtomicU64>,
         stop_requested: Arc<AtomicBool>,
         logger: Logger,
     ) {
+        let next_block_index = highest_processed_block_index.load(Ordering::SeqCst);
         let thread = Self {
             db,
             quotebook,
             msg_bus_tx,
             next_block_index,
-            shared_state,
+            highest_processed_block_index,
             stop_requested,
             logger,
         };
@@ -208,7 +199,6 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
 
     fn run(mut self) {
         log::info!(self.logger, "Db fetcher thread started.");
-        self.next_block_index = 0;
         loop {
             if self.stop_requested.load(Ordering::SeqCst) {
                 log::info!(self.logger, "Db fetcher thread stop requested.");
@@ -239,10 +229,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                         );
                     }
                 }
-                let mut shared_state = self.shared_state.lock().expect("mutex poisoned");
-                // this is next_block_index because next_block_index is actually the block
-                // we just processed
-                shared_state.highest_processed_block_index = last_processed_block_index;
+                self.highest_processed_block_index.store(last_processed_block_index, Ordering::SeqCst);
             }
             std::thread::sleep(Self::POLLING_FREQUENCY);
         }
