@@ -80,7 +80,7 @@ impl From<&deqs_quote_book_api::Quote> for Quote {
             .input_rules
             .as_ref()
             .map(|input_rules| input_rules.max_tombstone_block)
-            .unwrap_or(0) as i64; // TODO is 0 a sane default? probably not
+            .unwrap_or(0) as i64; // 0 implies no max tombstone block
         Self {
             id,
             sci_protobuf,
