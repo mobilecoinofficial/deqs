@@ -85,8 +85,8 @@ impl<QB: QuoteBook> Server<QB> {
                                 }
                             }
 
-                            Some(Msg::SciQuoteRemoved(quote_id)) => {
-                                if let Err(err) = p2p.broadcast_sci_quote_removed(quote_id).await {
+                            Some(Msg::SciQuoteRemoved(quote)) => {
+                                if let Err(err) = p2p.broadcast_sci_quote_removed(*quote.id()).await {
                                     log::info!(logger, "broadcast_sci_quote_removed failed: {:?}", err)
                                 }
                             }

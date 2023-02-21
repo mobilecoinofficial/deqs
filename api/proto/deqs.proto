@@ -76,7 +76,9 @@ message RemoveQuoteResponse {
 }
 
 message LiveUpdatesRequest {
-
+    /// Pair we want to get live updates for.
+    /// Optional, when pair.base_token_id and pair.counter_token_id are both 0, all pairs are returned.
+    Pair pair = 1;
 }
 
 message LiveUpdate {
