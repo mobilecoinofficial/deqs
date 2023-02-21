@@ -79,7 +79,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
     pub fn stop(&mut self) -> Result<(), ()> {
         if let Some(join_handle) = self.join_handle.take() {
             self.stop_requested.store(true, Ordering::SeqCst);
-            join_handle.join().map_err(|_| ())?;
+            join_handle.join().expect("SynchronizedQuoteBookThread join failed");        
         }
 
         Ok(())
