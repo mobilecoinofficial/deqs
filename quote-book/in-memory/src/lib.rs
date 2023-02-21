@@ -99,7 +99,11 @@ impl QuoteBook for InMemoryQuoteBook {
             let mut removed_entries = entries
                 .drain_filter(|entry| {
                     if let Some(input_rules) = &entry.sci().tx_in.input_rules {
-                        validate_tombstone(current_block_index, input_rules.max_tombstone_block)
+                        input_rules.max_tombstone_block != 0
+                            && validate_tombstone(
+                                current_block_index,
+                                input_rules.max_tombstone_block,
+                            )
                             .is_err()
                     } else {
                         false
