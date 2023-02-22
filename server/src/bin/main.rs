@@ -9,7 +9,7 @@ use deqs_server::{Server, ServerConfig};
 use mc_common::logger::o;
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         })
         .transpose()?;
 
-    let remove_quote_callback = Arc::new(Mutex::new(|_quotes: Vec<Quote>| { /* Do nothing */ }));
+    let remove_quote_callback = Box::new(|_quotes: Vec<Quote>| { /* Do nothing */ });
     // let remove_quote_callback: RemoveQuoteCallback =
     //     Arc::new(Mutex::new(move |quotes: Vec<Quote>| {
     //         for quote in quotes {

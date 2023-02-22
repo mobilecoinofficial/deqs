@@ -170,7 +170,7 @@ where
 
 /// A callback for broadcasting a quote removal. It receives 1 argument:
 /// - A vector of quotes that have been removed
-pub type RemoveQuoteCallback = Arc<Mutex<dyn FnMut(Vec<Quote>) + Sync + Send>>;
+pub type RemoveQuoteCallback = Box<dyn Fn(Vec<Quote>) + Sync + Send>;
 
 struct DbFetcherThread<DB: Ledger, Q: QuoteBook> {
     db: DB,
@@ -236,7 +236,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                         .quotebook
                         .remove_quotes_by_tombstone_block(last_processed_block_index);
                 }
-                (self.remove_quote_callback.lock().expect("lock poisoned"))(quotes.unwrap());
+                (self.remove_quote_callback)(quotes.unwrap());
                 self.highest_processed_block_index
                     .store(last_processed_block_index, Ordering::SeqCst);
             }
@@ -276,7 +276,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                         std::thread::sleep(Self::ERROR_RETRY_FREQUENCY);
                         quotes = self.quotebook.remove_quotes_by_key_image(&key_image);
                     }
-                    (self.remove_quote_callback.lock().expect("lock poisoned"))(quotes.unwrap());
+                    (self.remove_quote_callback)(quotes.unwrap());
                 }
                 self.next_block_index += 1;
             }
@@ -320,9 +320,9 @@ mod tests {
     }
 
     fn get_remove_quote_callback() -> RemoveQuoteCallback {
-        Arc::new(Mutex::new(|_| {
+        Box::new(|_| {
             //Do nothing
-        }))
+        })
     }
 
     #[test_with_logger]
