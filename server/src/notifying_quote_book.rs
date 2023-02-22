@@ -1,9 +1,11 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+use crate::{Msg, MsgSource};
 use deqs_quote_book_api::{Error, Pair, Quote, QuoteBook, QuoteId};
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
 use mc_transaction_extra::SignedContingentInput;
+use postage::{broadcast::Sender, sink::Sink};
 use std::{ops::RangeBounds, sync::Arc};
 
 /// Quote added callback
@@ -15,15 +17,15 @@ pub struct NotifyingQuoteBook<QB: QuoteBook> {
     /// Underlying quote book
     quote_book: QB,
 
-    /// New quote added callback
-    quote_added_callback: QuoteAddedCallback,
+    /// Message bus sender channel.
+    msg_bus_tx: Sender<Msg>,
 }
 
 impl<QB: QuoteBook> NotifyingQuoteBook<QB> {
-    pub fn new(quote_book: QB, quote_added_callback: QuoteAddedCallback) -> Self {
+    pub fn new(quote_book: QB, msg_bus_tx: Sender<Msg>) -> Self {
         Self {
             quote_book,
-            quote_added_callback,
+            msg_bus_tx,
         }
     }
 
@@ -31,33 +33,58 @@ impl<QB: QuoteBook> NotifyingQuoteBook<QB> {
         &self,
         sci: SignedContingentInput,
         timestamp: Option<u64>,
+        source: MsgSource,
     ) -> Result<Quote, Error> {
         // Convert SCI into an quote. This also validates it.
         let quote = Quote::new(sci, timestamp)?;
-        self.add_quote(&quote)?;
+        self.add_quote(quote.clone(), source)?;
         Ok(quote)
     }
 
-    pub fn add_quote(&self, quote: &Quote) -> Result<(), Error> {
-        self.quote_book.add_quote(quote)?;
-        (self.quote_added_callback)(quote);
+    pub fn add_quote(&self, quote: Quote, source: MsgSource) -> Result<(), Error> {
+        self.quote_book.add_quote(&quote)?;
+        self.msg_bus_tx
+            .blocking_send(Msg::SciQuoteAdded(quote, source))
+            .expect("msg bus send");
         Ok(())
     }
 
-    pub fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, Error> {
-        self.quote_book.remove_quote_by_id(id)
+    pub fn remove_quote_by_id(&self, id: &QuoteId, source: MsgSource) -> Result<Quote, Error> {
+        let quote = self.quote_book.remove_quote_by_id(id)?;
+        self.msg_bus_tx
+            .blocking_send(Msg::SciQuoteRemoved(quote.clone(), source))
+            .expect("msg bus send");
+        Ok(quote)
     }
 
-    pub fn remove_quotes_by_key_image(&self, key_image: &KeyImage) -> Result<Vec<Quote>, Error> {
-        self.quote_book.remove_quotes_by_key_image(key_image)
+    pub fn remove_quotes_by_key_image(
+        &self,
+        key_image: &KeyImage,
+        source: MsgSource,
+    ) -> Result<Vec<Quote>, Error> {
+        let quotes = self.quote_book.remove_quotes_by_key_image(key_image)?;
+        for quote in &quotes {
+            self.msg_bus_tx
+                .blocking_send(Msg::SciQuoteRemoved(quote.clone(), source))
+                .expect("msg bus send");
+        }
+        Ok(quotes)
     }
 
     pub fn remove_quotes_by_tombstone_block(
         &self,
         current_block_index: BlockIndex,
+        source: MsgSource,
     ) -> Result<Vec<Quote>, Error> {
-        self.quote_book
-            .remove_quotes_by_tombstone_block(current_block_index)
+        let quotes = self
+            .quote_book
+            .remove_quotes_by_tombstone_block(current_block_index)?;
+        for quote in &quotes {
+            self.msg_bus_tx
+                .blocking_send(Msg::SciQuoteRemoved(quote.clone(), source))
+                .expect("msg bus send");
+        }
+        Ok(quotes)
     }
 
     pub fn get_quotes(

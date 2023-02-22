@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{Msg, NotifyingQuoteBook, SVC_COUNTERS};
+use crate::{Msg, MsgSource, NotifyingQuoteBook, SVC_COUNTERS};
 use deqs_api::{
     deqs::{
         GetQuotesRequest, GetQuotesResponse, LiveUpdate, LiveUpdatesRequest, QuoteStatusCode,
@@ -19,7 +19,6 @@ use mc_util_grpc::{rpc_internal_error, rpc_invalid_arg_error, rpc_logger, send_r
 use postage::{
     broadcast::{Receiver, Sender},
     prelude::Stream,
-    sink::Sink,
 };
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -27,7 +26,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// GRPC Client service
 #[derive(Clone)]
 pub struct ClientService<QB: QuoteBook> {
-    /// Message bus sender.
+    /// Message bus sender. We use it to subscribe to events on the message bus.
     msg_bus_tx: Sender<Msg>,
 
     /// Quote book.
@@ -82,7 +81,10 @@ impl<QB: QuoteBook> ClientService<QB> {
 
         let results = scis
             .into_par_iter()
-            .map(|sci| self.quote_book.add_sci(sci, Some(timestamp)))
+            .map(|sci| {
+                self.quote_book
+                    .add_sci(sci, Some(timestamp), MsgSource::GrpcClient)
+            })
             .collect::<Vec<_>>();
 
         let mut status_codes = vec![];
@@ -96,30 +98,17 @@ impl<QB: QuoteBook> ClientService<QB> {
                     error_messages.push("".to_string());
                     quotes.push((&quote).into());
 
-                    match self
-                        .msg_bus_tx
-                        .blocking_send(Msg::SciQuoteAdded(quote.clone()))
-                    {
-                        Ok(_) => {
-                            log::info!(
-                                logger,
-                                "Quote {} added: Max {} of token {} for {} of token {}",
-                                quote.id(),
-                                quote.base_range().end(),
-                                quote.pair().base_token_id,
-                                quote.max_counter_tokens(),
-                                quote.pair().counter_token_id,
-                            );
-                        }
-                        Err(err) => {
-                            log::error!(
-                                logger,
-                                "Failed to send SCI quote added message to message bus: {:?}",
-                                err
-                            );
-                        }
-                    }
+                    log::info!(
+                        logger,
+                        "Quote {} added: Max {} of token {} for {} of token {}",
+                        quote.id(),
+                        quote.base_range().end(),
+                        quote.pair().base_token_id,
+                        quote.max_counter_tokens(),
+                        quote.pair().counter_token_id,
+                    );
                 }
+
                 Err(err) => {
                     error_messages.push(err.to_string());
                     status_codes.push((&err).into());
@@ -174,22 +163,15 @@ impl<QB: QuoteBook> ClientService<QB> {
         let quote_id = QuoteId::try_from(req.get_quote_id())
             .map_err(|err| rpc_invalid_arg_error("quote_id", err, &self.logger))?;
 
-        match self.quote_book.remove_quote_by_id(&quote_id) {
+        match self
+            .quote_book
+            .remove_quote_by_id(&quote_id, MsgSource::GrpcClient)
+        {
             Ok(quote) => {
                 log::info!(self.logger, "Quote {} removed", quote.id());
 
                 let mut resp = RemoveQuoteResponse::default();
                 resp.set_quote((&quote).into());
-
-                if let Err(err) = self.msg_bus_tx.blocking_send(Msg::SciQuoteRemoved(quote)) {
-                    log::error!(
-                        logger,
-                        "Failed to send SCI quote {} removed message to message bus: {:?}",
-                        quote_id,
-                        err
-                    );
-                }
-
                 Ok(resp)
             }
             Err(QuoteBookError::QuoteNotFound) => Err(RpcStatus::new(RpcStatusCode::NOT_FOUND)),
@@ -217,7 +199,7 @@ impl<QB: QuoteBook> ClientService<QB> {
         while let Some(msg) = msg_bus_rx.recv().await {
             let mut live_update = LiveUpdate::default();
             match msg {
-                Msg::SciQuoteAdded(quote) => {
+                Msg::SciQuoteAdded(quote, ..) => {
                     if let Some(pair) = filter_for_pair {
                         if quote.pair() != &pair {
                             continue;
@@ -227,7 +209,7 @@ impl<QB: QuoteBook> ClientService<QB> {
                     live_update.set_quote_added((&quote).into());
                 }
 
-                Msg::SciQuoteRemoved(quote) => {
+                Msg::SciQuoteRemoved(quote, ..) => {
                     if let Some(pair) = filter_for_pair {
                         if quote.pair() != &pair {
                             continue;
@@ -332,7 +314,7 @@ mod tests {
         let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(1000);
 
         let notifying_quote_book =
-            NotifyingQuoteBook::new(quote_book.clone(), Arc::new(Box::new(|_quote| {})));
+            NotifyingQuoteBook::new(quote_book.clone(), msg_bus_tx);
 
         let client_service =
             ClientService::new(msg_bus_tx, notifying_quote_book, logger.clone()).into_service();

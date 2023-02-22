@@ -1,9 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use std::sync::Arc;
-
 use crate::{
-    update_periodic_metrics, Error, GrpcServer, Msg, NotifyingQuoteBook, METRICS_POLL_INTERVAL, P2P,
+    update_periodic_metrics, Error, GrpcServer, Msg, NotifyingQuoteBook, METRICS_POLL_INTERVAL, P2P, MsgSource,
 };
 use deqs_api::DeqsClientUri;
 use deqs_p2p::libp2p::{identity::Keypair, Multiaddr};
@@ -48,8 +46,7 @@ impl<QB: QuoteBook> Server<QB> {
         let (shutdown_ack_tx, shutdown_ack_rx) = mpsc::unbounded_channel();
         let quote_book = NotifyingQuoteBook::new(
             quote_book,
-            Arc::new(Box::new(|quote| {
-            })),
+            msg_bus_tx.clone(),
         );
 
         // Init p2p network
@@ -88,13 +85,23 @@ impl<QB: QuoteBook> Server<QB> {
                 select! {
                     msg = msg_bus_rx.recv() => {
                         match msg {
-                            Some(Msg::SciQuoteAdded(quote)) => {
+                            Some(Msg::SciQuoteAdded(quote, source)) => {
+                                // Don't gossip quotes we received via gossip, this is handled internally in libp2p.
+                                if source == MsgSource::Gossip {
+                                    continue;
+                                }
+
                                 if let Err(err) = p2p.broadcast_sci_quote_added(quote).await {
                                     log::info!(logger, "broadcast_sci_quote_added failed: {:?}", err)
                                 }
                             }
 
-                            Some(Msg::SciQuoteRemoved(quote)) => {
+                            Some(Msg::SciQuoteRemoved(quote, source)) => {
+                                // Don't gossip quotes we received via gossip, this is handled internally in libp2p.
+                                if source == MsgSource::Gossip {
+                                    continue;
+                                }
+
                                 if let Err(err) = p2p.broadcast_sci_quote_removed(*quote.id()).await {
                                     log::info!(logger, "broadcast_sci_quote_removed failed: {:?}", err)
                                 }

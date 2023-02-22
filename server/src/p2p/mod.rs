@@ -7,7 +7,7 @@ mod rpc_error;
 pub use metrics::P2PRpcMetrics;
 pub use rpc_error::{RpcError, RpcQuoteBookError};
 
-use crate::{Error, NotifyingQuoteBook};
+use crate::{Error, MsgSource, NotifyingQuoteBook};
 use deqs_p2p::{
     libp2p::{
         gossipsub::{GossipsubMessage, IdentTopic},
@@ -268,11 +268,14 @@ impl<QB: QuoteBook> P2P<QB> {
         }
     }
 
-    /// Handle a message on the message bus topic: a new quote has beeen added
+    /// Handle a message on the gossip message bus topic: a new quote has beeen
+    /// added
     async fn handle_sci_quote_added(&mut self, remote_quote: Quote) -> Result<(), Error> {
-        let local_quote = self
-            .quote_book
-            .add_sci(remote_quote.sci().clone(), Some(remote_quote.timestamp()))?;
+        let local_quote = self.quote_book.add_sci(
+            remote_quote.sci().clone(),
+            Some(remote_quote.timestamp()),
+            MsgSource::Gossip,
+        )?;
 
         // Sanity
         if remote_quote != local_quote {
@@ -287,7 +290,10 @@ impl<QB: QuoteBook> P2P<QB> {
 
     /// Handle a message on the message bus topic: a quote has been removed
     async fn handle_sci_quote_removed(&mut self, quote_id: &QuoteId) -> Result<(), Error> {
-        match self.quote_book.remove_quote_by_id(quote_id) {
+        match self
+            .quote_book
+            .remove_quote_by_id(quote_id, MsgSource::Gossip)
+        {
             Ok(_) => {
                 log::info!(self.logger, "Removed quote via gossip: {}", quote_id,);
             }
@@ -390,7 +396,11 @@ async fn sync_quotes_from_peer<QB: QuoteBook>(
                             };
 
                             // Add the quote to our local quote book.
-                            match quote_book.add_sci(quote.sci().clone(), Some(quote.timestamp())) {
+                            match quote_book.add_sci(
+                                quote.sci().clone(),
+                                Some(quote.timestamp()),
+                                MsgSource::P2pSync,
+                            ) {
                                 Ok(quote) => {
                                     log::debug!(
                                         logger,
