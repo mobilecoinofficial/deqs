@@ -9,10 +9,16 @@ name = "deqs-test-cli"
 path = "src/bin/main.rs"
 
 [dependencies]
+
+clap = { version = "4.0", features = ["derive", "env"] }
 deqs-api = { path = "../api" }
 deqs-mc-test-utils = { path = "../mc-test-utils" }
 deqs-p2p = { path = "../p2p" }
 deqs-quote-book = { path = "../quote-book" }
+displaydoc = { version = "0.2", default-features = false }
+futures = "0.3"
+grpcio = "0.12.0"
+hex = "0.4"
 
 mc-api = { path = "../mobilecoin/api" }
 mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
@@ -20,12 +26,6 @@ mc-transaction-types = { path = "../mobilecoin/transaction/types" }
 mc-util-grpc = { path = "../mobilecoin/util/grpc" }
 mc-util-parse = { path = "../mobilecoin/util/parse" }
 mc-util-uri = { path = "../mobilecoin/util/uri" }
-
-clap = { version = "4.0", features = ["derive", "env"] }
-displaydoc = { version = "0.2", default-features = false }
-futures = "0.3"
-grpcio = "0.12.0"
-hex = "0.4"
 rand = "0.8"
 rayon = "1.6"
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }

@@ -1,15 +1,15 @@
 // Copyright (c) 2023 MobileCoin Inc.
-use backoff::{Error as BackoffError, ExponentialBackoff};
 use crate::{Error as QuoteBookError, Pair, Quote, QuoteBook, QuoteId};
+use backoff::{Error as BackoffError, ExponentialBackoff};
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
 use mc_ledger_db::{Error as LedgerError, Ledger};
 use mc_transaction_extra::SignedContingentInput;
 
 use std::{
-    ops::{RangeBounds},
+    ops::RangeBounds,
     sync::{
-        atomic::{AtomicBool, Ordering, AtomicU64},
+        atomic::{AtomicBool, AtomicU64, Ordering},
         Arc, Mutex,
     },
     thread::{Builder as ThreadBuilder, JoinHandle},
@@ -37,10 +37,15 @@ pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'stati
 
 impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, L> {
     /// Create a new Synchronized Quotebook
-    pub fn new(quote_book: Q, ledger: L, remove_quote_callback: RemoveQuoteCallback, logger: Logger) -> Self {
+    pub fn new(
+        quote_book: Q,
+        ledger: L,
+        remove_quote_callback: RemoveQuoteCallback,
+        logger: Logger,
+    ) -> Self {
         let ledger_clone = ledger.clone();
         let quote_book_clone = quote_book.clone();
-        let highest_processed_block_index= Arc::new(AtomicU64::new(0));
+        let highest_processed_block_index = Arc::new(AtomicU64::new(0));
         let thread_highest_processed_block_index = highest_processed_block_index.clone();
         let stop_requested = Arc::new(AtomicBool::new(false));
         let thread_stop_requested = stop_requested.clone();
@@ -68,14 +73,16 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
         }
     }
     pub fn get_current_block_index(&self) -> u64 {
-        self.highest_processed_block_index.load(Ordering::SeqCst) 
+        self.highest_processed_block_index.load(Ordering::SeqCst)
     }
 
     /// Stop and join the db poll thread
     pub fn stop(&mut self) {
         if let Some(join_handle) = self.join_handle.take() {
             self.stop_requested.store(true, Ordering::SeqCst);
-            join_handle.join().expect("SynchronizedQuoteBookThread join failed");        
+            join_handle
+                .join()
+                .expect("SynchronizedQuoteBookThread join failed");
         }
     }
 }
@@ -159,8 +166,7 @@ where
 
 /// A callback for broadcasting a quote removal. It receives 1 argument:
 /// - A vector of quotes that have been removed
-pub type RemoveQuoteCallback =
-    Arc<Mutex<dyn FnMut(Vec<Quote>) + Sync + Send>>;
+pub type RemoveQuoteCallback = Arc<Mutex<dyn FnMut(Vec<Quote>) + Sync + Send>>;
 
 struct DbFetcherThread<DB: Ledger, Q: QuoteBook> {
     db: DB,
@@ -216,8 +222,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                     .remove_quotes_by_tombstone_block(last_processed_block_index)
                 {
                     Ok(quotes) => {
-                        (self.remove_quote_callback.lock()
-                        .expect("lock poisoned"))(quotes);
+                        (self.remove_quote_callback.lock().expect("lock poisoned"))(quotes);
                     }
                     Err(err) => {
                         log::error!(
@@ -228,7 +233,8 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                         );
                     }
                 }
-                self.highest_processed_block_index.store(last_processed_block_index, Ordering::SeqCst);
+                self.highest_processed_block_index
+                    .store(last_processed_block_index, Ordering::SeqCst);
             }
             std::thread::sleep(Self::POLLING_FREQUENCY);
         }
@@ -258,11 +264,16 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                     let backoff = ExponentialBackoff::default();
                     let working_quotebook = self.quotebook.clone();
                     let f = &move || -> Result<Vec<Quote>, BackoffError<QuoteBookError>> {
-                        working_quotebook.remove_quotes_by_key_image(&key_image).map_err(|e| BackoffError::Transient { err: e, retry_after: None })
+                        working_quotebook
+                            .remove_quotes_by_key_image(&key_image)
+                            .map_err(|e| BackoffError::Transient {
+                                err: e,
+                                retry_after: None,
+                            })
                     };
-                    let quotes = backoff::retry(backoff, f).expect("Could not remove quotes by key_image after retries");
-                    (self.remove_quote_callback.lock()
-                    .expect("lock poisoned"))(quotes);
+                    let quotes = backoff::retry(backoff, f)
+                        .expect("Could not remove quotes by key_image after retries");
+                    (self.remove_quote_callback.lock().expect("lock poisoned"))(quotes);
                 }
                 self.next_block_index += 1;
             }

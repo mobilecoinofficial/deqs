@@ -8,7 +8,6 @@ edition = "2021"
 backoff = "0.4"
 displaydoc = "0.2"
 hex = "0.4"
-serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
 
 mc-blockchain-types = { path = "../mobilecoin/blockchain/types" }
 mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
@@ -21,10 +20,10 @@ mc-transaction-types = { path = "../mobilecoin/transaction/types" }
 
 postage = "0.5"
 rand = "0.8" # build fails without this
+serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
 
 [dev-dependencies]
 assert_matches = "1.5"
-rand_core = "0.6"
 
 deqs-mc-test-utils = { path = "../mc-test-utils" }
 
@@ -33,3 +32,4 @@ mc-blockchain-test-utils = { path = "../mobilecoin/blockchain/test-utils" }
 mc-crypto-ring-signature-signer = { path = "../mobilecoin/crypto/ring-signature/signer", default-features = false }
 mc-fog-report-validation-test-utils = { path = "../mobilecoin/fog/report/validation/test-utils" }
 mc-transaction-builder = { path = "../mobilecoin/transaction/builder", features = ["test-only"] }
+rand_core = "0.6"

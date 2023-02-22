@@ -2,9 +2,14 @@
 
 mod common;
 
-use std::{sync::{Arc, Mutex}, time::Duration};
+use std::{
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 
-use deqs_quote_book::{Error, InMemoryQuoteBook, QuoteBook, SynchronizedQuoteBook, RemoveQuoteCallback};
+use deqs_quote_book::{
+    Error, InMemoryQuoteBook, QuoteBook, RemoveQuoteCallback, SynchronizedQuoteBook,
+};
 use mc_blockchain_types::BlockVersion;
 use mc_crypto_ring_signature_signer::NoKeysRingSigner;
 use mc_ledger_db::{Ledger, LedgerDB};
@@ -34,7 +39,7 @@ fn create_and_initialize_test_ledger() -> LedgerDB {
 }
 
 fn get_remove_quote_callback() -> RemoveQuoteCallback {
-    Arc::new( Mutex::new(|_| {
+    Arc::new(Mutex::new(|_| {
         //Do nothing
     }))
 }

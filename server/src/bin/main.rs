@@ -2,13 +2,15 @@
 
 use clap::Parser;
 use deqs_p2p::libp2p::identity::Keypair;
-use deqs_quote_book::{InMemoryQuoteBook, Msg, SynchronizedQuoteBook, RemoveQuoteCallback, Quote};
+use deqs_quote_book::{InMemoryQuoteBook, Msg, Quote, RemoveQuoteCallback, SynchronizedQuoteBook};
 use deqs_server::{Server, ServerConfig, P2P};
 use mc_common::logger::{log, o};
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
-use postage::{broadcast, prelude::Stream};
-use postage::prelude::Sink;
+use postage::{
+    broadcast,
+    prelude::{Sink, Stream},
+};
 use std::sync::{Arc, Mutex};
 use tokio::select;
 
@@ -32,14 +34,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     assert_ne!(0, num_blocks);
 
     let mut callback_msg_bus_tx = msg_bus_tx.clone();
-    // let mut remove_quote_callback = Arc::new(|_| callback_msg_bux_tx.blocking_send(Msg::SciQuoteRemoved(0)).expect(""));
+    // let mut remove_quote_callback = Arc::new(|_|
+    // callback_msg_bux_tx.blocking_send(Msg::SciQuoteRemoved(0)).expect(""));
     let remove_quote_callback: RemoveQuoteCallback =
-    Arc::new( Mutex::new(move|quotes:Vec<Quote>| {
-        for quote in quotes {
-            callback_msg_bus_tx
-        .blocking_send(Msg::SciQuoteRemoved(*quote.id())).expect(&format!("Failed to send SCI quote {} removed message to message bus", quote.id()));
-        }
-    }));
+        Arc::new(Mutex::new(move |quotes: Vec<Quote>| {
+            for quote in quotes {
+                callback_msg_bus_tx
+                    .blocking_send(Msg::SciQuoteRemoved(*quote.id()))
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "Failed to send SCI quote {} removed message to message bus",
+                            quote.id()
+                        )
+                    });
+            }
+        }));
 
     // Create quote book
     let internal_quote_book = InMemoryQuoteBook::default();
