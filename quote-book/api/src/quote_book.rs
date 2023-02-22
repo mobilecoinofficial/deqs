@@ -21,11 +21,14 @@ pub trait QuoteBook: Clone + Send + Sync + 'static {
     fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, Error>;
 
     /// Remove all quotes matching a given key image, returns the list of quotes
-    /// removed
+    /// removed. This does not return error QuoteNotFound when no matching
+    /// quotes are found. Instead it returns an empty list.
     fn remove_quotes_by_key_image(&self, key_image: &KeyImage) -> Result<Vec<Quote>, Error>;
 
     /// Remove all quotes whose tombstone block is >= current block index,
-    /// returns the list of quotes removed.
+    /// returns the list of quotes removed. This does not return error
+    /// QuoteNotFound when no matching quotes are found. Instead it returns an
+    /// empty list.
     fn remove_quotes_by_tombstone_block(
         &self,
         current_block_index: BlockIndex,
