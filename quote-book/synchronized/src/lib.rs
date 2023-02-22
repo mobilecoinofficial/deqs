@@ -317,7 +317,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                         self.logger,
                         "Unexpected error when removing quotes by tombstone_block {}. Retrying. Error: {}",
                         last_processed_block_index,
-                        quotes.err()
+                        quotes.expect_err("quotes should be an err if we're printing about the unexpected error")
                     );
                     std::thread::sleep(Self::ERROR_RETRY_FREQUENCY);
                     quotes = self
@@ -359,7 +359,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                             self.logger,
                             "Unexpected error when removing quotes by key_image {}. Retrying. Error: {}",
                             key_image,
-                            quotes.err()
+                            quotes.expect_err("quotes should be an err if we're printing about the unexpected error")
                         );
                         std::thread::sleep(Self::ERROR_RETRY_FREQUENCY);
                         quotes = self.quotebook.remove_quotes_by_key_image(&key_image);
