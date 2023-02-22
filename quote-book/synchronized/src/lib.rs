@@ -315,7 +315,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                 while quotes.is_err() {
                     log::error!(
                         self.logger,
-                        "Unexpected error when removing quotes by tombstone_block {}. Retrying. Error: {:?}",
+                        "Unexpected error when removing quotes by tombstone_block {}. Retrying. Error: {}",
                         last_processed_block_index,
                         quotes.err()
                     );
