@@ -15,7 +15,8 @@ use std::{
     time::Duration,
 };
 /// A wrapper for a quote book implementation that syncs quotes with the ledger
-pub struct SynchronizedQuoteBookImpl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> {
+#[derive(Clone)]
+pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> {
     /// Quotebook being synchronized to the ledger by the Synchronized Quotebook
     quote_book: Q,
 
@@ -26,13 +27,13 @@ pub struct SynchronizedQuoteBookImpl<Q: QuoteBook, L: Ledger + Clone + Sync + 's
     highest_processed_block_index: Arc<AtomicU64>,
 
     /// Join handle used to wait for the thread to terminate.
-    join_handle: Option<JoinHandle<()>>,
+    join_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
 
     /// Stop request trigger, used to signal the thread to stop.
     stop_requested: Arc<AtomicBool>,
 }
 
-impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBookImpl<Q, L> {
+impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, L> {
     /// Create a new Synchronized Quotebook
     pub fn new(
         quote_book: Q,
@@ -46,7 +47,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBookImpl
         let thread_highest_processed_block_index = highest_processed_block_index.clone();
         let stop_requested = Arc::new(AtomicBool::new(false));
         let thread_stop_requested = stop_requested.clone();
-        let join_handle = Some(
+        let join_handle = Arc::new(Mutex::new(Some(
             ThreadBuilder::new()
                 .name("LedgerDbFetcher".to_owned())
                 .spawn(move || {
@@ -60,7 +61,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBookImpl
                     )
                 })
                 .expect("Could not spawn thread"),
-        );
+        )));
         Self {
             quote_book,
             ledger,
@@ -76,19 +77,31 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBookImpl
 
     /// Stop and join the db poll thread
     pub fn stop(&mut self) {
-        if let Some(join_handle) = self.join_handle.take() {
+        if let Some(join_handle) = self.join_handle.lock().expect("mutex poisoned").take() {
             self.stop_requested.store(true, Ordering::SeqCst);
             join_handle
                 .join()
                 .expect("SynchronizedQuoteBookThread join failed");
         }
     }
+}
 
-    pub fn add_sci(
-        &self,
-        sci: SignedContingentInput,
-        timestamp: Option<u64>,
-    ) -> Result<Quote, Error> {
+impl<Q, L> Drop for SynchronizedQuoteBook<Q, L>
+where
+    Q: QuoteBook,
+    L: Ledger + Clone + Sync + 'static,
+{
+    fn drop(&mut self) {
+        let _ = self.stop();
+    }
+}
+
+impl<Q, L> QuoteBook for SynchronizedQuoteBook<Q, L>
+where
+    Q: QuoteBook,
+    L: Ledger + Clone + Sync + 'static,
+{
+    fn add_sci(&self, sci: SignedContingentInput, timestamp: Option<u64>) -> Result<Quote, Error> {
         // Check to see if the ledger's current block index is already at or past the
         // max_tombstone_block for the sci.
         let current_block_index = self
@@ -117,116 +130,19 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBookImpl
         self.quote_book.add_sci(sci, timestamp)
     }
 
-    pub fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, Error> {
+    fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, Error> {
         self.quote_book.remove_quote_by_id(id)
     }
 
-    pub fn remove_quotes_by_key_image(
-        &self,
-        key_image: &KeyImage,
-    ) -> Result<Vec<Quote>, Error> {
+    fn remove_quotes_by_key_image(&self, key_image: &KeyImage) -> Result<Vec<Quote>, Error> {
         self.quote_book.remove_quotes_by_key_image(key_image)
-    }
-
-    pub fn remove_quotes_by_tombstone_block(
-        &self,
-        current_block_index: BlockIndex,
-    ) -> Result<Vec<Quote>, Error> {
-        self.quote_book
-            .remove_quotes_by_tombstone_block(current_block_index)
-    }
-
-    pub fn get_quotes(
-        &self,
-        pair: &Pair,
-        base_token_quantity: impl RangeBounds<u64>,
-        limit: usize,
-    ) -> Result<Vec<Quote>, Error> {
-        self.quote_book.get_quotes(pair, base_token_quantity, limit)
-    }
-
-    pub fn get_quote_ids(&self, pair: Option<&Pair>) -> Result<Vec<QuoteId>, Error> {
-        self.quote_book.get_quote_ids(pair)
-    }
-
-    pub fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, Error> {
-        self.quote_book.get_quote_by_id(id)
-    }
-
-    pub fn num_scis(&self) -> Result<u64, Error> {
-        self.quote_book.num_scis()
-    }
-}
-
-impl<Q, L> Drop for SynchronizedQuoteBookImpl<Q, L>
-where
-    Q: QuoteBook,
-    L: Ledger + Clone + Sync + 'static,
-{
-    fn drop(&mut self) {
-        let _ = self.stop();
-    }
-}
-#[derive(Clone)]
-/// A wrapper for a quote book implementation that syncs quotes with the ledger
-pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> {
-    /// Quotebook being synchronized to the ledger by the Synchronized Quotebook
-    synchronized_quote_book_impl: Arc<SynchronizedQuoteBookImpl<Q, L>>,
-}
-impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, L> {
-    /// Create a new Synchronized Quotebook
-    pub fn new(
-        quote_book: Q,
-        ledger: L,
-        remove_quote_callback: RemoveQuoteCallback,
-        logger: Logger,
-    ) -> Self {
-        let synchronized_quote_book_impl = Arc::new(SynchronizedQuoteBookImpl::new(
-            quote_book,
-            ledger,
-            remove_quote_callback,
-            logger,
-        ));
-        Self {
-            synchronized_quote_book_impl,
-        }
-    }
-
-    pub fn get_current_block_index(&self) -> u64 {
-        self.synchronized_quote_book_impl.get_current_block_index()
-    }
-}
-
-impl<Q, L> QuoteBook for SynchronizedQuoteBook<Q, L>
-where
-    Q: QuoteBook,
-    L: Ledger + Clone + Sync + 'static,
-{
-    fn add_sci(
-        &self,
-        sci: SignedContingentInput,
-        timestamp: Option<u64>,
-    ) -> Result<Quote, Error> {
-        self.synchronized_quote_book_impl.add_sci(sci, timestamp)
-    }
-
-    fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, Error> {
-        self.synchronized_quote_book_impl.remove_quote_by_id(id)
-    }
-
-    fn remove_quotes_by_key_image(
-        &self,
-        key_image: &KeyImage,
-    ) -> Result<Vec<Quote>, Error> {
-        self.synchronized_quote_book_impl
-            .remove_quotes_by_key_image(key_image)
     }
 
     fn remove_quotes_by_tombstone_block(
         &self,
         current_block_index: BlockIndex,
     ) -> Result<Vec<Quote>, Error> {
-        self.synchronized_quote_book_impl
+        self.quote_book
             .remove_quotes_by_tombstone_block(current_block_index)
     }
 
@@ -236,20 +152,19 @@ where
         base_token_quantity: impl RangeBounds<u64>,
         limit: usize,
     ) -> Result<Vec<Quote>, Error> {
-        self.synchronized_quote_book_impl
-            .get_quotes(pair, base_token_quantity, limit)
+        self.quote_book.get_quotes(pair, base_token_quantity, limit)
     }
 
     fn get_quote_ids(&self, pair: Option<&Pair>) -> Result<Vec<QuoteId>, Error> {
-        self.synchronized_quote_book_impl.get_quote_ids(pair)
+        self.quote_book.get_quote_ids(pair)
     }
 
     fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, Error> {
-        self.synchronized_quote_book_impl.get_quote_by_id(id)
+        self.quote_book.get_quote_by_id(id)
     }
 
     fn num_scis(&self) -> Result<u64, Error> {
-        self.synchronized_quote_book_impl.num_scis()
+        self.quote_book.num_scis()
     }
 }
 
