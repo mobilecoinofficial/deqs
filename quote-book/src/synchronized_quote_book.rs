@@ -7,18 +7,16 @@ use mc_ledger_db::{Error as LedgerError, Ledger};
 use mc_transaction_extra::SignedContingentInput;
 
 use std::{
-    ops::RangeBounds,
+    ops::{RangeBounds},
     sync::{
         atomic::{AtomicBool, Ordering, AtomicU64},
-        Arc,
+        Arc, Mutex,
     },
     thread::{Builder as ThreadBuilder, JoinHandle},
     time::Duration,
 };
 
-use crate::Msg;
 use mc_common::logger::{log, Logger};
-use postage::{broadcast::Sender, prelude::Sink};
 /// A wrapper for a quote book implementation that syncs quotes with the ledger
 pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> {
     /// Quotebook being synchronized to the ledger by the Synchronized Quotebook
@@ -39,7 +37,7 @@ pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'stati
 
 impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, L> {
     /// Create a new Synchronized Quotebook
-    pub fn new(quote_book: Q, ledger: L, msg_bus_tx: Sender<Msg>, logger: Logger) -> Self {
+    pub fn new(quote_book: Q, ledger: L, remove_quote_callback: RemoveQuoteCallback, logger: Logger) -> Self {
         let ledger_clone = ledger.clone();
         let quote_book_clone = quote_book.clone();
         let highest_processed_block_index= Arc::new(AtomicU64::new(0));
@@ -53,7 +51,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
                     DbFetcherThread::start(
                         ledger_clone,
                         quote_book_clone,
-                        msg_bus_tx,
+                        remove_quote_callback,
                         thread_highest_processed_block_index,
                         thread_stop_requested,
                         logger,
@@ -159,11 +157,16 @@ where
     }
 }
 
+/// A callback for broadcasting a quote removal. It receives 1 argument:
+/// - A vector of quotes that have been removed
+pub type RemoveQuoteCallback =
+    Arc<Mutex<dyn FnMut(Vec<Quote>) + Sync + Send>>;
+
 struct DbFetcherThread<DB: Ledger, Q: QuoteBook> {
     db: DB,
     quotebook: Q,
     /// Message bus sender.
-    msg_bus_tx: Sender<Msg>,
+    remove_quote_callback: RemoveQuoteCallback,
     next_block_index: u64,
     highest_processed_block_index: Arc<AtomicU64>,
     stop_requested: Arc<AtomicBool>,
@@ -179,7 +182,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
     pub fn start(
         db: DB,
         quotebook: Q,
-        msg_bus_tx: Sender<Msg>,
+        remove_quote_callback: RemoveQuoteCallback,
         highest_processed_block_index: Arc<AtomicU64>,
         stop_requested: Arc<AtomicBool>,
         logger: Logger,
@@ -188,7 +191,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
         let thread = Self {
             db,
             quotebook,
-            msg_bus_tx,
+            remove_quote_callback,
             next_block_index,
             highest_processed_block_index,
             stop_requested,
@@ -213,12 +216,8 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                     .remove_quotes_by_tombstone_block(last_processed_block_index)
                 {
                     Ok(quotes) => {
-                        for quote in quotes {
-                            log::debug!(self.logger, "Quote {} removed", quote.id());
-                            self
-                                .msg_bus_tx
-                                .blocking_send(Msg::SciQuoteRemoved(*quote.id())).expect(&format!("Failed to send SCI quote {} removed message to message bus while filtering by tombstone block", quote.id()));
-                        }
+                        (self.remove_quote_callback.lock()
+                        .expect("lock poisoned"))(quotes);
                     }
                     Err(err) => {
                         log::error!(
@@ -262,12 +261,8 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                         working_quotebook.remove_quotes_by_key_image(&key_image).map_err(|e| BackoffError::Transient { err: e, retry_after: None })
                     };
                     let quotes = backoff::retry(backoff, f).expect("Could not remove quotes by key_image after retries");
-                    for quote in quotes {
-                        log::debug!(self.logger, "Quote {} removed", quote.id());
-                        self
-                        .msg_bus_tx
-                        .blocking_send(Msg::SciQuoteRemoved(*quote.id())).expect(&format!("Failed to send SCI quote {} removed message to message bus while filtering by key_image", quote.id()));
-            }
+                    (self.remove_quote_callback.lock()
+                    .expect("lock poisoned"))(quotes);
                 }
                 self.next_block_index += 1;
             }

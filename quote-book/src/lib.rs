@@ -15,6 +15,7 @@ pub use error::Error;
 pub use in_memory_quote_book::InMemoryQuoteBook;
 pub use msg::Msg;
 pub use synchronized_quote_book::SynchronizedQuoteBook;
+pub use synchronized_quote_book::RemoveQuoteCallback;
 
 pub use quote::Quote;
 pub use quote_book::QuoteBook;

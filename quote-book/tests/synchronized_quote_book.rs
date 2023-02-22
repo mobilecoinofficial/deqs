@@ -2,13 +2,12 @@
 
 mod common;
 
-use std::{sync::Arc, time::Duration};
+use std::{sync::{Arc, Mutex}, time::Duration};
 
-use deqs_quote_book::{Error, InMemoryQuoteBook, Msg, QuoteBook, SynchronizedQuoteBook};
+use deqs_quote_book::{Error, InMemoryQuoteBook, QuoteBook, SynchronizedQuoteBook, RemoveQuoteCallback};
 use mc_blockchain_types::BlockVersion;
 use mc_crypto_ring_signature_signer::NoKeysRingSigner;
 use mc_ledger_db::{Ledger, LedgerDB};
-use postage::broadcast;
 use rand::{rngs::StdRng, SeedableRng};
 
 use mc_account_keys::AccountKey;
@@ -34,15 +33,21 @@ fn create_and_initialize_test_ledger() -> LedgerDB {
     ledger
 }
 
+fn get_remove_quote_callback() -> RemoveQuoteCallback {
+    Arc::new( Mutex::new(|_| {
+        //Do nothing
+    }))
+}
+
 #[test_with_logger]
 fn basic_happy_flow(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
-    let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
+    let remove_quote_callback = get_remove_quote_callback();
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = Arc::new(SynchronizedQuoteBook::new(
         internal_quote_book,
         ledger.clone(),
-        msg_bus_tx,
+        remove_quote_callback,
         logger,
     ));
     common::basic_happy_flow(&synchronized_quote_book);
@@ -51,12 +56,12 @@ fn basic_happy_flow(logger: Logger) {
 #[test_with_logger]
 fn cannot_add_invalid_sci(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
-    let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
+    let remove_quote_callback = get_remove_quote_callback();
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = Arc::new(SynchronizedQuoteBook::new(
         internal_quote_book,
         ledger.clone(),
-        msg_bus_tx,
+        remove_quote_callback,
         logger,
     ));
     common::cannot_add_invalid_sci(&synchronized_quote_book);
@@ -65,12 +70,12 @@ fn cannot_add_invalid_sci(logger: Logger) {
 #[test_with_logger]
 fn get_quotes_filtering_works(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
-    let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
+    let remove_quote_callback = get_remove_quote_callback();
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = Arc::new(SynchronizedQuoteBook::new(
         internal_quote_book,
         ledger.clone(),
-        msg_bus_tx,
+        remove_quote_callback,
         logger,
     ));
     common::get_quotes_filtering_works(&synchronized_quote_book);
@@ -79,12 +84,12 @@ fn get_quotes_filtering_works(logger: Logger) {
 #[test_with_logger]
 fn get_quote_ids_works(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
-    let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
+    let remove_quote_callback = get_remove_quote_callback();
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = Arc::new(SynchronizedQuoteBook::new(
         internal_quote_book,
         ledger.clone(),
-        msg_bus_tx,
+        remove_quote_callback,
         logger,
     ));
     common::get_quote_ids_works(&synchronized_quote_book);
@@ -93,12 +98,12 @@ fn get_quote_ids_works(logger: Logger) {
 #[test_with_logger]
 fn get_quote_by_id_works(logger: Logger) {
     let ledger = create_and_initialize_test_ledger();
-    let (msg_bus_tx, _) = broadcast::channel::<Msg>(1000);
+    let remove_quote_callback = get_remove_quote_callback();
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = Arc::new(SynchronizedQuoteBook::new(
         internal_quote_book,
         ledger.clone(),
-        msg_bus_tx,
+        remove_quote_callback,
         logger,
     ));
     common::get_quote_by_id_works(&synchronized_quote_book);
@@ -107,12 +112,12 @@ fn get_quote_by_id_works(logger: Logger) {
 #[test_with_logger]
 fn cannot_add_sci_with_key_image_in_ledger(logger: Logger) {
     let mut ledger = create_and_initialize_test_ledger();
-    let (msg_bus_tx, _msg_bus_rx) = broadcast::channel::<Msg>(1000);
+    let remove_quote_callback = get_remove_quote_callback();
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = Arc::new(SynchronizedQuoteBook::new(
         internal_quote_book,
         ledger.clone(),
-        msg_bus_tx,
+        remove_quote_callback,
         logger,
     ));
 
@@ -164,12 +169,12 @@ fn cannot_add_sci_with_key_image_in_ledger(logger: Logger) {
 #[test_with_logger]
 fn sci_that_are_added_to_ledger_are_removed_in_the_background(logger: Logger) {
     let mut ledger = create_and_initialize_test_ledger();
-    let (msg_bus_tx, _msg_bus_rx) = broadcast::channel::<Msg>(1000);
+    let remove_quote_callback = get_remove_quote_callback();
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = Arc::new(SynchronizedQuoteBook::new(
         internal_quote_book,
         ledger.clone(),
-        msg_bus_tx,
+        remove_quote_callback,
         logger,
     ));
 
@@ -225,12 +230,12 @@ fn cannot_add_sci_past_tombstone_block(logger: Logger) {
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
     let ledger = create_and_initialize_test_ledger();
-    let (msg_bus_tx, _msg_bus_rx) = broadcast::channel::<Msg>(1000);
+    let remove_quote_callback = get_remove_quote_callback();
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = Arc::new(SynchronizedQuoteBook::new(
         internal_quote_book,
         ledger.clone(),
-        msg_bus_tx,
+        remove_quote_callback,
         logger,
     ));
 
@@ -284,14 +289,14 @@ fn sci_past_tombstone_block_get_removed_in_the_background(logger: Logger) {
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
     let mut ledger = create_and_initialize_test_ledger();
-    let (msg_bus_tx, _msg_bus_rx) = broadcast::channel::<Msg>(1000);
+    let remove_quote_callback = get_remove_quote_callback();
 
     let internal_quote_book = InMemoryQuoteBook::default();
     let starting_blocks = ledger.num_blocks().unwrap();
     let synchronized_quote_book = Arc::new(SynchronizedQuoteBook::new(
         internal_quote_book,
         ledger.clone(),
-        msg_bus_tx,
+        remove_quote_callback,
         logger,
     ));
 
