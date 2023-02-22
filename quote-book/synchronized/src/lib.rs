@@ -357,7 +357,7 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
                     while quotes.is_err() {
                         log::error!(
                             self.logger,
-                            "Unexpected error when removing quotes by key_image {}. Retrying. Error: {:?}",
+                            "Unexpected error when removing quotes by key_image {}. Retrying. Error: {}",
                             key_image,
                             quotes.err()
                         );
