@@ -1,5 +1,5 @@
 // Copyright (c) 2023 MobileCoin Inc.
-use deqs_quote_book_api::{Error as QuoteBookError, Pair, Quote, QuoteBook, QuoteId};
+use deqs_quote_book_api::{Error, Pair, Quote, QuoteBook, QuoteId};
 use mc_blockchain_types::BlockIndex;
 use mc_common::logger::{log, Logger};
 use mc_crypto_ring_signature::KeyImage;
@@ -88,19 +88,19 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBookImpl
         &self,
         sci: SignedContingentInput,
         timestamp: Option<u64>,
-    ) -> Result<Quote, QuoteBookError> {
+    ) -> Result<Quote, Error> {
         // Check to see if the ledger's current block index is already at or past the
         // max_tombstone_block for the sci.
         let current_block_index = self
             .ledger
             .num_blocks()
-            .map_err(|err| QuoteBookError::ImplementationSpecific(err.to_string()))?
+            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?
             - 1;
         if let Some(input_rules) = &sci.tx_in.input_rules {
             if input_rules.max_tombstone_block != 0
                 && current_block_index >= input_rules.max_tombstone_block
             {
-                return Err(QuoteBookError::QuoteIsStale);
+                return Err(Error::QuoteIsStale);
             }
         }
         // Check the ledger to see if the quote is stale before adding it to the
@@ -108,30 +108,30 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBookImpl
         if self
             .ledger
             .contains_key_image(&sci.key_image())
-            .map_err(|err| QuoteBookError::ImplementationSpecific(err.to_string()))?
+            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?
         {
-            return Err(QuoteBookError::QuoteIsStale);
+            return Err(Error::QuoteIsStale);
         }
 
         // Try adding to quote book.
         self.quote_book.add_sci(sci, timestamp)
     }
 
-    pub fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, QuoteBookError> {
+    pub fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, Error> {
         self.quote_book.remove_quote_by_id(id)
     }
 
     pub fn remove_quotes_by_key_image(
         &self,
         key_image: &KeyImage,
-    ) -> Result<Vec<Quote>, QuoteBookError> {
+    ) -> Result<Vec<Quote>, Error> {
         self.quote_book.remove_quotes_by_key_image(key_image)
     }
 
     pub fn remove_quotes_by_tombstone_block(
         &self,
         current_block_index: BlockIndex,
-    ) -> Result<Vec<Quote>, QuoteBookError> {
+    ) -> Result<Vec<Quote>, Error> {
         self.quote_book
             .remove_quotes_by_tombstone_block(current_block_index)
     }
@@ -141,19 +141,19 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBookImpl
         pair: &Pair,
         base_token_quantity: impl RangeBounds<u64>,
         limit: usize,
-    ) -> Result<Vec<Quote>, QuoteBookError> {
+    ) -> Result<Vec<Quote>, Error> {
         self.quote_book.get_quotes(pair, base_token_quantity, limit)
     }
 
-    pub fn get_quote_ids(&self, pair: Option<&Pair>) -> Result<Vec<QuoteId>, QuoteBookError> {
+    pub fn get_quote_ids(&self, pair: Option<&Pair>) -> Result<Vec<QuoteId>, Error> {
         self.quote_book.get_quote_ids(pair)
     }
 
-    pub fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, QuoteBookError> {
+    pub fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, Error> {
         self.quote_book.get_quote_by_id(id)
     }
 
-    pub fn num_scis(&self) -> Result<u64, QuoteBookError> {
+    pub fn num_scis(&self) -> Result<u64, Error> {
         self.quote_book.num_scis()
     }
 }
@@ -206,18 +206,18 @@ where
         &self,
         sci: SignedContingentInput,
         timestamp: Option<u64>,
-    ) -> Result<Quote, QuoteBookError> {
+    ) -> Result<Quote, Error> {
         self.synchronized_quote_book_impl.add_sci(sci, timestamp)
     }
 
-    fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, QuoteBookError> {
+    fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, Error> {
         self.synchronized_quote_book_impl.remove_quote_by_id(id)
     }
 
     fn remove_quotes_by_key_image(
         &self,
         key_image: &KeyImage,
-    ) -> Result<Vec<Quote>, QuoteBookError> {
+    ) -> Result<Vec<Quote>, Error> {
         self.synchronized_quote_book_impl
             .remove_quotes_by_key_image(key_image)
     }
@@ -225,7 +225,7 @@ where
     fn remove_quotes_by_tombstone_block(
         &self,
         current_block_index: BlockIndex,
-    ) -> Result<Vec<Quote>, QuoteBookError> {
+    ) -> Result<Vec<Quote>, Error> {
         self.synchronized_quote_book_impl
             .remove_quotes_by_tombstone_block(current_block_index)
     }
@@ -235,20 +235,20 @@ where
         pair: &Pair,
         base_token_quantity: impl RangeBounds<u64>,
         limit: usize,
-    ) -> Result<Vec<Quote>, QuoteBookError> {
+    ) -> Result<Vec<Quote>, Error> {
         self.synchronized_quote_book_impl
             .get_quotes(pair, base_token_quantity, limit)
     }
 
-    fn get_quote_ids(&self, pair: Option<&Pair>) -> Result<Vec<QuoteId>, QuoteBookError> {
+    fn get_quote_ids(&self, pair: Option<&Pair>) -> Result<Vec<QuoteId>, Error> {
         self.synchronized_quote_book_impl.get_quote_ids(pair)
     }
 
-    fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, QuoteBookError> {
+    fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, Error> {
         self.synchronized_quote_book_impl.get_quote_by_id(id)
     }
 
-    fn num_scis(&self) -> Result<u64, QuoteBookError> {
+    fn num_scis(&self) -> Result<u64, Error> {
         self.synchronized_quote_book_impl.num_scis()
     }
 }
@@ -526,7 +526,7 @@ mod tests {
         // Because the key image is already in the ledger, adding this sci should fail
         assert_eq!(
             synchronized_quote_book.add_sci(sci, None).unwrap_err(),
-            QuoteBookError::QuoteIsStale
+            Error::QuoteIsStale
         );
 
         // Adding a quote that isn't already in the ledger should work
@@ -619,7 +619,7 @@ mod tests {
 
         assert_eq!(
             synchronized_quote_book.add_sci(sci, None).unwrap_err(),
-            QuoteBookError::QuoteIsStale
+            Error::QuoteIsStale
         );
 
         // Because the tombstone block is higher than the block index of the highest
@@ -651,7 +651,7 @@ mod tests {
 
         assert_eq!(
             synchronized_quote_book.add_sci(sci4, None).unwrap_err(),
-            QuoteBookError::QuoteIsStale
+            Error::QuoteIsStale
         );
     }
 
