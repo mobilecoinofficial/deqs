@@ -8,7 +8,7 @@ use deqs_api::{
     },
     deqs_grpc::{create_deqs_client_api, DeqsClientApi},
 };
-use deqs_quote_book::{Error as QuoteBookError, Pair, QuoteBook, QuoteId};
+use deqs_quote_book_api::{Error as QuoteBookError, Pair, QuoteBook, QuoteId};
 use futures::{FutureExt, SinkExt};
 use grpcio::{
     RpcContext, RpcStatus, RpcStatusCode, ServerStreamingSink, Service, UnarySink, WriteFlags,
@@ -118,8 +118,7 @@ impl<OB: QuoteBook> ClientService<OB> {
                 }
                 Err(err) => {
                     error_messages.push(err.to_string());
-                    let quote_book_error: deqs_quote_book::Error = err;
-                    status_codes.push((&quote_book_error).into());
+                    status_codes.push((&err).into());
                     quotes.push(Default::default());
                 }
             }
@@ -174,20 +173,19 @@ impl<OB: QuoteBook> ClientService<OB> {
         match self.quote_book.remove_quote_by_id(&quote_id) {
             Ok(quote) => {
                 log::info!(self.logger, "Quote {} removed", quote.id());
-                if let Err(err) = self
-                    .msg_bus_tx
-                    .blocking_send(Msg::SciQuoteRemoved(quote_id))
-                {
+
+                let mut resp = RemoveQuoteResponse::default();
+                resp.set_quote((&quote).into());
+
+                if let Err(err) = self.msg_bus_tx.blocking_send(Msg::SciQuoteRemoved(quote)) {
                     log::error!(
                         logger,
                         "Failed to send SCI quote {} removed message to message bus: {:?}",
-                        quote.id(),
+                        quote_id,
                         err
                     );
                 }
 
-                let mut resp = RemoveQuoteResponse::default();
-                resp.set_quote((&quote).into());
                 Ok(resp)
             }
             Err(QuoteBookError::QuoteNotFound) => Err(RpcStatus::new(RpcStatusCode::NOT_FOUND)),
@@ -199,14 +197,41 @@ impl<OB: QuoteBook> ClientService<OB> {
     }
 
     async fn live_updates_impl(
+        req: LiveUpdatesRequest,
         mut responses: ServerStreamingSink<LiveUpdate>,
         mut msg_bus_rx: Receiver<Msg>,
     ) -> Result<(), grpcio::Error> {
+        let filter_for_pair = {
+            let pair = Pair::from(req.get_pair());
+            if *pair.base_token_id == 0 && *pair.counter_token_id == 0 {
+                None
+            } else {
+                Some(pair)
+            }
+        };
+
         while let Some(msg) = msg_bus_rx.recv().await {
             let mut live_update = LiveUpdate::default();
             match msg {
-                Msg::SciQuoteAdded(quote) => live_update.set_quote_added((&quote).into()),
-                Msg::SciQuoteRemoved(quote) => live_update.set_quote_removed((&quote).into()),
+                Msg::SciQuoteAdded(quote) => {
+                    if let Some(pair) = filter_for_pair {
+                        if quote.pair() != &pair {
+                            continue;
+                        }
+                    }
+
+                    live_update.set_quote_added((&quote).into());
+                }
+
+                Msg::SciQuoteRemoved(quote) => {
+                    if let Some(pair) = filter_for_pair {
+                        if quote.pair() != &pair {
+                            continue;
+                        }
+                    }
+
+                    live_update.set_quote_removed(quote.id().into());
+                }
             };
             responses.send((live_update, WriteFlags::default())).await?;
         }
@@ -255,7 +280,7 @@ impl<OB: QuoteBook> DeqsClientApi for ClientService<OB> {
     fn live_updates(
         &mut self,
         ctx: RpcContext<'_>,
-        _req: LiveUpdatesRequest,
+        req: LiveUpdatesRequest,
         responses: ServerStreamingSink<LiveUpdate>,
     ) {
         let receiver = self.msg_bus_tx.subscribe();
@@ -263,11 +288,12 @@ impl<OB: QuoteBook> DeqsClientApi for ClientService<OB> {
         scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
             let logger = logger.clone();
 
-            let future = Self::live_updates_impl(responses, receiver).map(move |future_result| {
-                if let Err(err) = future_result {
-                    log::error!(logger, "live_updates_impl failed: {:?}", err);
-                }
-            });
+            let future =
+                Self::live_updates_impl(req, responses, receiver).map(move |future_result| {
+                    if let Err(err) = future_result {
+                        log::error!(logger, "live_updates_impl failed: {:?}", err);
+                    }
+                });
             ctx.spawn(future)
         })
     }
@@ -278,7 +304,8 @@ mod tests {
     use super::*;
     use deqs_api::{deqs_grpc::DeqsClientApiClient, DeqsClientUri};
     use deqs_mc_test_utils::create_sci;
-    use deqs_quote_book::{InMemoryQuoteBook, Quote};
+    use deqs_quote_book_api::Quote;
+    use deqs_quote_book_in_memory::InMemoryQuoteBook;
     use futures::{executor::block_on, StreamExt};
     use grpcio::{ChannelBuilder, EnvBuilder, Server, ServerBuilder, ServerCredentials};
     use mc_common::logger::test_with_logger;
@@ -291,6 +318,7 @@ mod tests {
         sync::{mpsc::channel, Arc},
         thread,
     };
+    use tokio::select;
 
     fn create_test_client_and_server<OB: QuoteBook>(
         quote_book: &OB,
@@ -313,7 +341,7 @@ mod tests {
         let client_env = Arc::new(EnvBuilder::new().build());
         let ch = ChannelBuilder::default_channel_builder(client_env).connect_to_uri(
             &DeqsClientUri::from_str(&format!("insecure-deqs://127.0.0.1:{}", port)).unwrap(),
-            &logger,
+            logger,
         );
         let client_api = DeqsClientApiClient::new(ch);
 
@@ -447,11 +475,11 @@ mod tests {
 
         let scis = [&sci1, &sci2, &sci3, &sci4]
             .into_iter()
-            .map(|sci| mc_api::external::SignedContingentInput::from(sci))
+            .map(mc_api::external::SignedContingentInput::from)
             .collect::<Vec<_>>();
 
         let req = SubmitQuotesRequest {
-            quotes: scis.clone().into(),
+            quotes: scis.into(),
             ..Default::default()
         };
         client_api.submit_quotes(&req).expect("submit quote failed");
@@ -559,10 +587,10 @@ mod tests {
     }
 
     #[test_with_logger]
-    fn streaming_works(logger: Logger) {
+    fn streaming_works_without_filtering(logger: Logger) {
         let pair = Pair {
-            base_token_id: TokenId::from(1),
-            counter_token_id: TokenId::from(2),
+            base_token_id: TokenId::from(0),
+            counter_token_id: TokenId::from(1),
         };
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
         let quote_book = InMemoryQuoteBook::default();
@@ -573,9 +601,7 @@ mod tests {
 
         let thread_client_api = client_api.clone();
         let _join_handle = thread::spawn(move || {
-            let req = LiveUpdatesRequest {
-                ..Default::default()
-            };
+            let req = LiveUpdatesRequest::default();
             let mut stream = thread_client_api
                 .live_updates(&req)
                 .expect("stream quotes failed");
@@ -618,5 +644,134 @@ mod tests {
 
         let resp = rx.recv().expect("recv failed");
         assert_eq!(resp.get_quote_removed(), added_quote.get_id());
+    }
+
+    #[test_with_logger]
+    fn streaming_works_and_filters_correctly(logger: Logger) {
+        let pair1 = Pair {
+            base_token_id: TokenId::from(1),
+            counter_token_id: TokenId::from(2),
+        };
+        let pair2 = Pair {
+            base_token_id: TokenId::from(1),
+            counter_token_id: TokenId::from(3),
+        };
+
+        let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+        let quote_book = InMemoryQuoteBook::default();
+        let (client_api, _server, _msg_bus_rx) =
+            create_test_client_and_server(&quote_book, &logger);
+
+        let (tx1, rx1) = channel();
+        let (tx2, rx2) = channel();
+
+        let thread_client_api = client_api.clone();
+        let _join_handle = thread::spawn(move || {
+            let mut req1 = LiveUpdatesRequest::default();
+            req1.set_pair((&pair1).into()); // Filter only to pair1
+            let mut stream1 = thread_client_api
+                .live_updates(&req1)
+                .expect("stream quotes failed");
+
+            let mut req2 = LiveUpdatesRequest::default();
+            req2.set_pair((&pair2).into()); // Filter only to pair2
+            let mut stream2 = thread_client_api
+                .live_updates(&req2)
+                .expect("stream quotes failed");
+
+            block_on(async {
+                loop {
+                    select! {
+                        resp = stream1.next() => {
+                            match resp {
+                                Some(Ok(resp)) => {
+                                    tx1.send(resp).expect("send failed");
+                                }
+                                _ => {
+                                    break;
+                                }
+                            }
+                        }
+                        resp = stream2.next() => {
+                            match resp {
+                                Some(Ok(resp)) => {
+                                    tx2.send(resp).expect("send failed");
+                                }
+                                _ => {
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+
+        // Initially, the receivers should be empty.
+        assert!(rx1.try_recv().is_err());
+        assert!(rx2.try_recv().is_err());
+
+        let pair1_sci1 = create_sci(
+            pair1.base_token_id,
+            pair1.counter_token_id,
+            10,
+            20,
+            &mut rng,
+        );
+        let pair1_sci2 = create_sci(
+            pair1.base_token_id,
+            pair1.counter_token_id,
+            10,
+            20,
+            &mut rng,
+        );
+        let pair2_sci1 = create_sci(
+            pair2.base_token_id,
+            pair2.counter_token_id,
+            10,
+            20,
+            &mut rng,
+        );
+        let pair2_sci2 = create_sci(
+            pair2.base_token_id,
+            pair2.counter_token_id,
+            10,
+            20,
+            &mut rng,
+        );
+        let req = SubmitQuotesRequest {
+            quotes: vec![
+                (&pair1_sci1).into(),
+                (&pair1_sci2).into(),
+                (&pair2_sci1).into(),
+                (&pair2_sci2).into(),
+            ]
+            .into(),
+            ..Default::default()
+        };
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+        assert_eq!(
+            resp.status_codes,
+            vec![
+                QuoteStatusCode::CREATED,
+                QuoteStatusCode::CREATED,
+                QuoteStatusCode::CREATED,
+                QuoteStatusCode::CREATED
+            ]
+        );
+
+        // We should now see our two pair1 quotes arrive in the first stream.
+        let resp = rx1.recv().expect("recv failed");
+        assert_eq!(resp.get_quote_added().get_pair(), &(&pair1).into());
+
+        let resp = rx1.recv().expect("recv failed");
+        assert_eq!(resp.get_quote_added().get_pair(), &(&pair1).into());
+
+        // And pair2 quotes on the second stream
+        let resp = rx2.recv().expect("recv failed");
+        assert_eq!(resp.get_quote_added().get_pair(), &(&pair2).into());
+
+        let resp = rx2.recv().expect("recv failed");
+        assert_eq!(resp.get_quote_added().get_pair(), &(&pair2).into());
     }
 }

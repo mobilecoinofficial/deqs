@@ -2,7 +2,7 @@
 
 use crate::{p2p::RpcError, Error};
 use deqs_p2p::{libp2p::PeerId, Client};
-use deqs_quote_book::{Quote, QuoteId};
+use deqs_quote_book_api::{Quote, QuoteId};
 use mc_common::logger::{log, Logger};
 use serde::{Deserialize, Serialize};
 
@@ -10,6 +10,16 @@ use serde::{Deserialize, Serialize};
 pub enum Request {
     GetAllQuoteIds,
     GetQuotesById(Vec<QuoteId>),
+}
+
+impl Request {
+    /// Method name to use in Prometheus metrics.
+    pub fn metrics_method_name(&self) -> &'static str {
+        match self {
+            Request::GetAllQuoteIds => "get_all_quote_ids",
+            Request::GetQuotesById(_) => "get_quotes_by_id",
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]

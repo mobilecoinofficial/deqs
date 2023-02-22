@@ -7,7 +7,7 @@ edition = "2021"
 links = "deqs-api"
 
 [dependencies]
-deqs-quote-book = { path = "../quote-book" }
+deqs-quote-book-api = { path = "../quote-book/api" }
 
 futures = "0.3"
 grpcio = "0.12.0"

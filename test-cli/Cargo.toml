@@ -14,7 +14,7 @@ clap = { version = "4.0", features = ["derive", "env"] }
 deqs-api = { path = "../api" }
 deqs-mc-test-utils = { path = "../mc-test-utils" }
 deqs-p2p = { path = "../p2p" }
-deqs-quote-book = { path = "../quote-book" }
+deqs-quote-book-api = { path = "../quote-book/api" }
 displaydoc = { version = "0.2", default-features = false }
 futures = "0.3"
 grpcio = "0.12.0"

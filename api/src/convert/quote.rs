@@ -5,7 +5,7 @@
 use std::ops::RangeInclusive;
 
 use crate::deqs as api;
-use deqs_quote_book::{Pair, Quote, QuoteId};
+use deqs_quote_book_api::{Pair, Quote, QuoteId};
 use mc_api::ConversionError;
 use mc_transaction_extra::SignedContingentInput;
 

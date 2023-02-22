@@ -53,4 +53,7 @@ pub trait QuoteBook: Clone + Send + Sync + 'static {
 
     /// Get a quote by its id
     fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, Error>;
+
+    /// Get the total number of SCIs in the quote book
+    fn num_scis(&self) -> Result<u64, Error>;
 }

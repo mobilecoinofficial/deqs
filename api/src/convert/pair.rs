@@ -3,7 +3,7 @@
 //! Convert to/from Pair.
 
 use crate::deqs as api;
-use deqs_quote_book::Pair;
+use deqs_quote_book_api::Pair;
 use mc_transaction_types::TokenId;
 
 /// Convert Rust Pair to Protobuf Pair.

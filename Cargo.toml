@@ -5,7 +5,10 @@ members = [
     "api",
     "mc-test-utils",
     "p2p",
-    "quote-book",
+    "quote-book/api",
+    "quote-book/in-memory",
+    "quote-book/synchronized",
+    "quote-book/test-suite",
     "server",
     "test-cli",
 ]

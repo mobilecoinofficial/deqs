@@ -13,41 +13,39 @@ name = "deqs-server"
 path = "src/bin/main.rs"
 
 [dependencies]
-
-clap = { version = "4.0", features = ["derive", "env"] }
 deqs-api = { path = "../api" }
 deqs-p2p = { path = "../p2p" }
-deqs-quote-book = { path = "../quote-book" }
-displaydoc = { version = "0.2", default-features = false }
-futures = "0.3"
-grpcio = "0.12.0"
-lazy_static = "1.4"
+deqs-quote-book-api = { path = "../quote-book/api" }
+deqs-quote-book-in-memory = { path = "../quote-book/in-memory" }
+deqs-quote-book-synchronized = { path = "../quote-book/synchronized" }
 
 mc-api = { path = "../mobilecoin/api" }
-mc-blockchain-types = { path = "../mobilecoin/blockchain/types" }
 mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
-mc-crypto-ring-signature = { path = "../mobilecoin/crypto/ring-signature" }
 mc-ledger-db = { path = "../mobilecoin/ledger/db" }
 mc-transaction-extra = { path = "../mobilecoin/transaction/extra" }
 mc-util-grpc = { path = "../mobilecoin/util/grpc" }
 mc-util-metrics  = { path = "../mobilecoin/util/metrics" }
 mc-util-serial = { path = "../mobilecoin/util/serial" }
 mc-util-uri = { path = "../mobilecoin/util/uri" }
+
+clap = { version = "4.0", features = ["derive", "env"] }
+displaydoc = { version = "0.2", default-features = false }
+futures = "0.3"
+grpcio = "0.12.0"
+lazy_static = "1.4"
 postage = "0.5"
+prometheus = "0.13"
 rayon = "1.6"
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
 serde_json = "1.0"
-tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros", "time", "sync"] }
+tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros", "time", "signal", "sync"] }
 
 [dev-dependencies]
 deqs-mc-test-utils = { path = "../mc-test-utils" }
 
 mc-account-keys = { path = "../mobilecoin/account-keys" }
-mc-crypto-ring-signature-signer = { path = "../mobilecoin/crypto/ring-signature/signer", default-features = false }
-mc-fog-report-validation-test-utils = { path = "../mobilecoin/fog/report/validation/test-utils" }
-mc-transaction-builder = { path = "../mobilecoin/transaction/builder", features = ["test-only"] }
-mc-transaction-core = { path = "../mobilecoin/transaction/core" }
-
+mc-ledger-db = { path = "../mobilecoin/ledger/db", features = ["test_utils"] }
 mc-transaction-types = { path = "../mobilecoin/transaction/types" }
+
 rand = "0.8"
-rand_core = "0.6"
+tokio-retry = "0.3"

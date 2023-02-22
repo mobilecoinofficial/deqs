@@ -89,7 +89,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let Network {
         mut event_loop_handle,
         mut events,
-        mut client,
+        client,
     } = network_builder.build()?;
 
     // Subscribe to a gossip topic for receiving broadcast messages.

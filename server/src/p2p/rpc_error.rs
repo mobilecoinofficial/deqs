@@ -1,11 +1,12 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+use deqs_quote_book_api::Error as QuoteBookError;
 use displaydoc::Display;
 use mc_transaction_extra::SignedContingentInputError;
 use serde::{Deserialize, Serialize};
 
 /// Errors returned over RPC calls.
-/// Note that we have our own version of `deqs_quote_book::Error` here, because
+/// Note that we have our own version of `QuoteBookError` here, because
 /// it cannot derive serde traits (due to LedgerError not being
 /// serde-compatible)
 #[derive(Clone, Debug, Deserialize, Display, Eq, PartialEq, Serialize)]
@@ -20,8 +21,8 @@ pub enum RpcError {
     TooManyQuotesRequested,
 }
 
-impl From<deqs_quote_book::Error> for RpcError {
-    fn from(err: deqs_quote_book::Error) -> Self {
+impl From<QuoteBookError> for RpcError {
+    fn from(err: QuoteBookError) -> Self {
         Self::QuoteBook(err.into())
     }
 }
@@ -47,14 +48,14 @@ pub enum RpcQuoteBookError {
     Other(String),
 }
 
-impl From<deqs_quote_book::Error> for RpcQuoteBookError {
-    fn from(err: deqs_quote_book::Error) -> Self {
+impl From<QuoteBookError> for RpcQuoteBookError {
+    fn from(err: QuoteBookError) -> Self {
         match err {
-            deqs_quote_book::Error::Sci(err) => Self::Sci(err),
-            deqs_quote_book::Error::UnsupportedSci(err) => Self::UnsupportedSci(err),
-            deqs_quote_book::Error::QuoteAlreadyExists => Self::QuoteAlreadyExists,
-            deqs_quote_book::Error::QuoteNotFound => Self::QuoteNotFound,
-            deqs_quote_book::Error::QuoteIsStale => Self::QuoteIsStale,
+            QuoteBookError::Sci(err) => Self::Sci(err),
+            QuoteBookError::UnsupportedSci(err) => Self::UnsupportedSci(err),
+            QuoteBookError::QuoteAlreadyExists => Self::QuoteAlreadyExists,
+            QuoteBookError::QuoteNotFound => Self::QuoteNotFound,
+            QuoteBookError::QuoteIsStale => Self::QuoteIsStale,
             err => Self::Other(err.to_string()),
         }
     }

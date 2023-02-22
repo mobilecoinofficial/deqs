@@ -1,13 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-// This module is reused by various tests, and Rust is annoying since each test
-// file is compiled as an independent crate which makes Rust think methods in
-// this file are unused if they are not called by each and every test file :/
-#![allow(dead_code)]
-
-use std::collections::HashSet;
-
-use deqs_quote_book::{Error, Pair, Quote, QuoteBook, QuoteId};
+use deqs_quote_book_api::{Error, Pair, Quote, QuoteBook, QuoteId};
 use mc_account_keys::AccountKey;
 use mc_crypto_ring_signature::Error as RingSignatureError;
 use mc_crypto_ring_signature_signer::NoKeysRingSigner;
@@ -17,6 +10,7 @@ use mc_transaction_extra::{SignedContingentInput, SignedContingentInputError};
 use mc_transaction_types::{Amount, TokenId};
 use rand::{rngs::StdRng, SeedableRng};
 use rand_core::{CryptoRng, RngCore};
+use std::collections::HashSet;
 
 /// Default test pair
 pub fn pair() -> Pair {
@@ -253,13 +247,13 @@ pub fn get_quotes_filtering_works(quote_book: &impl QuoteBook) {
             p2_50_for_3.clone(),     // rate is 16.6667
             p2_50_for_5.clone(),     // rate is 10
             p2_100_for_1000.clone(), // rate is 0.1
-            p2_5_for_50.clone(),     // rate is 0.1
+            p2_5_for_50,             // rate is 0.1
         ]
     );
 
     // Get all quotes but limit to the first 2
     let quotes = quote_book.get_quotes(&pair1, .., 2).unwrap();
-    assert_eq!(quotes, vec![p1_100_for_1000.clone()]);
+    assert_eq!(quotes, vec![p1_100_for_1000]);
 
     let quotes = quote_book.get_quotes(&pair2, .., 2).unwrap();
     assert_eq!(quotes, vec![p2_50_for_3.clone(), p2_50_for_5.clone(),]);
@@ -294,9 +288,9 @@ pub fn get_quotes_filtering_works(quote_book: &impl QuoteBook) {
     assert_eq!(
         quotes,
         vec![
-            p2_50_for_3.clone(),     // rate is 16.6667
-            p2_50_for_5.clone(),     // rate is 10
-            p2_100_for_1000.clone(), // rate is 0.1
+            p2_50_for_3,     // rate is 16.6667
+            p2_50_for_5,     // rate is 10
+            p2_100_for_1000, // rate is 0.1
         ]
     );
 }
@@ -359,9 +353,9 @@ pub fn get_quote_by_id_works(quote_book: &impl QuoteBook) {
     let quote2 = Quote::new(sci2, None).unwrap();
 
     assert_eq!(
-        quote_book.get_quote_by_id(&quote1.id()).unwrap(),
+        quote_book.get_quote_by_id(quote1.id()).unwrap(),
         Some(quote1.clone())
     );
 
-    assert_eq!(quote_book.get_quote_by_id(&quote2.id()).unwrap(), None);
+    assert_eq!(quote_book.get_quote_by_id(quote2.id()).unwrap(), None);
 }
