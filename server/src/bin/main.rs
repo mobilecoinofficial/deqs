@@ -18,6 +18,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let (logger, _global_logger_guard) = mc_common::logger::create_app_logger(o!());
     mc_common::setup_panic_handler();
 
+    // TODO: It appears that there is some unclean shutdown behavior, resulting in
+    // logging happening after main() returns. The logging uses the `log` crate,
+    // which forwards to `slog_scope`, and that panics since the global logger
+    // is dropped when `main` returns. This hack prevents it from being dropped,
+    // and will be addressed in a follow-up PR.
+    _global_logger_guard.cancel_reset();
+
     // Open the ledger db
     let ledger_db = LedgerDB::open(&config.ledger_db).expect("Could not open ledger db");
     let num_blocks = ledger_db
