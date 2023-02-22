@@ -7,6 +7,7 @@ edition = "2021"
 [dependencies]
 displaydoc = "0.2"
 hex = "0.4"
+serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
 
 mc-blockchain-types = { path = "../../mobilecoin/blockchain/types" }
 mc-crypto-digestible = { path = "../../mobilecoin/crypto/digestible" }
@@ -16,9 +17,8 @@ mc-transaction-extra = { path = "../../mobilecoin/transaction/extra" }
 mc-transaction-types = { path = "../../mobilecoin/transaction/types" }
 
 rand = "0.8" # build fails without this
-serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
 
 [dev-dependencies]
+rand_core = "0.6"
 
 deqs-mc-test-utils = { path = "../../mc-test-utils" }
-rand_core = "0.6"
