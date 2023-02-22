@@ -27,15 +27,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Read keypair, if provided.
     let keypair = config
-    .p2p_keypair_path
-    .as_ref()
-    .map(|path| -> Result<Keypair, Box<dyn std::error::Error>> {
-        let bytes = std::fs::read(path)?;
-        Ok(Keypair::from_protobuf_encoding(&bytes)?)
-    })
-    .transpose()?;
+        .p2p_keypair_path
+        .as_ref()
+        .map(|path| -> Result<Keypair, Box<dyn std::error::Error>> {
+            let bytes = std::fs::read(path)?;
+            Ok(Keypair::from_protobuf_encoding(&bytes)?)
+        })
+        .transpose()?;
 
-    let remove_quote_callback = Arc::new(Mutex::new(|_quotes: Vec<Quote>| {/* Do nothing */}));
+    let remove_quote_callback = Arc::new(Mutex::new(|_quotes: Vec<Quote>| { /* Do nothing */ }));
     // let remove_quote_callback: RemoveQuoteCallback =
     //     Arc::new(Mutex::new(move |quotes: Vec<Quote>| {
     //         for quote in quotes {
@@ -43,8 +43,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     //                 .blocking_send(Msg::SciQuoteRemoved(*quote.id()))
     //                 .unwrap_or_else(|_| {
     //                     panic!(
-    //                         "Failed to send SCI quote {} removed message to message bus",
-    //                         quote.id()
+    //                         "Failed to send SCI quote {} removed message to
+    // message bus",                         quote.id()
     //                     )
     //                 });
     //         }

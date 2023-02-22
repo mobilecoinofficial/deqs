@@ -20,7 +20,12 @@ use mc_transaction_extra::SignedContingentInput;
 use mc_transaction_types::{BlockVersion, TokenId};
 use mc_util_grpc::ConnectionUriGrpcioChannel;
 use rand::{rngs::StdRng, SeedableRng};
-use std::{collections::BTreeSet, str::FromStr, sync::{Arc, Mutex}, time::Duration};
+use std::{
+    collections::BTreeSet,
+    str::FromStr,
+    sync::{Arc, Mutex},
+    time::Duration,
+};
 use tokio_retry::{strategy::FixedInterval, Retry};
 
 fn create_and_initialize_test_ledger() -> LedgerDB {
@@ -46,10 +51,14 @@ async fn start_deqs_server(
     initial_scis: &[SignedContingentInput],
     logger: &Logger,
 ) -> (TestServer, TestQuoteBook, DeqsClientApiClient) {
-    let remove_quote_callback = Arc::new(Mutex::new(|_quotes: Vec<Quote>| {/* Do nothing */}));
+    let remove_quote_callback = Arc::new(Mutex::new(|_quotes: Vec<Quote>| { /* Do nothing */ }));
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book =
-        SynchronizedQuoteBook::new(internal_quote_book, ledger_db.clone(), remove_quote_callback, logger.clone());
+    let synchronized_quote_book = SynchronizedQuoteBook::new(
+        internal_quote_book,
+        ledger_db.clone(),
+        remove_quote_callback,
+        logger.clone(),
+    );
 
     for sci in initial_scis.into_iter() {
         synchronized_quote_book.add_sci(sci.clone(), None).unwrap();

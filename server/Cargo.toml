@@ -13,11 +13,17 @@ name = "deqs-server"
 path = "src/bin/main.rs"
 
 [dependencies]
+
+clap = { version = "4.0", features = ["derive", "env"] }
 deqs-api = { path = "../api" }
 deqs-p2p = { path = "../p2p" }
 deqs-quote-book-api = { path = "../quote-book/api" }
 deqs-quote-book-in-memory = { path = "../quote-book/in-memory" }
 deqs-quote-book-synchronized = { path = "../quote-book/synchronized" }
+displaydoc = { version = "0.2", default-features = false }
+futures = "0.3"
+grpcio = "0.12.0"
+lazy_static = "1.4"
 
 mc-api = { path = "../mobilecoin/api" }
 mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
@@ -27,12 +33,6 @@ mc-util-grpc = { path = "../mobilecoin/util/grpc" }
 mc-util-metrics  = { path = "../mobilecoin/util/metrics" }
 mc-util-serial = { path = "../mobilecoin/util/serial" }
 mc-util-uri = { path = "../mobilecoin/util/uri" }
-
-clap = { version = "4.0", features = ["derive", "env"] }
-displaydoc = { version = "0.2", default-features = false }
-futures = "0.3"
-grpcio = "0.12.0"
-lazy_static = "1.4"
 postage = "0.5"
 prometheus = "0.13"
 rayon = "1.6"
