@@ -2,8 +2,8 @@
 
 use clap::Parser;
 use deqs_p2p::libp2p::identity::Keypair;
-use deqs_quote_book::{InMemoryQuoteBook, Msg, Quote, RemoveQuoteCallback, SynchronizedQuoteBook};
-use deqs_server::{Server, ServerConfig, P2P};
+use deqs_quote_book::{InMemoryQuoteBook, Quote, RemoveQuoteCallback, SynchronizedQuoteBook};
+use deqs_server::{Msg, Server, ServerConfig, P2P};
 use mc_common::logger::{log, o};
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;

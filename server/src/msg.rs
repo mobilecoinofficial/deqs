@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{Quote, QuoteId};
+use deqs_quote_book::{Quote, QuoteId};
 
 /// Data type for encapsulating messages sent over the internal message bus
 #[derive(Clone, Debug)]

@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::SVC_COUNTERS;
+use crate::{Msg, SVC_COUNTERS};
 use deqs_api::{
     deqs::{
         GetQuotesRequest, GetQuotesResponse, LiveUpdate, LiveUpdatesRequest, QuoteStatusCode,
@@ -8,7 +8,7 @@ use deqs_api::{
     },
     deqs_grpc::{create_deqs_client_api, DeqsClientApi},
 };
-use deqs_quote_book::{Error as QuoteBookError, Msg, Pair, QuoteBook, QuoteId};
+use deqs_quote_book::{Error as QuoteBookError, Pair, QuoteBook, QuoteId};
 use futures::{FutureExt, SinkExt};
 use grpcio::{
     RpcContext, RpcStatus, RpcStatusCode, ServerStreamingSink, Service, UnarySink, WriteFlags,
