@@ -1,11 +1,10 @@
 // Copyright (c) 2023 MobileCoin Inc.
-// Copyright (c) 2023 MobileCoin Inc.
 use deqs_quote_book_api::{Error as QuoteBookError, Pair, Quote, QuoteBook, QuoteId};
 use mc_blockchain_types::BlockIndex;
+use mc_common::logger::{log, Logger};
 use mc_crypto_ring_signature::KeyImage;
 use mc_ledger_db::{Error as LedgerError, Ledger};
 use mc_transaction_extra::SignedContingentInput;
-
 use std::{
     ops::RangeBounds,
     sync::{
@@ -15,8 +14,6 @@ use std::{
     thread::{Builder as ThreadBuilder, JoinHandle},
     time::Duration,
 };
-
-use mc_common::logger::{log, Logger};
 /// A wrapper for a quote book implementation that syncs quotes with the ledger
 pub struct SynchronizedQuoteBookImpl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> {
     /// Quotebook being synchronized to the ledger by the Synchronized Quotebook
