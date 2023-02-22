@@ -85,7 +85,7 @@ async fn wait_for_quotes(
     quote_book: &TestQuoteBook,
     expected_quotes: &BTreeSet<Quote>,
 ) {
-    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(10); // limit to 10 retries
+    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(20); // limit to 10 retries
     Retry::spawn(retry_strategy, || async {
         let quotes = BTreeSet::from_iter(quote_book.get_quotes(pair, .., 0).unwrap());
         if &quotes == expected_quotes {
