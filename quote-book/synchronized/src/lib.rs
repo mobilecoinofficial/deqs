@@ -1,6 +1,5 @@
 // Copyright (c) 2023 MobileCoin Inc.
 // Copyright (c) 2023 MobileCoin Inc.
-use backoff::{Error as BackoffError, ExponentialBackoff};
 use deqs_quote_book_api::{Error as QuoteBookError, Pair, Quote, QuoteBook, QuoteId};
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
@@ -310,22 +309,22 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
             while self.load_block_data() && !self.stop_requested.load(Ordering::SeqCst) {}
             if self.next_block_index != starting_block_index {
                 let last_processed_block_index = self.next_block_index - 1;
-                match self
+                let mut quotes = self
                     .quotebook
-                    .remove_quotes_by_tombstone_block(last_processed_block_index)
-                {
-                    Ok(quotes) => {
-                        (self.remove_quote_callback.lock().expect("lock poisoned"))(quotes);
-                    }
-                    Err(err) => {
-                        log::error!(
-                            self.logger,
-                            "Failed to sync to block_index {}: {:?}",
-                            last_processed_block_index,
-                            err
-                        );
-                    }
+                    .remove_quotes_by_tombstone_block(last_processed_block_index);
+                while quotes.is_err() {
+                    log::error!(
+                        self.logger,
+                        "Unexpected error when removing quotes by tombstone_block {}. Retrying. Error: {:?}",
+                        last_processed_block_index,
+                        quotes.err()
+                    );
+                    std::thread::sleep(Self::ERROR_RETRY_FREQUENCY);
+                    quotes = self
+                        .quotebook
+                        .remove_quotes_by_tombstone_block(last_processed_block_index);
                 }
+                (self.remove_quote_callback.lock().expect("lock poisoned"))(quotes.unwrap());
                 self.highest_processed_block_index
                     .store(last_processed_block_index, Ordering::SeqCst);
             }
@@ -354,19 +353,18 @@ impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
             Ok(block_contents) => {
                 // Filter keyimages in quotebook
                 for key_image in block_contents.key_images {
-                    let backoff = ExponentialBackoff::default();
-                    let working_quotebook = self.quotebook.clone();
-                    let f = &move || -> Result<Vec<Quote>, BackoffError<QuoteBookError>> {
-                        working_quotebook
-                            .remove_quotes_by_key_image(&key_image)
-                            .map_err(|e| BackoffError::Transient {
-                                err: e,
-                                retry_after: None,
-                            })
-                    };
-                    let quotes = backoff::retry(backoff, f)
-                        .expect("Could not remove quotes by key_image after retries");
-                    (self.remove_quote_callback.lock().expect("lock poisoned"))(quotes);
+                    let mut quotes = self.quotebook.remove_quotes_by_key_image(&key_image);
+                    while quotes.is_err() {
+                        log::error!(
+                            self.logger,
+                            "Unexpected error when removing quotes by key_image {}. Retrying. Error: {:?}",
+                            key_image,
+                            quotes.err()
+                        );
+                        std::thread::sleep(Self::ERROR_RETRY_FREQUENCY);
+                        quotes = self.quotebook.remove_quotes_by_key_image(&key_image);
+                    }
+                    (self.remove_quote_callback.lock().expect("lock poisoned"))(quotes.unwrap());
                 }
                 self.next_block_index += 1;
             }
