@@ -15,13 +15,15 @@ path = "src/bin/main.rs"
 [dependencies]
 deqs-api = { path = "../api" }
 deqs-p2p = { path = "../p2p" }
-
 deqs-quote-book-api = { path = "../quote-book/api" }
 deqs-quote-book-in-memory = { path = "../quote-book/in-memory" }
 deqs-quote-book-sqlite = { path = "../quote-book/sqlite" }
 deqs-quote-book-synchronized = { path = "../quote-book/synchronized" }
+
 mc-api = { path = "../mobilecoin/api" }
+mc-blockchain-types = { path = "../mobilecoin/blockchain/types" }
 mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
+mc-crypto-ring-signature = { path = "../mobilecoin/crypto/ring-signature" }
 mc-ledger-db = { path = "../mobilecoin/ledger/db" }
 mc-transaction-extra = { path = "../mobilecoin/transaction/extra" }
 mc-util-grpc = { path = "../mobilecoin/util/grpc" }

@@ -7,7 +7,7 @@ mod rpc_error;
 pub use metrics::P2PRpcMetrics;
 pub use rpc_error::{RpcError, RpcQuoteBookError};
 
-use crate::Error;
+use crate::{Error, NotifyingQuoteBook};
 use deqs_p2p::{
     libp2p::{
         gossipsub::{GossipsubMessage, IdentTopic},
@@ -47,7 +47,7 @@ enum GossipMsgBusData {
 /// An object for containing the logic for interfacing with the P2P network.
 pub struct P2P<QB: QuoteBook> {
     /// Quote book.
-    quote_book: QB,
+    quote_book: NotifyingQuoteBook<QB>,
 
     /// Logger.
     logger: Logger,
@@ -78,7 +78,7 @@ impl<QB: QuoteBook> P2P<QB> {
     /// added to it and saves us from having to manage a task inside this
     /// object.
     pub async fn new(
-        quote_book: QB,
+        quote_book: NotifyingQuoteBook<QB>,
         bootstrap_peers: Vec<Multiaddr>,
         listen_addr: Option<Multiaddr>,
         external_addr: Option<Multiaddr>,
@@ -309,10 +309,10 @@ impl<QB: QuoteBook> P2P<QB> {
 // peers sequentially, rather than spawning a new task for each peer.
 // What happens right now is that we connect to multiple peers at the same time
 // and end up syncing a lot of identical quotes from each of the peers.
-async fn sync_quotes_from_peer(
+async fn sync_quotes_from_peer<QB: QuoteBook>(
     peer_id: PeerId,
     mut rpc: RpcClient,
-    quote_book: &impl QuoteBook,
+    quote_book: &NotifyingQuoteBook<QB>,
     logger: &Logger,
 ) -> Result<(), Error> {
     // Get all quote ids from peer.

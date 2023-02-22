@@ -1,6 +1,10 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{update_periodic_metrics, Error, GrpcServer, Msg, METRICS_POLL_INTERVAL, P2P};
+use std::sync::Arc;
+
+use crate::{
+    update_periodic_metrics, Error, GrpcServer, Msg, NotifyingQuoteBook, METRICS_POLL_INTERVAL, P2P,
+};
 use deqs_api::DeqsClientUri;
 use deqs_p2p::libp2p::{identity::Keypair, Multiaddr};
 use deqs_quote_book_api::QuoteBook;
@@ -42,6 +46,11 @@ impl<QB: QuoteBook> Server<QB> {
         let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
         let (shutdown_tx, mut shutdown_rx) = mpsc::unbounded_channel();
         let (shutdown_ack_tx, shutdown_ack_rx) = mpsc::unbounded_channel();
+        let quote_book = NotifyingQuoteBook::new(
+            quote_book,
+            Arc::new(Box::new(|quote| {
+            })),
+        );
 
         // Init p2p network
         let (mut p2p, mut p2p_events) = P2P::new(

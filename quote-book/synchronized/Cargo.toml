@@ -17,7 +17,6 @@ rand = "0.8" # build fails without this
 [dev-dependencies]
 deqs-mc-test-utils = { path = "../../mc-test-utils" }
 deqs-quote-book-in-memory = { path = "../in-memory" }
-
 deqs-quote-book-test-suite = { path = "../test-suite" }
 
 mc-account-keys = { path = "../../mobilecoin/account-keys" }

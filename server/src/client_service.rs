@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{Msg, SVC_COUNTERS};
+use crate::{Msg, NotifyingQuoteBook, SVC_COUNTERS};
 use deqs_api::{
     deqs::{
         GetQuotesRequest, GetQuotesResponse, LiveUpdate, LiveUpdatesRequest, QuoteStatusCode,
@@ -26,20 +26,24 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 /// GRPC Client service
 #[derive(Clone)]
-pub struct ClientService<OB: QuoteBook> {
+pub struct ClientService<QB: QuoteBook> {
     /// Message bus sender.
     msg_bus_tx: Sender<Msg>,
 
     /// Quote book.
-    quote_book: OB,
+    quote_book: NotifyingQuoteBook<QB>,
 
     /// Logger.
     logger: Logger,
 }
 
-impl<OB: QuoteBook> ClientService<OB> {
+impl<QB: QuoteBook> ClientService<QB> {
     /// Create a new ClientService
-    pub fn new(msg_bus_tx: Sender<Msg>, quote_book: OB, logger: Logger) -> Self {
+    pub fn new(
+        msg_bus_tx: Sender<Msg>,
+        quote_book: NotifyingQuoteBook<QB>,
+        logger: Logger,
+    ) -> Self {
         Self {
             msg_bus_tx,
             quote_book,
@@ -240,7 +244,7 @@ impl<OB: QuoteBook> ClientService<OB> {
     }
 }
 
-impl<OB: QuoteBook> DeqsClientApi for ClientService<OB> {
+impl<QB: QuoteBook> DeqsClientApi for ClientService<QB> {
     fn submit_quotes(
         &mut self,
         ctx: RpcContext,
@@ -320,15 +324,18 @@ mod tests {
     };
     use tokio::select;
 
-    fn create_test_client_and_server<OB: QuoteBook>(
-        quote_book: &OB,
+    fn create_test_client_and_server<QB: QuoteBook>(
+        quote_book: &QB,
         logger: &Logger,
     ) -> (DeqsClientApiClient, Server, Receiver<Msg>) {
         let server_env = Arc::new(EnvBuilder::new().build());
         let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(1000);
 
+        let notifying_quote_book =
+            NotifyingQuoteBook::new(quote_book.clone(), Arc::new(Box::new(|_quote| {})));
+
         let client_service =
-            ClientService::new(msg_bus_tx, quote_book.clone(), logger.clone()).into_service();
+            ClientService::new(msg_bus_tx, notifying_quote_book, logger.clone()).into_service();
         let mut server = ServerBuilder::new(server_env)
             .register_service(client_service)
             .build()

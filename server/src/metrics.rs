@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{Error, P2P};
+use crate::{Error, P2P, NotifyingQuoteBook};
 use deqs_quote_book_api::QuoteBook;
 use mc_util_metrics::{IntGauge, OpMetrics, ServiceMetrics};
 use std::time::Duration;
@@ -24,7 +24,7 @@ lazy_static::lazy_static! {
 
 /// Update periodic metrics.
 pub async fn update_periodic_metrics<QB: QuoteBook>(
-    quote_book: &QB,
+    quote_book: &NotifyingQuoteBook<QB>,
     p2p: &P2P<QB>,
 ) -> Result<(), Error> {
     SCI_COUNT.set(quote_book.num_scis()? as i64);

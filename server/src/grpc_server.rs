@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{ClientService, Error, Msg};
+use crate::{ClientService, Error, Msg, NotifyingQuoteBook};
 use deqs_api::DeqsClientUri;
 use deqs_quote_book_api::QuoteBook;
 use futures::executor::block_on;
@@ -16,7 +16,7 @@ pub struct GrpcServer<OB: QuoteBook> {
     msg_bus_tx: Sender<Msg>,
 
     /// Quote book.
-    quote_book: OB,
+    quote_book: NotifyingQuoteBook<OB>,
 
     /// Client listen URI. This is the URI that we are asked to listen on.
     client_listen_uri: DeqsClientUri,
@@ -36,7 +36,7 @@ pub struct GrpcServer<OB: QuoteBook> {
 impl<OB: QuoteBook> GrpcServer<OB> {
     pub fn new(
         msg_bus_tx: Sender<Msg>,
-        quote_book: OB,
+        quote_book: NotifyingQuoteBook<OB>,
         client_listen_uri: DeqsClientUri,
         logger: Logger,
     ) -> Self {
