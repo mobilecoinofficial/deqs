@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{Error, P2P, NotifyingQuoteBook};
+use crate::{Error, NotifyingQuoteBook, P2P};
 use deqs_quote_book_api::QuoteBook;
 use mc_util_metrics::{IntGauge, OpMetrics, ServiceMetrics};
 use std::time::Duration;

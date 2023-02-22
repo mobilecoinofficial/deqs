@@ -1,7 +1,8 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use crate::{
-    update_periodic_metrics, Error, GrpcServer, Msg, NotifyingQuoteBook, METRICS_POLL_INTERVAL, P2P, MsgSource,
+    update_periodic_metrics, Error, GrpcServer, Msg, MsgSource, NotifyingQuoteBook,
+    METRICS_POLL_INTERVAL, P2P,
 };
 use deqs_api::DeqsClientUri;
 use deqs_p2p::libp2p::{identity::Keypair, Multiaddr};
@@ -44,10 +45,7 @@ impl<QB: QuoteBook> Server<QB> {
         let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
         let (shutdown_tx, mut shutdown_rx) = mpsc::unbounded_channel();
         let (shutdown_ack_tx, shutdown_ack_rx) = mpsc::unbounded_channel();
-        let quote_book = NotifyingQuoteBook::new(
-            quote_book,
-            msg_bus_tx.clone(),
-        );
+        let quote_book = NotifyingQuoteBook::new(quote_book, msg_bus_tx.clone());
 
         // Init p2p network
         let (mut p2p, mut p2p_events) = P2P::new(
@@ -88,6 +86,12 @@ impl<QB: QuoteBook> Server<QB> {
                             Some(Msg::SciQuoteAdded(quote, source)) => {
                                 // Don't gossip quotes we received via gossip, this is handled internally in libp2p.
                                 if source == MsgSource::Gossip {
+                                    continue;
+                                }
+
+                                // Don't gossip quotes received via the sync that happens when we connect to a peer.
+                                // The assumption here is that this node is joining an existing network, and quotes have already been gossipped around. While we could gossip them here, this significantly slows down the sync process.
+                                if source == MsgSource::P2pSync{
                                     continue;
                                 }
 

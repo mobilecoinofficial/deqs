@@ -5,13 +5,13 @@ use deqs_quote_book_api::Quote;
 /// The source of a message on the message bus.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum MsgSource {
-    /// TODO
+    /// Message originated from p2p gossip.
     Gossip,
 
-    /// TODO
+    /// Message originated from explicit syncing with a peer.
     P2pSync,
 
-    /// TODO
+    /// Message originated from a GRPC client.
     GrpcClient,
 }
 

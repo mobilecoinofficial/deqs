@@ -6,10 +6,7 @@ use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
 use mc_transaction_extra::SignedContingentInput;
 use postage::{broadcast::Sender, sink::Sink};
-use std::{ops::RangeBounds, sync::Arc};
-
-/// Quote added callback
-pub type QuoteAddedCallback = Arc<Box<dyn Fn(&Quote) + 'static + Sync + Send>>;
+use std::ops::RangeBounds;
 
 /// A quote book that calls a callback when quotes are added or removed.
 #[derive(Clone)]
@@ -30,7 +27,7 @@ impl<QB: QuoteBook> NotifyingQuoteBook<QB> {
     }
 
     pub fn add_sci(
-        &self,
+        &mut self,
         sci: SignedContingentInput,
         timestamp: Option<u64>,
         source: MsgSource,
@@ -41,7 +38,7 @@ impl<QB: QuoteBook> NotifyingQuoteBook<QB> {
         Ok(quote)
     }
 
-    pub fn add_quote(&self, quote: Quote, source: MsgSource) -> Result<(), Error> {
+    pub fn add_quote(&mut self, quote: Quote, source: MsgSource) -> Result<(), Error> {
         self.quote_book.add_quote(&quote)?;
         self.msg_bus_tx
             .blocking_send(Msg::SciQuoteAdded(quote, source))
@@ -49,7 +46,7 @@ impl<QB: QuoteBook> NotifyingQuoteBook<QB> {
         Ok(())
     }
 
-    pub fn remove_quote_by_id(&self, id: &QuoteId, source: MsgSource) -> Result<Quote, Error> {
+    pub fn remove_quote_by_id(&mut self, id: &QuoteId, source: MsgSource) -> Result<Quote, Error> {
         let quote = self.quote_book.remove_quote_by_id(id)?;
         self.msg_bus_tx
             .blocking_send(Msg::SciQuoteRemoved(quote.clone(), source))
@@ -58,7 +55,7 @@ impl<QB: QuoteBook> NotifyingQuoteBook<QB> {
     }
 
     pub fn remove_quotes_by_key_image(
-        &self,
+        &mut self,
         key_image: &KeyImage,
         source: MsgSource,
     ) -> Result<Vec<Quote>, Error> {
@@ -72,7 +69,7 @@ impl<QB: QuoteBook> NotifyingQuoteBook<QB> {
     }
 
     pub fn remove_quotes_by_tombstone_block(
-        &self,
+        &mut self,
         current_block_index: BlockIndex,
         source: MsgSource,
     ) -> Result<Vec<Quote>, Error> {

@@ -82,8 +82,8 @@ impl<QB: QuoteBook> ClientService<QB> {
         let results = scis
             .into_par_iter()
             .map(|sci| {
-                self.quote_book
-                    .add_sci(sci, Some(timestamp), MsgSource::GrpcClient)
+                let mut quote_book = self.quote_book.clone();
+                quote_book.add_sci(sci, Some(timestamp), MsgSource::GrpcClient)
             })
             .collect::<Vec<_>>();
 
@@ -313,8 +313,7 @@ mod tests {
         let server_env = Arc::new(EnvBuilder::new().build());
         let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(1000);
 
-        let notifying_quote_book =
-            NotifyingQuoteBook::new(quote_book.clone(), msg_bus_tx);
+        let notifying_quote_book = NotifyingQuoteBook::new(quote_book.clone(), msg_bus_tx.clone());
 
         let client_service =
             ClientService::new(msg_bus_tx, notifying_quote_book, logger.clone()).into_service();

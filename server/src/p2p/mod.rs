@@ -137,7 +137,7 @@ impl<QB: QuoteBook> P2P<QB> {
         Ok(())
     }
 
-    /// Broadcast to toher peers that a quote has been removed from the quote
+    /// Broadcast to other peers that a quote has been removed from the quote
     /// book.
     pub async fn broadcast_sci_quote_removed(&mut self, quote_id: QuoteId) -> Result<(), Error> {
         let bytes = mc_util_serial::serialize(&GossipMsgBusData::SciQuoteRemoved(quote_id))?;
@@ -354,7 +354,7 @@ async fn sync_quotes_from_peer<QB: QuoteBook>(
     let chunk_results = stream::iter(chunks)
         .map(|quote_ids| {
             let mut rpc = rpc.clone();
-            let quote_book = quote_book.clone();
+            let mut quote_book = quote_book.clone();
             let logger = logger.clone();
 
             // This spawns a task that performs a get_quotes_by_id RPC call to the peer. If
@@ -412,11 +412,11 @@ async fn sync_quotes_from_peer<QB: QuoteBook>(
                                 }
                                 Err(err @ QuoteBookError::QuoteAlreadyExists) => {
                                     log::debug!(
-                            logger,
-                            "Failed to add quote {} from {:?}: Already exists (this is acceptable)",
-                            quote.id(),
-                            peer_id,
-                        );
+                                        logger,
+                                        "Failed to add quote {} from {:?}: Already exists (this is acceptable)",
+                                        quote.id(),
+                                        peer_id,
+                                    );
                                     Err(err.into())
                                 }
                                 Err(err) => {
