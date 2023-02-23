@@ -311,6 +311,40 @@ mod tests {
     use mc_transaction_builder::test_utils::get_transaction;
     use mc_transaction_core::TokenId;
     use rand::{rngs::StdRng, SeedableRng};
+    use std::{sync::Mutex, vec};
+    struct TestContext {
+        ledger: LedgerDB,
+        removed_quotes_sent_to_live_updates: Arc<Mutex<Vec<Quote>>>,
+        // remove_quote_callback: RemoveQuoteCallback,
+        // internal_quote_book: InMemoryQuoteBook,
+        // logger: Logger,
+        synchronized_quote_book: SynchronizedQuoteBook<InMemoryQuoteBook, LedgerDB>,
+    }
+
+    fn setup(logger: Logger) -> TestContext {
+        println!("Test setup ...");
+        let removed_quotes_sent_to_live_updates = Arc::new(Mutex::new(vec![]));
+        let removed_quotes_for_callback = removed_quotes_sent_to_live_updates.clone();
+        let remove_quote_callback = Box::new(move |quotes| {
+            removed_quotes_for_callback
+                .lock()
+                .expect("mutex poisoned")
+                .extend(quotes);
+        });
+        let ledger = create_and_initialize_test_ledger();
+        let internal_quote_book = InMemoryQuoteBook::default();
+        let synchronized_quote_book = SynchronizedQuoteBook::new(
+            internal_quote_book,
+            ledger.clone(),
+            remove_quote_callback,
+            logger,
+        );
+        TestContext {
+            removed_quotes_sent_to_live_updates,
+            ledger,
+            synchronized_quote_book,
+        }
+    }
 
     fn create_and_initialize_test_ledger() -> LedgerDB {
         //Create a ledger_db
@@ -326,93 +360,53 @@ mod tests {
         ledger
     }
 
-    fn get_remove_quote_callback() -> RemoveQuoteCallback {
-        Box::new(|_| {
-            //Do nothing
-        })
-    }
-
     #[test_with_logger]
     fn basic_happy_flow(logger: Logger) {
-        let ledger = create_and_initialize_test_ledger();
-        let remove_quote_callback = get_remove_quote_callback();
-        let internal_quote_book = InMemoryQuoteBook::default();
-        let synchronized_quote_book = SynchronizedQuoteBook::new(
-            internal_quote_book,
-            ledger.clone(),
-            remove_quote_callback,
-            logger,
-        );
-        test_suite::basic_happy_flow(&synchronized_quote_book);
+        let test_context = setup(logger.clone());
+        test_suite::basic_happy_flow(&test_context.synchronized_quote_book);
+        {
+            let removed_quotes = test_context
+                .removed_quotes_sent_to_live_updates
+                .lock()
+                .expect("mutex poisoned")
+                .clone();
+            assert_eq!(removed_quotes, vec![]);
+        }
     }
 
     #[test_with_logger]
     fn cannot_add_invalid_sci(logger: Logger) {
-        let ledger = create_and_initialize_test_ledger();
-        let remove_quote_callback = get_remove_quote_callback();
-        let internal_quote_book = InMemoryQuoteBook::default();
-        let synchronized_quote_book = SynchronizedQuoteBook::new(
-            internal_quote_book,
-            ledger.clone(),
-            remove_quote_callback,
-            logger,
-        );
+        let test_context = setup(logger.clone());
+        let synchronized_quote_book = test_context.synchronized_quote_book;
         test_suite::cannot_add_invalid_sci(&synchronized_quote_book);
     }
 
     #[test_with_logger]
     fn get_quotes_filtering_works(logger: Logger) {
-        let ledger = create_and_initialize_test_ledger();
-        let remove_quote_callback = get_remove_quote_callback();
-        let internal_quote_book = InMemoryQuoteBook::default();
-        let synchronized_quote_book = SynchronizedQuoteBook::new(
-            internal_quote_book,
-            ledger.clone(),
-            remove_quote_callback,
-            logger,
-        );
+        let test_context = setup(logger.clone());
+        let synchronized_quote_book = test_context.synchronized_quote_book;
         test_suite::get_quotes_filtering_works(&synchronized_quote_book);
     }
 
     #[test_with_logger]
     fn get_quote_ids_works(logger: Logger) {
-        let ledger = create_and_initialize_test_ledger();
-        let remove_quote_callback = get_remove_quote_callback();
-        let internal_quote_book = InMemoryQuoteBook::default();
-        let synchronized_quote_book = SynchronizedQuoteBook::new(
-            internal_quote_book,
-            ledger.clone(),
-            remove_quote_callback,
-            logger,
-        );
+        let test_context = setup(logger.clone());
+        let synchronized_quote_book = test_context.synchronized_quote_book;
         test_suite::get_quote_ids_works(&synchronized_quote_book);
     }
 
     #[test_with_logger]
     fn get_quote_by_id_works(logger: Logger) {
-        let ledger = create_and_initialize_test_ledger();
-        let remove_quote_callback = get_remove_quote_callback();
-        let internal_quote_book = InMemoryQuoteBook::default();
-        let synchronized_quote_book = SynchronizedQuoteBook::new(
-            internal_quote_book,
-            ledger.clone(),
-            remove_quote_callback,
-            logger,
-        );
+        let test_context = setup(logger.clone());
+        let synchronized_quote_book = test_context.synchronized_quote_book;
         test_suite::get_quote_by_id_works(&synchronized_quote_book);
     }
 
     #[test_with_logger]
     fn cannot_add_sci_with_key_image_in_ledger(logger: Logger) {
-        let mut ledger = create_and_initialize_test_ledger();
-        let remove_quote_callback = get_remove_quote_callback();
-        let internal_quote_book = InMemoryQuoteBook::default();
-        let synchronized_quote_book = SynchronizedQuoteBook::new(
-            internal_quote_book,
-            ledger.clone(),
-            remove_quote_callback,
-            logger,
-        );
+        let test_context = setup(logger.clone());
+        let mut ledger = test_context.ledger.clone();
+        let synchronized_quote_book = test_context.synchronized_quote_book;
 
         let pair = test_suite::pair();
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
@@ -461,15 +455,9 @@ mod tests {
 
     #[test_with_logger]
     fn sci_that_are_added_to_ledger_are_removed_in_the_background(logger: Logger) {
-        let mut ledger = create_and_initialize_test_ledger();
-        let remove_quote_callback = get_remove_quote_callback();
-        let internal_quote_book = InMemoryQuoteBook::default();
-        let synchronized_quote_book = SynchronizedQuoteBook::new(
-            internal_quote_book,
-            ledger.clone(),
-            remove_quote_callback,
-            logger,
-        );
+        let test_context = setup(logger.clone());
+        let mut ledger = test_context.ledger.clone();
+        let synchronized_quote_book = test_context.synchronized_quote_book;
 
         let pair = test_suite::pair();
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
@@ -516,22 +504,23 @@ mod tests {
         }
         let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
         assert_eq!(quotes, vec![]);
+        {
+            let removed_quotes = test_context
+                .removed_quotes_sent_to_live_updates
+                .lock()
+                .expect("mutex poisoned")
+                .clone();
+            assert_eq!(removed_quotes, vec![quote.clone()])
+        }
     }
 
     #[test_with_logger]
     fn cannot_add_sci_past_tombstone_block(logger: Logger) {
         let pair = test_suite::pair();
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-
-        let ledger = create_and_initialize_test_ledger();
-        let remove_quote_callback = get_remove_quote_callback();
-        let internal_quote_book = InMemoryQuoteBook::default();
-        let synchronized_quote_book = SynchronizedQuoteBook::new(
-            internal_quote_book,
-            ledger.clone(),
-            remove_quote_callback,
-            logger,
-        );
+        let test_context = setup(logger.clone());
+        let ledger = test_context.ledger.clone();
+        let synchronized_quote_book = test_context.synchronized_quote_book;
 
         // Because the tombstone block is lower than the number blocks already in the
         // ledger, adding this sci should fail
@@ -581,18 +570,10 @@ mod tests {
     fn sci_past_tombstone_block_get_removed_in_the_background(logger: Logger) {
         let pair = test_suite::pair();
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-
-        let mut ledger = create_and_initialize_test_ledger();
-        let remove_quote_callback = get_remove_quote_callback();
-
-        let internal_quote_book = InMemoryQuoteBook::default();
-        let starting_blocks = ledger.num_blocks().unwrap();
-        let synchronized_quote_book = SynchronizedQuoteBook::new(
-            internal_quote_book,
-            ledger.clone(),
-            remove_quote_callback,
-            logger,
-        );
+        let test_context = setup(logger.clone());
+        let mut ledger = test_context.ledger.clone();
+        let starting_blocks = test_context.ledger.num_blocks().unwrap();
+        let synchronized_quote_book = test_context.synchronized_quote_book;
 
         // Because the tombstone block is lower than the number blocks already in the
         // ledger, adding this sci should fail
@@ -634,5 +615,13 @@ mod tests {
 
         let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
         assert_eq!(quotes, vec![]);
+        {
+            let removed_quotes = test_context
+                .removed_quotes_sent_to_live_updates
+                .lock()
+                .expect("mutex poisoned")
+                .clone();
+            assert_eq!(removed_quotes, vec![quote.clone()])
+        }
     }
 }
