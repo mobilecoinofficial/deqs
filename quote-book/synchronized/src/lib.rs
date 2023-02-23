@@ -9,7 +9,7 @@ use std::{
     ops::RangeBounds,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
-        Arc, Mutex,
+        Arc,
     },
     thread::{Builder as ThreadBuilder, JoinHandle},
     time::Duration,
@@ -26,11 +26,8 @@ pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'stati
     /// Shared state
     highest_processed_block_index: Arc<AtomicU64>,
 
-    /// Join handle used to wait for the thread to terminate.
-    join_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
-
-    /// Stop request trigger, used to signal the thread to stop.
-    stop_requested: Arc<AtomicBool>,
+    /// Thread management
+    _thread_manager: Arc<SyncThread>,
 }
 
 impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, L> {
@@ -47,7 +44,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
         let thread_highest_processed_block_index = highest_processed_block_index.clone();
         let stop_requested = Arc::new(AtomicBool::new(false));
         let thread_stop_requested = stop_requested.clone();
-        let join_handle = Arc::new(Mutex::new(Some(
+        let join_handle =Some(
             ThreadBuilder::new()
                 .name("LedgerDbFetcher".to_owned())
                 .spawn(move || {
@@ -60,39 +57,18 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
                         logger,
                     )
                 })
-                .expect("Could not spawn thread"),
-        )));
+                .expect("Could not spawn thread"));
+        let _thread_manager = Arc::new(SyncThread {join_handle, stop_requested});    
         Self {
             quote_book,
             ledger,
             highest_processed_block_index,
-            join_handle,
-            stop_requested,
+            _thread_manager
         }
     }
 
     pub fn get_current_block_index(&self) -> u64 {
         self.highest_processed_block_index.load(Ordering::SeqCst)
-    }
-
-    /// Stop and join the db poll thread
-    pub fn stop(&mut self) {
-        if let Some(join_handle) = self.join_handle.lock().expect("mutex poisoned").take() {
-            self.stop_requested.store(true, Ordering::SeqCst);
-            join_handle
-                .join()
-                .expect("SynchronizedQuoteBookThread join failed");
-        }
-    }
-}
-
-impl<Q, L> Drop for SynchronizedQuoteBook<Q, L>
-where
-    Q: QuoteBook,
-    L: Ledger + Clone + Sync + 'static,
-{
-    fn drop(&mut self) {
-        let _ = self.stop();
     }
 }
 
@@ -171,6 +147,37 @@ where
 /// A callback for broadcasting a quote removal. It receives 1 argument:
 /// - A vector of quotes that have been removed
 pub type RemoveQuoteCallback = Box<dyn FnMut(Vec<Quote>) + Sync + Send>;
+
+struct SyncThread{
+
+    /// Join handle used to wait for the thread to terminate.
+    join_handle: Option<JoinHandle<()>>,
+
+    /// Stop request trigger, used to signal the thread to stop.
+    stop_requested: Arc<AtomicBool>,
+}
+
+impl SyncThread {
+    /// Stop and join the db poll thread
+    pub fn stop(&mut self) {
+        if let Some(join_handle) = self.join_handle.take() {
+        self.stop_requested.store(true, Ordering::SeqCst);
+        join_handle
+            .join()
+            .expect("SynchronizedQuoteBookThread join failed");
+        }
+    }
+}
+
+impl Drop for SyncThread
+{
+    fn drop(&mut self) {
+        let _ = self.stop();
+    }
+}
+
+
+
 
 struct DbFetcherThread<DB: Ledger, Q: QuoteBook> {
     db: DB,
