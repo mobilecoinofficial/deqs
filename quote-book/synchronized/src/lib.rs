@@ -26,7 +26,8 @@ pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'stati
     /// Shared state
     highest_processed_block_index: Arc<AtomicU64>,
 
-    /// Thread management. This is being held purely for the destructor so that the Syncthread will be dropped after all the quotebooks using it.
+    /// Thread management. This is being held purely for the destructor so that
+    /// the SyncThread will be dropped after all the Quotebooks using it.
     _thread_manager: Arc<SyncThread>,
 }
 
