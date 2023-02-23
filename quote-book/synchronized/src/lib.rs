@@ -44,7 +44,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
         let thread_highest_processed_block_index = highest_processed_block_index.clone();
         let stop_requested = Arc::new(AtomicBool::new(false));
         let thread_stop_requested = stop_requested.clone();
-        let join_handle =Some(
+        let join_handle = Some(
             ThreadBuilder::new()
                 .name("LedgerDbFetcher".to_owned())
                 .spawn(move || {
@@ -57,13 +57,17 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
                         logger,
                     )
                 })
-                .expect("Could not spawn thread"));
-        let _thread_manager = Arc::new(SyncThread {join_handle, stop_requested});    
+                .expect("Could not spawn thread"),
+        );
+        let _thread_manager = Arc::new(SyncThread {
+            join_handle,
+            stop_requested,
+        });
         Self {
             quote_book,
             ledger,
             highest_processed_block_index,
-            _thread_manager
+            _thread_manager,
         }
     }
 
@@ -148,8 +152,7 @@ where
 /// - A vector of quotes that have been removed
 pub type RemoveQuoteCallback = Box<dyn FnMut(Vec<Quote>) + Sync + Send>;
 
-struct SyncThread{
-
+struct SyncThread {
     /// Join handle used to wait for the thread to terminate.
     join_handle: Option<JoinHandle<()>>,
 
@@ -161,23 +164,19 @@ impl SyncThread {
     /// Stop and join the db poll thread
     pub fn stop(&mut self) {
         if let Some(join_handle) = self.join_handle.take() {
-        self.stop_requested.store(true, Ordering::SeqCst);
-        join_handle
-            .join()
-            .expect("SynchronizedQuoteBookThread join failed");
+            self.stop_requested.store(true, Ordering::SeqCst);
+            join_handle
+                .join()
+                .expect("SynchronizedQuoteBookThread join failed");
         }
     }
 }
 
-impl Drop for SyncThread
-{
+impl Drop for SyncThread {
     fn drop(&mut self) {
         let _ = self.stop();
     }
 }
-
-
-
 
 struct DbFetcherThread<DB: Ledger, Q: QuoteBook> {
     db: DB,
