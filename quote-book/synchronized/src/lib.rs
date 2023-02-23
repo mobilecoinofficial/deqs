@@ -317,14 +317,10 @@ mod tests {
     struct TestContext {
         ledger: LedgerDB,
         removed_quotes_sent_to_live_updates: Arc<Mutex<Vec<Quote>>>,
-        // remove_quote_callback: RemoveQuoteCallback,
-        // internal_quote_book: InMemoryQuoteBook,
-        // logger: Logger,
         synchronized_quote_book: SynchronizedQuoteBook<InMemoryQuoteBook, LedgerDB>,
     }
 
     fn setup(logger: Logger) -> TestContext {
-        println!("Test setup ...");
         let removed_quotes_sent_to_live_updates = Arc::new(Mutex::new(vec![]));
         let removed_quotes_for_callback = removed_quotes_sent_to_live_updates.clone();
         let remove_quote_callback = Box::new(move |quotes| {
