@@ -8,6 +8,7 @@ edition = "2021"
 deqs-quote-book-api = { path = "../api" }
 
 mc-blockchain-types = { path = "../../mobilecoin/blockchain/types" }
+mc-common = { path = "../../mobilecoin/common", features = ["loggers"] }
 mc-crypto-ring-signature = { path = "../../mobilecoin/crypto/ring-signature" }
 mc-ledger-db = { path = "../../mobilecoin/ledger/db", features = ["test_utils"] }
 mc-transaction-extra = { path = "../../mobilecoin/transaction/extra" }

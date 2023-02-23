@@ -3,17 +3,17 @@
 use crate::{update_periodic_metrics, Error, GrpcServer, Msg, METRICS_POLL_INTERVAL, P2P};
 use deqs_api::DeqsClientUri;
 use deqs_p2p::libp2p::{identity::Keypair, Multiaddr};
-use deqs_quote_book_api::QuoteBook;
+use deqs_quote_book_api::{Quote, QuoteBook};
 use mc_common::logger::{log, Logger};
-use postage::{broadcast, prelude::Stream};
+use postage::{
+    broadcast::{Receiver, Sender},
+    prelude::{Sink, Stream},
+};
 use tokio::{
     select,
     sync::mpsc,
     time::{interval, MissedTickBehavior},
 };
-
-/// Maximum number of messages that can be queued in the message bus.
-const MSG_BUS_QUEUE_SIZE: usize = 1000;
 
 pub struct Server<QB: QuoteBook> {
     /// Shutdown sender, used to signal the event loop to shutdown.
@@ -37,9 +37,10 @@ impl<QB: QuoteBook> Server<QB> {
         p2p_listen_address: Option<Multiaddr>,
         p2p_external_address: Option<Multiaddr>,
         p2p_keypair: Option<Keypair>,
+        msg_bus_tx: Sender<Msg>,
+        mut msg_bus_rx: Receiver<Msg>,
         logger: Logger,
     ) -> Result<Self, Error> {
-        let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
         let (shutdown_tx, mut shutdown_rx) = mpsc::unbounded_channel();
         let (shutdown_ack_tx, shutdown_ack_rx) = mpsc::unbounded_channel();
 
@@ -151,5 +152,22 @@ impl<QB: QuoteBook> Server<QB> {
 
     pub fn p2p_listen_addrs(&self) -> Vec<Multiaddr> {
         self.p2p_listen_addrs.clone()
+    }
+    pub fn get_remove_quote_callback_function(
+        mut callback_msg_bus_tx: Sender<Msg>,
+    ) -> Box<dyn FnMut(Vec<Quote>) + Send + Sync> {
+        Box::new(move |quotes: Vec<Quote>| {
+            for quote in quotes {
+                callback_msg_bus_tx
+                    .blocking_send(Msg::SciQuoteRemoved(quote.clone()))
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "Failed to send SCI quote {} removed message to
+        message bus",
+                            quote.id()
+                        )
+                    });
+            }
+        })
     }
 }

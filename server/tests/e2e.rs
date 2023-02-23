@@ -8,20 +8,26 @@ use deqs_api::{
 use deqs_quote_book_api::{Pair, Quote, QuoteBook, QuoteId};
 use deqs_quote_book_in_memory::InMemoryQuoteBook;
 use deqs_quote_book_synchronized::SynchronizedQuoteBook;
-use deqs_server::Server;
+use deqs_server::{Msg, Server};
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_account_keys::AccountKey;
 use mc_common::logger::{async_test_with_logger, log, Logger};
+use mc_fog_report_validation_test_utils::MockFogResolver;
 use mc_ledger_db::{
-    test_utils::{create_ledger, initialize_ledger},
+    test_utils::{add_txos_and_key_images_to_ledger, create_ledger, initialize_ledger},
     LedgerDB,
 };
+use mc_transaction_builder::test_utils::get_transaction;
 use mc_transaction_extra::SignedContingentInput;
 use mc_transaction_types::{BlockVersion, TokenId};
 use mc_util_grpc::ConnectionUriGrpcioChannel;
+use postage::broadcast;
 use rand::{rngs::StdRng, SeedableRng};
 use std::{collections::BTreeSet, str::FromStr, sync::Arc, time::Duration};
 use tokio_retry::{strategy::FixedInterval, Retry};
+
+/// Maximum number of messages that can be queued in the message bus.
+const MSG_BUS_QUEUE_SIZE: usize = 1000;
 
 fn create_and_initialize_test_ledger() -> LedgerDB {
     // Create a ledger_db
@@ -46,16 +52,68 @@ async fn start_deqs_server(
     initial_scis: &[SignedContingentInput],
     logger: &Logger,
 ) -> (TestServer, TestQuoteBook, DeqsClientApiClient) {
+    let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
+    let remove_quote_callback = TestServer::get_remove_quote_callback_function(msg_bus_tx.clone());
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book =
-        SynchronizedQuoteBook::new(internal_quote_book, ledger_db.clone());
+    let synchronized_quote_book = SynchronizedQuoteBook::new(
+        internal_quote_book,
+        ledger_db.clone(),
+        remove_quote_callback,
+        logger.clone(),
+    );
 
+    let (deqs_server, client_api) = start_deqs_server_for_quotebook(
+        initial_scis,
+        &synchronized_quote_book,
+        p2p_bootstrap_from,
+        msg_bus_tx,
+        msg_bus_rx,
+        logger,
+    )
+    .await;
+
+    (deqs_server, synchronized_quote_book, client_api)
+}
+
+async fn start_in_memory_deqs_server(
+    p2p_bootstrap_from: &[&TestServer],
+    initial_scis: &[SignedContingentInput],
+    logger: &Logger,
+) -> (
+    Server<InMemoryQuoteBook>,
+    InMemoryQuoteBook,
+    DeqsClientApiClient,
+) {
+    let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
+    let internal_quote_book = InMemoryQuoteBook::default();
+
+    let (deqs_server, client_api) = start_deqs_server_for_quotebook(
+        initial_scis,
+        &internal_quote_book,
+        p2p_bootstrap_from,
+        msg_bus_tx,
+        msg_bus_rx,
+        logger,
+    )
+    .await;
+
+    (deqs_server, internal_quote_book, client_api)
+}
+
+async fn start_deqs_server_for_quotebook<Q: QuoteBook>(
+    initial_scis: &[SignedContingentInput],
+    quote_book: &Q,
+    p2p_bootstrap_from: &[&TestServer],
+    msg_bus_tx: broadcast::Sender<Msg>,
+    msg_bus_rx: broadcast::Receiver<Msg>,
+    logger: &Logger,
+) -> (Server<Q>, DeqsClientApiClient) {
     for sci in initial_scis.into_iter() {
-        synchronized_quote_book.add_sci(sci.clone(), None).unwrap();
+        quote_book.add_sci(sci.clone(), None).unwrap();
     }
 
     let deqs_server = Server::start(
-        synchronized_quote_book.clone(),
+        quote_book.clone(),
         DeqsClientUri::from_str("insecure-deqs://127.0.0.1:0/").unwrap(),
         p2p_bootstrap_from
             .into_iter()
@@ -65,6 +123,8 @@ async fn start_deqs_server(
         None,
         None,
         None,
+        msg_bus_tx,
+        msg_bus_rx,
         logger.clone(),
     )
     .await
@@ -74,8 +134,7 @@ async fn start_deqs_server(
     let ch = ChannelBuilder::default_channel_builder(client_env)
         .connect_to_uri(&deqs_server.grpc_listen_uri().unwrap(), &logger);
     let client_api = DeqsClientApiClient::new(ch);
-
-    (deqs_server, synchronized_quote_book, client_api)
+    (deqs_server, client_api)
 }
 
 // Helper to wait until a quote book has a set of quotes, or timeout.
@@ -84,7 +143,7 @@ async fn wait_for_quotes(
     quote_book: &TestQuoteBook,
     expected_quotes: &BTreeSet<Quote>,
 ) {
-    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(10); // limit to 10 retries
+    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(20); // limit to 20 retries
     Retry::spawn(retry_strategy, || async {
         let quotes = BTreeSet::from_iter(quote_book.get_quotes(pair, .., 0).unwrap());
         if &quotes == expected_quotes {
@@ -156,6 +215,93 @@ async fn e2e_two_nodes_quote_propagation(logger: Logger) {
     let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(30); // limit to 30 retries
     Retry::spawn(retry_strategy, || async {
         let quote = quote_book1.get_quote_by_id(&quote_id);
+        match quote {
+            Ok(Some(_quote)) => Err("not yet".to_string()),
+            Ok(None) => Ok(()),
+            Err(e) => Err(format!("error: {:?}", e)),
+        }
+    })
+    .await
+    .unwrap();
+}
+
+/// Test that two nodes propagate quotes being added and removed to each other
+/// where one does not have a ledger.
+#[async_test_with_logger]
+async fn e2e_two_nodes_quote_propagation_to_ledger_free_node(logger: Logger) {
+    let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+    let mut ledger_db = create_and_initialize_test_ledger();
+
+    // Start two DEQS servers
+    let (deqs_server1, quote_book1, client1) =
+        start_deqs_server(&ledger_db, &[], &[], &logger).await;
+
+    let (_deqs_server2, quote_book2, _client2) =
+        start_in_memory_deqs_server(&[&deqs_server1], &[], &logger).await;
+
+    // Submit an SCI to the first server
+    let sci =
+        deqs_mc_test_utils::create_sci(TokenId::from(1), TokenId::from(2), 10000, 20000, &mut rng);
+
+    let req = SubmitQuotesRequest {
+        quotes: vec![(&sci).into()].into(),
+        ..Default::default()
+    };
+    let resp = client1.submit_quotes(&req).expect("submit quote failed");
+    let quote_id = QuoteId::try_from(resp.get_quotes()[0].get_id()).unwrap();
+
+    // After a few moments the second server should have the SCI in its quote book
+    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(10); // limit to 10 retries
+    let quote = Retry::spawn(retry_strategy, || async {
+        let quote = quote_book2.get_quote_by_id(&quote_id);
+        match quote {
+            Ok(Some(quote)) => Ok(quote),
+            Ok(None) => Err("not yet".to_string()),
+            Err(e) => Err(format!("error: {:?}", e)),
+        }
+    })
+    .await
+    .unwrap();
+
+    assert_eq!(quote.sci(), &sci);
+
+    // Add the quote to the ledger for the first quotebook. The quote should
+    // eventually be removed from the second quotebook
+    assert_eq!(
+        quote_book1.get_quote_by_id(&quote_id).unwrap().unwrap(),
+        quote
+    );
+    let key_image = quote.sci().key_image();
+
+    let block_version = BlockVersion::MAX;
+    let fog_resolver = MockFogResolver::default();
+
+    let offerer_account = AccountKey::random(&mut rng);
+
+    let tx = get_transaction(
+        block_version,
+        TokenId::from(0),
+        2,
+        2,
+        &offerer_account,
+        &offerer_account,
+        fog_resolver,
+        &mut rng,
+    )
+    .unwrap();
+    add_txos_and_key_images_to_ledger(
+        &mut ledger_db,
+        BlockVersion::MAX,
+        tx.prefix.outputs,
+        vec![key_image],
+        &mut rng,
+    )
+    .unwrap();
+
+    // Quote should eventually be removed from the first server
+    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(30); // limit to 30 retries
+    Retry::spawn(retry_strategy, || async {
+        let quote = quote_book2.get_quote_by_id(&quote_id);
         match quote {
             Ok(Some(_quote)) => Err("not yet".to_string()),
             Ok(None) => Ok(()),

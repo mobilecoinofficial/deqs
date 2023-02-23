@@ -44,7 +44,9 @@ tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros", "time"
 deqs-mc-test-utils = { path = "../mc-test-utils" }
 
 mc-account-keys = { path = "../mobilecoin/account-keys" }
+mc-fog-report-validation-test-utils = { path = "../mobilecoin/fog/report/validation/test-utils" }
 mc-ledger-db = { path = "../mobilecoin/ledger/db", features = ["test_utils"] }
+mc-transaction-builder = { path = "../mobilecoin/transaction/builder", features = ["test-only"] }
 mc-transaction-types = { path = "../mobilecoin/transaction/types" }
 
 rand = "0.8"

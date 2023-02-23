@@ -3,12 +3,16 @@
 use clap::Parser;
 use deqs_p2p::libp2p::identity::Keypair;
 use deqs_quote_book_in_memory::InMemoryQuoteBook;
-use deqs_quote_book_synchronized::SynchronizedQuoteBook;
-use deqs_server::{Server, ServerConfig};
+use deqs_quote_book_synchronized::{RemoveQuoteCallback, SynchronizedQuoteBook};
+use deqs_server::{Msg, Server, ServerConfig};
 use mc_common::logger::o;
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
+use postage::broadcast;
 use std::sync::Arc;
+
+/// Maximum number of messages that can be queued in the message bus.
+const MSG_BUS_QUEUE_SIZE: usize = 1000;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -33,10 +37,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Ok(Keypair::from_protobuf_encoding(&bytes)?)
         })
         .transpose()?;
+    let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
+
+    let remove_quote_callback: RemoveQuoteCallback = Server::<
+        SynchronizedQuoteBook<InMemoryQuoteBook, LedgerDB>,
+    >::get_remove_quote_callback_function(
+        msg_bus_tx.clone()
+    );
 
     // Create quote book
     let internal_quote_book = InMemoryQuoteBook::default();
-    let synchronized_quote_book = SynchronizedQuoteBook::new(internal_quote_book, ledger_db);
+    let synchronized_quote_book = SynchronizedQuoteBook::new(
+        internal_quote_book,
+        ledger_db,
+        remove_quote_callback,
+        logger.clone(),
+    );
 
     // Start admin server
     let config_json = serde_json::to_string(&config).expect("failed to serialize config to JSON");
@@ -62,6 +78,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.p2p_listen,
         config.p2p_external_address,
         keypair,
+        msg_bus_tx,
+        msg_bus_rx,
         logger.clone(),
     )
     .await?;
