@@ -5,15 +5,15 @@ use deqs_api::DeqsClientUri;
 use deqs_p2p::libp2p::{identity::Keypair, Multiaddr};
 use deqs_quote_book_api::QuoteBook;
 use mc_common::logger::{log, Logger};
-use postage::{broadcast, prelude::Stream};
+use postage::{
+    broadcast::{Receiver, Sender},
+    prelude::Stream,
+};
 use tokio::{
     select,
     sync::mpsc,
     time::{interval, MissedTickBehavior},
 };
-
-/// Maximum number of messages that can be queued in the message bus.
-const MSG_BUS_QUEUE_SIZE: usize = 1000;
 
 pub struct Server<QB: QuoteBook> {
     /// Shutdown sender, used to signal the event loop to shutdown.
@@ -37,9 +37,10 @@ impl<QB: QuoteBook> Server<QB> {
         p2p_listen_address: Option<Multiaddr>,
         p2p_external_address: Option<Multiaddr>,
         p2p_keypair: Option<Keypair>,
+        msg_bus_tx: Sender<Msg>,
+        mut msg_bus_rx: Receiver<Msg>,
         logger: Logger,
     ) -> Result<Self, Error> {
-        let (msg_bus_tx, mut msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
         let (shutdown_tx, mut shutdown_rx) = mpsc::unbounded_channel();
         let (shutdown_ack_tx, shutdown_ack_rx) = mpsc::unbounded_channel();
 

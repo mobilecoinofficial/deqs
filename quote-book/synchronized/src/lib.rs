@@ -170,7 +170,7 @@ where
 
 /// A callback for broadcasting a quote removal. It receives 1 argument:
 /// - A vector of quotes that have been removed
-pub type RemoveQuoteCallback = Box<dyn Fn(Vec<Quote>) + Sync + Send>;
+pub type RemoveQuoteCallback = Box<dyn FnMut(Vec<Quote>) + Sync + Send>;
 
 struct DbFetcherThread<DB: Ledger, Q: QuoteBook> {
     db: DB,
