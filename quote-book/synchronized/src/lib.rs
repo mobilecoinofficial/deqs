@@ -1,4 +1,5 @@
 // Copyright (c) 2023 MobileCoin Inc.
+
 use deqs_quote_book_api::{Error, Pair, Quote, QuoteBook, QuoteId};
 use mc_blockchain_types::BlockIndex;
 use mc_common::logger::{log, Logger};
@@ -14,6 +15,7 @@ use std::{
     thread::{Builder as ThreadBuilder, JoinHandle},
     time::Duration,
 };
+
 /// A wrapper for a quote book implementation that syncs quotes with the ledger
 #[derive(Clone)]
 pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> {
@@ -23,7 +25,7 @@ pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'stati
     /// Ledger
     ledger: L,
 
-    /// Shared state
+    /// Index of the highest processed block index by the background thread.
     highest_processed_block_index: Arc<AtomicU64>,
 
     /// Thread management. This is being held purely for the destructor so that
@@ -162,7 +164,7 @@ struct SyncThread {
 }
 
 impl SyncThread {
-    /// Stop and join the db poll thread
+    /// Stop and join the dbfetcher thread
     pub fn stop(&mut self) {
         if let Some(join_handle) = self.join_handle.take() {
             self.stop_requested.store(true, Ordering::SeqCst);
@@ -191,7 +193,7 @@ struct DbFetcherThread<DB: Ledger, Q: QuoteBook> {
 }
 
 /// Background worker thread implementation that takes care of periodically
-/// polling data out of the database. Add join handle
+/// polling data out of the database.
 impl<DB: Ledger, Q: QuoteBook> DbFetcherThread<DB, Q> {
     const POLLING_FREQUENCY: Duration = Duration::from_millis(10);
     const ERROR_RETRY_FREQUENCY: Duration = Duration::from_millis(1000);
