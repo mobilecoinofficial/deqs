@@ -3,11 +3,11 @@
 use crate::{update_periodic_metrics, Error, GrpcServer, Msg, METRICS_POLL_INTERVAL, P2P};
 use deqs_api::DeqsClientUri;
 use deqs_p2p::libp2p::{identity::Keypair, Multiaddr};
-use deqs_quote_book_api::QuoteBook;
+use deqs_quote_book_api::{Quote, QuoteBook};
 use mc_common::logger::{log, Logger};
 use postage::{
     broadcast::{Receiver, Sender},
-    prelude::Stream,
+    prelude::{Sink, Stream},
 };
 use tokio::{
     select,
@@ -152,5 +152,22 @@ impl<QB: QuoteBook> Server<QB> {
 
     pub fn p2p_listen_addrs(&self) -> Vec<Multiaddr> {
         self.p2p_listen_addrs.clone()
+    }
+    pub fn get_remove_quote_callback_function(
+        mut callback_msg_bus_tx: Sender<Msg>,
+    ) -> Box<dyn FnMut(Vec<Quote>) + Send + Sync> {
+        Box::new(move |quotes: Vec<Quote>| {
+            for quote in quotes {
+                callback_msg_bus_tx
+                    .blocking_send(Msg::SciQuoteRemoved(quote.clone()))
+                    .unwrap_or_else(|_| {
+                        panic!(
+                            "Failed to send SCI quote {} removed message to
+        message bus",
+                            quote.id()
+                        )
+                    });
+            }
+        })
     }
 }

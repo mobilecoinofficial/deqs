@@ -2,14 +2,13 @@
 
 use clap::Parser;
 use deqs_p2p::libp2p::identity::Keypair;
-use deqs_quote_book_api::Quote;
 use deqs_quote_book_in_memory::InMemoryQuoteBook;
 use deqs_quote_book_synchronized::{RemoveQuoteCallback, SynchronizedQuoteBook};
 use deqs_server::{Msg, Server, ServerConfig};
 use mc_common::logger::o;
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
-use postage::{broadcast, sink::Sink};
+use postage::broadcast;
 use std::sync::Arc;
 
 /// Maximum number of messages that can be queued in the message bus.
@@ -40,20 +39,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .transpose()?;
     let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
 
-    let mut callback_msg_bus_tx = msg_bus_tx.clone();
-    let remove_quote_callback: RemoveQuoteCallback = Box::new(move |quotes: Vec<Quote>| {
-        for quote in quotes {
-            callback_msg_bus_tx
-                .blocking_send(Msg::SciQuoteRemoved(quote.clone()))
-                .unwrap_or_else(|_| {
-                    panic!(
-                        "Failed to send SCI quote {} removed message to
-    message bus",
-                        quote.id()
-                    )
-                });
-        }
-    });
+    let remove_quote_callback: RemoveQuoteCallback = Server::<
+        SynchronizedQuoteBook<InMemoryQuoteBook, LedgerDB>,
+    >::get_remove_quote_callback_function(
+        msg_bus_tx.clone()
+    );
 
     // Create quote book
     let internal_quote_book = InMemoryQuoteBook::default();

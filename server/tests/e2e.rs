@@ -21,7 +21,7 @@ use mc_transaction_builder::test_utils::get_transaction;
 use mc_transaction_extra::SignedContingentInput;
 use mc_transaction_types::{BlockVersion, TokenId};
 use mc_util_grpc::ConnectionUriGrpcioChannel;
-use postage::{broadcast, sink::Sink};
+use postage::broadcast;
 use rand::{rngs::StdRng, SeedableRng};
 use std::{collections::BTreeSet, str::FromStr, sync::Arc, time::Duration};
 use tokio_retry::{strategy::FixedInterval, Retry};
@@ -53,7 +53,7 @@ async fn start_deqs_server(
     logger: &Logger,
 ) -> (TestServer, TestQuoteBook, DeqsClientApiClient) {
     let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
-    let remove_quote_callback = get_callback_function(msg_bus_tx.clone());
+    let remove_quote_callback = TestServer::get_remove_quote_callback_function(msg_bus_tx.clone());
     let internal_quote_book = InMemoryQuoteBook::default();
     let synchronized_quote_book = SynchronizedQuoteBook::new(
         internal_quote_book,
@@ -98,24 +98,6 @@ async fn start_in_memory_deqs_server(
     .await;
 
     (deqs_server, internal_quote_book, client_api)
-}
-
-fn get_callback_function(
-    mut callback_msg_bus_tx: broadcast::Sender<Msg>,
-) -> Box<dyn FnMut(Vec<Quote>) + Send + Sync> {
-    Box::new(move |quotes: Vec<Quote>| {
-        for quote in quotes {
-            callback_msg_bus_tx
-                .blocking_send(Msg::SciQuoteRemoved(quote.clone()))
-                .unwrap_or_else(|_| {
-                    panic!(
-                        "Failed to send SCI quote {} removed message to
-    message bus",
-                        quote.id()
-                    )
-                });
-        }
-    })
 }
 
 async fn start_deqs_server_for_quotebook<Q: QuoteBook>(
