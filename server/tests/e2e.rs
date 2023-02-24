@@ -1,10 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use deqs_api::{
-    deqs::{SubmitQuotesRequest},
-    deqs_grpc::DeqsClientApiClient,
-    DeqsClientUri,
-};
+use deqs_api::{deqs::SubmitQuotesRequest, deqs_grpc::DeqsClientApiClient, DeqsClientUri};
 use deqs_quote_book_api::{Pair, Quote, QuoteBook, QuoteId};
 use deqs_quote_book_in_memory::InMemoryQuoteBook;
 use deqs_quote_book_synchronized::SynchronizedQuoteBook;
@@ -175,8 +171,8 @@ async fn e2e_two_nodes_quote_propagation(logger: Logger) {
     assert_eq!(quote.sci(), &sci);
 }
 
-/// Test that two nodes propagate quotes being added, and when the ledger invalidates it,
-/// they both remove it
+/// Test that two nodes propagate quotes being added, and when the ledger
+/// invalidates it, they both remove it
 #[async_test_with_logger]
 async fn e2e_two_nodes_quote_propagation_and_removal(logger: Logger) {
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);

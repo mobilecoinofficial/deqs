@@ -10,9 +10,7 @@ use deqs_api::{
 };
 use deqs_quote_book_api::{Pair, QuoteBook};
 use futures::{FutureExt, SinkExt};
-use grpcio::{
-    RpcContext, RpcStatus, ServerStreamingSink, Service, UnarySink, WriteFlags,
-};
+use grpcio::{RpcContext, RpcStatus, ServerStreamingSink, Service, UnarySink, WriteFlags};
 use mc_common::logger::{log, scoped_global_logger, Logger};
 use mc_transaction_extra::SignedContingentInput;
 use mc_util_grpc::{rpc_internal_error, rpc_invalid_arg_error, rpc_logger, send_result};
@@ -256,20 +254,20 @@ impl<OB: QuoteBook> DeqsClientApi for ClientService<OB> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use deqs_api::{deqs_grpc::DeqsClientApiClient, DeqsClientUri, deqs::LiveUpdate};
+    use deqs_api::{deqs::LiveUpdate, deqs_grpc::DeqsClientApiClient, DeqsClientUri};
     use deqs_mc_test_utils::create_sci;
-    use deqs_quote_book_api::{Quote};
+    use deqs_quote_book_api::Quote;
     use deqs_quote_book_in_memory::InMemoryQuoteBook;
     use deqs_quote_book_synchronized::SynchronizedQuoteBook;
     use futures::{executor::block_on, StreamExt};
     use grpcio::{ChannelBuilder, EnvBuilder, Server, ServerBuilder, ServerCredentials};
     use mc_account_keys::AccountKey;
     use mc_common::logger::test_with_logger;
-use mc_ledger_db::{
-    test_utils::{add_txos_and_key_images_to_ledger, create_ledger, initialize_ledger},
-    LedgerDB, Ledger,
-};
     use mc_fog_report_validation_test_utils::MockFogResolver;
+    use mc_ledger_db::{
+        test_utils::{add_txos_and_key_images_to_ledger, create_ledger, initialize_ledger},
+        Ledger, LedgerDB,
+    };
     use mc_transaction_builder::test_utils::get_transaction;
     use mc_transaction_types::{BlockVersion, TokenId};
     use mc_util_grpc::ConnectionUriGrpcioChannel;
@@ -290,7 +288,8 @@ use mc_ledger_db::{
         let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(1000);
 
         let client_service =
-            ClientService::new(msg_bus_tx.clone(), quote_book.clone(), logger.clone()).into_service();
+            ClientService::new(msg_bus_tx.clone(), quote_book.clone(), logger.clone())
+                .into_service();
         let mut server = ServerBuilder::new(server_env)
             .register_service(client_service)
             .build()
@@ -313,14 +312,15 @@ use mc_ledger_db::{
     fn create_live_updates_subscriber(
         client_api: DeqsClientApiClient,
         logger: Logger,
-    ) -> (std::sync::mpsc::Receiver::<LiveUpdate>, std::thread::JoinHandle::<()>) {
+    ) -> (
+        std::sync::mpsc::Receiver<LiveUpdate>,
+        std::thread::JoinHandle<()>,
+    ) {
         let (live_updates_tx, live_updates_rx) = channel();
 
         let join_handle = thread::spawn(move || {
             let req = LiveUpdatesRequest::default();
-            let mut stream = client_api
-                .live_updates(&req)
-                .expect("stream quotes failed");
+            let mut stream = client_api.live_updates(&req).expect("stream quotes failed");
 
             block_on(async {
                 while let Some(resp) = stream.next().await {
@@ -338,7 +338,7 @@ use mc_ledger_db::{
                 }
             });
         });
-        
+
         (live_updates_rx, join_handle)
     }
 
@@ -562,7 +562,8 @@ use mc_ledger_db::{
         let (client_api, _server, _msg_bus_tx, _msg_bus_rx) =
             create_test_client_and_server(&quote_book, &logger);
 
-        let (live_updates_rx, _join_handle) = create_live_updates_subscriber(client_api.clone(), logger.clone());
+        let (live_updates_rx, _join_handle) =
+            create_live_updates_subscriber(client_api.clone(), logger.clone());
 
         // Initially, the receiver should be empty.
         assert!(live_updates_rx.try_recv().is_err());
@@ -602,11 +603,14 @@ use mc_ledger_db::{
         let remove_quote_callback_state = Arc::new(Mutex::new(Option::<Sender<Msg>>::default()));
         let remove_quote_callback_state2 = remove_quote_callback_state.clone();
         let logger2 = logger.clone();
-        let remove_quote_callback =
-        Box::new(move |quotes: Vec<Quote>| {
+        let remove_quote_callback = Box::new(move |quotes: Vec<Quote>| {
             log::debug!(logger2, "{} quotes removed", quotes.len());
             for quote in quotes {
-                remove_quote_callback_state.lock().expect("lock poisoned").as_mut().expect("msg_bus_tx was not installed")
+                remove_quote_callback_state
+                    .lock()
+                    .expect("lock poisoned")
+                    .as_mut()
+                    .expect("msg_bus_tx was not installed")
                     .blocking_send(Msg::SciQuoteRemoved(quote.clone()))
                     .unwrap_or_else(|_| {
                         panic!(
@@ -631,7 +635,8 @@ use mc_ledger_db::{
         // install the msg_bus_tx in the remove_quote_callback's state
         *remove_quote_callback_state2.lock().expect("lock poisoned") = Some(msg_bus_tx);
 
-        let (live_updates_rx, _join_handle) = create_live_updates_subscriber(client_api.clone(), logger.clone());
+        let (live_updates_rx, _join_handle) =
+            create_live_updates_subscriber(client_api.clone(), logger.clone());
 
         // Initially, the receiver should be empty.
         assert!(live_updates_rx.try_recv().is_err());
