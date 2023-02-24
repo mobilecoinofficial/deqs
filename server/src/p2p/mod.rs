@@ -17,7 +17,7 @@ use deqs_p2p::{
     },
     Behaviour, Client, Network, NetworkBuilder, NetworkEvent, NetworkEventLoopHandle,
 };
-use deqs_quote_book_api::{Error as QuoteBookError, Quote, QuoteBook, QuoteId};
+use deqs_quote_book_api::{Error as QuoteBookError, Quote, QuoteBook};
 use futures::{stream, StreamExt};
 use mc_common::logger::{log, Logger};
 use rpc::{Request, Response, RpcClient};
@@ -41,7 +41,6 @@ pub const MAX_QUOTES_PER_REQUEST: usize = 100;
 #[derive(Debug, Deserialize, Serialize)]
 enum GossipMsgBusData {
     SciQuoteAdded(Quote),
-    SciQuoteRemoved(QuoteId),
 }
 
 /// An object for containing the logic for interfacing with the P2P network.
@@ -130,17 +129,6 @@ impl<QB: QuoteBook> P2P<QB> {
     /// book.
     pub async fn broadcast_sci_quote_added(&mut self, quote: Quote) -> Result<(), Error> {
         let bytes = mc_util_serial::serialize(&GossipMsgBusData::SciQuoteAdded(quote))?;
-        let _message_id = self
-            .client
-            .publish_gossip(self.msg_bus_topic.clone(), bytes)
-            .await?;
-        Ok(())
-    }
-
-    /// Broadcast to toher peers that a quote has been removed from the quote
-    /// book.
-    pub async fn broadcast_sci_quote_removed(&mut self, quote_id: QuoteId) -> Result<(), Error> {
-        let bytes = mc_util_serial::serialize(&GossipMsgBusData::SciQuoteRemoved(quote_id))?;
         let _message_id = self
             .client
             .publish_gossip(self.msg_bus_topic.clone(), bytes)
@@ -261,10 +249,6 @@ impl<QB: QuoteBook> P2P<QB> {
     async fn handle_msg_bus_message(&mut self, msg: GossipMsgBusData) -> Result<(), Error> {
         match msg {
             GossipMsgBusData::SciQuoteAdded(quote) => self.handle_sci_quote_added(quote).await,
-
-            GossipMsgBusData::SciQuoteRemoved(quote_id) => {
-                self.handle_sci_quote_removed(&quote_id).await
-            }
         }
     }
 
@@ -281,25 +265,6 @@ impl<QB: QuoteBook> P2P<QB> {
         }
 
         log::info!(self.logger, "Added quote via gossip: {}", local_quote.id());
-
-        Ok(())
-    }
-
-    /// Handle a message on the message bus topic: a quote has been removed
-    async fn handle_sci_quote_removed(&mut self, quote_id: &QuoteId) -> Result<(), Error> {
-        match self.quote_book.remove_quote_by_id(quote_id) {
-            Ok(_) => {
-                log::info!(self.logger, "Removed quote via gossip: {}", quote_id,);
-            }
-            Err(err) => {
-                log::info!(
-                    self.logger,
-                    "Failed removing quote {} via gossip: {:?}",
-                    quote_id,
-                    err,
-                );
-            }
-        }
 
         Ok(())
     }

@@ -86,10 +86,11 @@ impl<QB: QuoteBook> Server<QB> {
                                 }
                             }
 
-                            Some(Msg::SciQuoteRemoved(quote)) => {
-                                if let Err(err) = p2p.broadcast_sci_quote_removed(*quote.id()).await {
-                                    log::info!(logger, "broadcast_sci_quote_removed failed: {:?}", err)
-                                }
+                            Some(Msg::SciQuoteRemoved(_quote)) => {
+                                // We don't have to broadcast SciQuoteRemoved to peers over p2p, because
+                                // these are removed when the ledger advances, and all the p2p peers will
+                                // see that eventually.
+                                // This message is forwarded to live updates subscribers though.
                             }
 
                             None => {
