@@ -5,7 +5,6 @@ use mc_blockchain_types::BlockIndex;
 use mc_common::logger::{log, Logger};
 use mc_crypto_ring_signature::KeyImage;
 use mc_ledger_db::{Error as LedgerError, Ledger};
-use mc_transaction_extra::SignedContingentInput;
 use std::{
     ops::RangeBounds,
     sync::{
@@ -84,7 +83,7 @@ where
     Q: QuoteBook,
     L: Ledger + Clone + Sync + 'static,
 {
-    fn add_sci(&self, sci: SignedContingentInput, timestamp: Option<u64>) -> Result<Quote, Error> {
+    fn add_quote(&self, quote: &Quote) -> Result<(), Error> {
         // Check to see if the ledger's current block index is already at or past the
         // max_tombstone_block for the sci.
         let current_block_index = self
@@ -92,7 +91,7 @@ where
             .num_blocks()
             .map_err(|err| Error::ImplementationSpecific(err.to_string()))?
             - 1;
-        if let Some(input_rules) = &sci.tx_in.input_rules {
+        if let Some(input_rules) = &quote.sci().tx_in.input_rules {
             if input_rules.max_tombstone_block != 0
                 && current_block_index >= input_rules.max_tombstone_block
             {
@@ -103,14 +102,14 @@ where
         // quotebook.
         if self
             .ledger
-            .contains_key_image(&sci.key_image())
+            .contains_key_image(&quote.sci().key_image())
             .map_err(|err| Error::ImplementationSpecific(err.to_string()))?
         {
             return Err(Error::QuoteIsStale);
         }
 
         // Try adding to quote book.
-        self.quote_book.add_sci(sci, timestamp)
+        self.quote_book.add_quote(quote)
     }
 
     fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, Error> {

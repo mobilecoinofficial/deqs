@@ -6,7 +6,6 @@ use deqs_quote_book_api::{Error as QuoteBookError, Pair, Quote, QuoteBook, Quote
 use mc_blockchain_types::BlockIndex;
 use mc_crypto_ring_signature::KeyImage;
 use mc_transaction_core::validation::validate_tombstone;
-use mc_transaction_extra::SignedContingentInput;
 use std::{
     collections::{BTreeSet, HashMap},
     ops::{Bound, RangeBounds},
@@ -30,14 +29,7 @@ impl Default for InMemoryQuoteBook {
 }
 
 impl QuoteBook for InMemoryQuoteBook {
-    fn add_sci(
-        &self,
-        sci: SignedContingentInput,
-        timestamp: Option<u64>,
-    ) -> Result<Quote, QuoteBookError> {
-        // Convert SCI into an quote. This also validates it.
-        let quote = Quote::new(sci, timestamp)?;
-
+    fn add_quote(&self, quote: &Quote) -> Result<(), QuoteBookError> {
         // Try adding to quote book.
         let mut scis = self.scis.write()?;
         let quotes = scis.entry(*quote.pair()).or_insert_with(Default::default);
@@ -57,7 +49,7 @@ impl QuoteBook for InMemoryQuoteBook {
         // Add quote. We assert it doesn't fail since we do not expect duplicate quotes
         // due to the key image check above.
         assert!(quotes.insert(quote.clone()));
-        Ok(quote)
+        Ok(())
     }
 
     fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, QuoteBookError> {
@@ -107,7 +99,11 @@ impl QuoteBook for InMemoryQuoteBook {
             let mut removed_entries = entries
                 .drain_filter(|entry| {
                     if let Some(input_rules) = &entry.sci().tx_in.input_rules {
-                        validate_tombstone(current_block_index, input_rules.max_tombstone_block)
+                        input_rules.max_tombstone_block != 0
+                            && validate_tombstone(
+                                current_block_index,
+                                input_rules.max_tombstone_block,
+                            )
                             .is_err()
                     } else {
                         false

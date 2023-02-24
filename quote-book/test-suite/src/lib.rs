@@ -125,7 +125,8 @@ pub fn basic_happy_flow(quote_book: &impl QuoteBook) {
     let quotes = quote_book.get_quotes(&pair, .., 0).unwrap();
     assert_eq!(quotes, vec![]);
 
-    // Removing quotes by tombstone block should work
+    // Removing quotes by tombstone block should work. Quotes with a zero tombstone
+    // should survive.
     let sci = create_sci(&pair, 10, 20, &mut rng);
     let quote1 = quote_book.add_sci(sci, None).unwrap();
     let quote1_tombstone = quote
@@ -140,6 +141,11 @@ pub fn basic_happy_flow(quote_book: &impl QuoteBook) {
     sci_builder.set_tombstone_block(quote1_tombstone - 1);
     let sci2 = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
     let quote2 = quote_book.add_sci(sci2, None).unwrap();
+
+    let mut sci_builder = create_sci_builder(&pair, 10, 20, &mut rng);
+    sci_builder.set_tombstone_block(0);
+    let sci3 = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
+    let quote3 = quote_book.add_sci(sci3, None).unwrap();
 
     assert_eq!(
         quote_book
@@ -166,6 +172,10 @@ pub fn basic_happy_flow(quote_book: &impl QuoteBook) {
             .unwrap(),
         vec![],
     );
+
+    // The quote with 0 max tombstone should still be around
+    let quotes = quote_book.get_quotes(&pair, .., 0).unwrap();
+    assert_eq!(quotes, vec![quote3]);
 }
 
 /// Test some invalid SCI scenarios
@@ -200,6 +210,19 @@ pub fn cannot_add_invalid_sci(quote_book: &impl QuoteBook) {
         Error::Sci(SignedContingentInputError::RingSignature(
             RingSignatureError::LengthMismatch(22, 21),
         ))
+    );
+}
+
+pub fn cannot_add_duplicate_sci(quote_book: &impl QuoteBook) {
+    let pair = pair();
+    let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+
+    let sci = create_sci(&pair, 10, 20, &mut rng);
+    quote_book.add_sci(sci.clone(), None).unwrap();
+
+    assert_eq!(
+        quote_book.add_sci(sci, None).unwrap_err(),
+        Error::QuoteAlreadyExists
     );
 }
 
