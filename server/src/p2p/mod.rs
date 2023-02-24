@@ -102,7 +102,7 @@ impl<QB: QuoteBook> P2P<QB> {
             event_loop_handle,
             events,
             client,
-        } = network_builder.build()?;
+        } = network_builder.build().await?;
 
         client.subscribe_gossip(msg_bus_topic.clone()).await?;
 

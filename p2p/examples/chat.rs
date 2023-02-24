@@ -90,7 +90,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         mut event_loop_handle,
         mut events,
         client,
-    } = network_builder.build()?;
+    } = network_builder.build().await?;
 
     // Subscribe to a gossip topic for receiving broadcast messages.
     let topic = IdentTopic::new("chat-gossip");
