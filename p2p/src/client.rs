@@ -8,7 +8,7 @@ use libp2p::{
         IdentTopic, MessageId,
     },
     request_response::{OutboundFailure, ResponseChannel},
-    Multiaddr, PeerId,
+    Multiaddr, PeerId, TransportError,
 };
 use tokio::sync::{mpsc, oneshot};
 use tokio_retry::{
@@ -23,6 +23,12 @@ pub enum Command<REQ: RpcRequest, RESP: RpcResponse> {
     /// Instruct the network to provide a list of all peers it is aware of
     PeerList {
         response_sender: oneshot::Sender<Vec<PeerId>>,
+    },
+
+    /// Instruct the network to begin listening on a given address
+    Listen {
+        address: Multiaddr,
+        response_sender: oneshot::Sender<Result<Multiaddr, Error>>,
     },
 
     /// Instruct the network to provide a list of addresses it is listening on
@@ -81,6 +87,9 @@ pub enum Error {
 
     /// Gossip publish: {0}
     GossipPublish(PublishError),
+
+    /// Transport error: {0}
+    Transport(TransportError<std::io::Error>),
 }
 
 impl<T> From<mpsc::error::SendError<T>> for Error {
@@ -110,6 +119,12 @@ impl From<SubscriptionError> for Error {
 impl From<PublishError> for Error {
     fn from(err: PublishError) -> Self {
         Self::GossipPublish(err)
+    }
+}
+
+impl From<TransportError<std::io::Error>> for Error {
+    fn from(err: TransportError<std::io::Error>) -> Self {
+        Self::Transport(err)
     }
 }
 
@@ -198,6 +213,18 @@ impl<REQ: RpcRequest, RESP: RpcResponse> Client<REQ, RESP> {
         self.sender.send(Command::PeerList { response_sender })?;
 
         Ok(response_receiver.await?)
+    }
+
+    /// Listen on a new address
+    pub async fn listen(&self, address: Multiaddr) -> Result<Multiaddr, Error> {
+        let (response_sender, response_receiver) = oneshot::channel();
+
+        self.sender.send(Command::Listen {
+            address,
+            response_sender,
+        })?;
+
+        response_receiver.await?
     }
 
     //// Get list of listening addresses.

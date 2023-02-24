@@ -88,7 +88,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkBuilder<REQ, RESP> {
         .boxed())
     }
 
-    pub fn build(self) -> Result<Network<REQ, RESP>, Error> {
+    pub async fn build(self) -> Result<Network<REQ, RESP>, Error> {
         let mut swarm = SwarmBuilder::new(
             self.transport,
             self.behaviour,
@@ -99,7 +99,6 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkBuilder<REQ, RESP> {
         }))
         .build();
 
-        swarm.listen_on(self.listen_address)?;
         for addr in self.external_addresses {
             swarm.add_external_address(addr, libp2p_swarm::AddressScore::Infinite);
         }
@@ -118,6 +117,11 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkBuilder<REQ, RESP> {
             self.bootstrap_peers.clone(),
             self.logger,
         );
+
+        // Listen on the given address. Note that this requires the event loop to be
+        // running.
+        let _ = client.listen(self.listen_address).await?;
+
         Ok(Network {
             event_loop_handle,
             client,

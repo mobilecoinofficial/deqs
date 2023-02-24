@@ -1,5 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+use crate::ClientError;
 use displaydoc::Display;
 use libp2p::{
     kad::store::Error as KadStoreError, multiaddr::Error as MultiaddrError, noise::NoiseError,
@@ -45,6 +46,9 @@ pub enum Error {
 
     /// Kademlia store: {0}
     KadStore(KadStoreError),
+
+    /// Client: {0}
+    Client(ClientError),
 }
 
 impl From<IoError> for Error {
@@ -80,6 +84,12 @@ impl From<MultiaddrError> for Error {
 impl From<KadStoreError> for Error {
     fn from(e: KadStoreError) -> Self {
         Self::KadStore(e)
+    }
+}
+
+impl From<ClientError> for Error {
+    fn from(e: ClientError) -> Self {
+        Self::Client(e)
     }
 }
 
