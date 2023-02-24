@@ -5,7 +5,6 @@ use mc_blockchain_types::BlockIndex;
 use mc_common::logger::{log, Logger};
 use mc_crypto_ring_signature::KeyImage;
 use mc_ledger_db::{Error as LedgerError, Ledger};
-use mc_transaction_extra::SignedContingentInput;
 use std::{
     ops::RangeBounds,
     sync::{
@@ -15,11 +14,6 @@ use std::{
     thread::{Builder as ThreadBuilder, JoinHandle},
     time::Duration,
 };
-use mc_ledger_db::Ledger;
-use mc_transaction_extra::SignedContingentInput;
-use std::ops::RangeBounds;
-use mc_ledger_db::Ledger;
-use std::ops::RangeBounds;
 
 /// A wrapper for a quote book implementation that syncs quotes with the ledger
 #[derive(Clone)]
