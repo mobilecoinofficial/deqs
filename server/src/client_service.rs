@@ -590,12 +590,14 @@ mod tests {
         assert!(live_updates_rx.try_recv().is_err());
 
         // Announce over the message bus that a quote has been removed
-        msg_bus_tx.blocking_send(Msg::SciQuoteRemoved(added_quote.try_into().unwrap())).expect("msg_bus reader died");
+        msg_bus_tx
+            .blocking_send(Msg::SciQuoteRemoved(added_quote.try_into().unwrap()))
+            .expect("msg_bus reader died");
 
         // The live update subscription should get an update
         let resp = live_updates_rx.recv().expect("recv failed");
         log::debug!(logger, "live_updates_rx.recv() returned");
-        assert_eq!(resp.get_quote_removed(), added_quote.get_id());        
+        assert_eq!(resp.get_quote_removed(), added_quote.get_id());
     }
 
     #[test_with_logger]
@@ -641,7 +643,6 @@ mod tests {
             .map(|quote| SignedContingentInput::try_from(quote.get_sci()).unwrap())
             .collect::<Vec<_>>();
         assert_eq!(received_scis, vec![sci.clone()]);
-
 
         // Build a Tx and add its outputs, and the sci's key image, to the ledger
         let block_version = BlockVersion::MAX;
