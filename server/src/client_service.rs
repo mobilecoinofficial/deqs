@@ -275,7 +275,7 @@ mod tests {
     use rand::{rngs::StdRng, SeedableRng};
     use std::{
         str::FromStr,
-        sync::{mpsc::channel, Arc, Mutex},
+        sync::{mpsc::channel, Arc},
         thread,
     };
     use tokio::select;
@@ -559,7 +559,7 @@ mod tests {
         };
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
         let quote_book = InMemoryQuoteBook::default();
-        let (client_api, _server, _msg_bus_tx, _msg_bus_rx) =
+        let (client_api, _server, mut msg_bus_tx, _msg_bus_rx) =
             create_test_client_and_server(&quote_book, &logger);
 
         let (live_updates_rx, _join_handle) =
@@ -585,10 +585,21 @@ mod tests {
         // We should now see our quote arrive in the stream.
         let resp = live_updates_rx.recv().expect("recv failed");
         assert_eq!(resp.get_quote_added(), added_quote);
+
+        // There should not be any more updates right now
+        assert!(live_updates_rx.try_recv().is_err());
+
+        // Announce over the message bus that a quote has been removed
+        msg_bus_tx.blocking_send(Msg::SciQuoteRemoved(added_quote.try_into().unwrap())).expect("msg_bus reader died");
+
+        // The live update subscription should get an update
+        let resp = live_updates_rx.recv().expect("recv failed");
+        log::debug!(logger, "live_updates_rx.recv() returned");
+        assert_eq!(resp.get_quote_removed(), added_quote.get_id());        
     }
 
     #[test_with_logger]
-    fn streaming_works_with_quotes_expiring(logger: Logger) {
+    fn submitting_expired_quotes_produces_quote_is_stale_error(logger: Logger) {
         let pair = Pair {
             base_token_id: TokenId::from(0),
             counter_token_id: TokenId::from(1),
@@ -598,49 +609,19 @@ mod tests {
         let mut ledger = create_and_initialize_test_ledger();
         let starting_blocks = ledger.num_blocks().unwrap();
 
-        // Allow msg_bus_tx to be created later for remove_quote_callback,
-        // by putting Mutex<Option<Sender>> in the captured state of the callback
-        let remove_quote_callback_state = Arc::new(Mutex::new(Option::<Sender<Msg>>::default()));
-        let remove_quote_callback_state2 = remove_quote_callback_state.clone();
-        let logger2 = logger.clone();
-        let remove_quote_callback = Box::new(move |quotes: Vec<Quote>| {
-            log::debug!(logger2, "{} quotes removed", quotes.len());
-            for quote in quotes {
-                remove_quote_callback_state
-                    .lock()
-                    .expect("lock poisoned")
-                    .as_mut()
-                    .expect("msg_bus_tx was not installed")
-                    .blocking_send(Msg::SciQuoteRemoved(quote.clone()))
-                    .unwrap_or_else(|_| {
-                        panic!(
-                            "Failed to send SCI quote {} removed message to
-        message bus",
-                            quote.id()
-                        )
-                    });
-            }
-        });
-
+        // HACK: We aren't using the live updates in this particular test,
+        // so we don't need to put a proper remove_quote_callback here.
         let quote_book = SynchronizedQuoteBook::new(
             InMemoryQuoteBook::default(),
             ledger.clone(),
-            remove_quote_callback,
+            Box::new(|_| {}),
             logger.clone(),
         );
 
-        let (client_api, _server, msg_bus_tx, _msg_bus_rx) =
+        let (client_api, _server, _msg_bus_tx, _msg_bus_rx) =
             create_test_client_and_server(&quote_book, &logger);
 
-        // install the msg_bus_tx in the remove_quote_callback's state
-        *remove_quote_callback_state2.lock().expect("lock poisoned") = Some(msg_bus_tx);
-
-        let (live_updates_rx, _join_handle) =
-            create_live_updates_subscriber(client_api.clone(), logger.clone());
-
-        // Initially, the receiver should be empty.
-        assert!(live_updates_rx.try_recv().is_err());
-
+        // Make and submit an sci
         let sci = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
         let key_image = sci.key_image();
         let req = SubmitQuotesRequest {
@@ -649,13 +630,18 @@ mod tests {
         };
         let resp = client_api.submit_quotes(&req).expect("submit quote failed");
         assert_eq!(resp.status_codes, vec![QuoteStatusCode::CREATED]);
-        let added_quote = &resp.get_quotes()[0];
 
-        // We should now see our quote arrive in the live updates stream.
-        let resp = live_updates_rx.recv().expect("recv failed");
-        assert_eq!(resp.get_quote_added(), added_quote);
-        // There should not be any more updates right now
-        assert!(live_updates_rx.try_recv().is_err());
+        // We should see this sci if we call get quotes
+        let mut req = GetQuotesRequest::default();
+        req.set_pair((&pair).into());
+        let resp = client_api.get_quotes(&req).expect("get quotes failed");
+        let received_scis = resp
+            .get_quotes()
+            .iter()
+            .map(|quote| SignedContingentInput::try_from(quote.get_sci()).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(received_scis, vec![sci.clone()]);
+
 
         // Build a Tx and add its outputs, and the sci's key image, to the ledger
         let block_version = BlockVersion::MAX;
@@ -685,11 +671,24 @@ mod tests {
 
         assert_eq!(ledger.num_blocks().unwrap(), starting_blocks + 1);
 
-        log::debug!(logger, "added a block");
-        // Block until we get a live update showing it is removed
-        let resp = live_updates_rx.recv().expect("recv failed");
-        log::debug!(logger, "live_updates_rx.recv() returned");
-        assert_eq!(resp.get_quote_removed(), added_quote.get_id());
+        // Block until we have processed this block
+        let mut tries = 500usize;
+        while quote_book.get_current_block_index() + 1 < ledger.num_blocks().unwrap() {
+            std::thread::sleep(std::time::Duration::from_millis(100));
+            tries -= 1;
+            assert_ne!(tries, 0, "Quote book failed to catch up in time");
+        }
+
+        // We should see an empty book now if we call get quotes
+        let mut req = GetQuotesRequest::default();
+        req.set_pair((&pair).into());
+        let resp = client_api.get_quotes(&req).expect("get quotes failed");
+        let received_scis = resp
+            .get_quotes()
+            .iter()
+            .map(|quote| SignedContingentInput::try_from(quote.get_sci()).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(received_scis, vec![]);
 
         // If we try to add the same quote back, it should be rejected as stale
         let req = SubmitQuotesRequest {
@@ -698,6 +697,17 @@ mod tests {
         };
         let resp = client_api.submit_quotes(&req).expect("submit quote failed");
         assert_eq!(resp.status_codes, vec![QuoteStatusCode::QUOTE_IS_STALE]);
+
+        // The quote book should still be empty
+        let mut req = GetQuotesRequest::default();
+        req.set_pair((&pair).into());
+        let resp = client_api.get_quotes(&req).expect("get quotes failed");
+        let received_scis = resp
+            .get_quotes()
+            .iter()
+            .map(|quote| SignedContingentInput::try_from(quote.get_sci()).unwrap())
+            .collect::<Vec<_>>();
+        assert_eq!(received_scis, vec![]);
     }
 
     #[test_with_logger]
