@@ -3,6 +3,7 @@ cargo-features = ["named-profiles"]
 [workspace]
 members = [
     "api",
+    "liquidity-bot",
     "mc-test-utils",
     "p2p",
     "quote-book/api",

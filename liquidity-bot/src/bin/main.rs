@@ -1,0 +1,35 @@
+// Copyright (c) 2023 MobileCoin Inc.
+
+use std::sync::Arc;
+
+use clap::Parser;
+use deqs_liquidity_bot::Config;
+use mc_common::logger::o;
+use mc_util_grpc::AdminServer;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let _sentry_guard = mc_common::sentry::init();
+    let config = Config::parse();
+    let (logger, _global_logger_guard) = mc_common::logger::create_app_logger(o!());
+    mc_common::setup_panic_handler();
+
+    // Start admin server
+    let config_json = serde_json::to_string(&config).expect("failed to serialize config to JSON");
+    let get_config_json = Arc::new(move || Ok(config_json.clone()));
+    let _admin_server = config.admin_listen_uri.as_ref().map(|admin_listen_uri| {
+        AdminServer::start(
+            None,
+            admin_listen_uri,
+            "DEQS-Liquidity-Bot".into(),
+            "".into(),
+            Some(get_config_json),
+            logger.clone(),
+        )
+        .expect("Failed starting admin server")
+    });
+
+
+
+    todo!()
+}
