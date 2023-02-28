@@ -86,14 +86,18 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
             .ledger
             .get_root_tx_out_membership_element()
             .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
+        let proofs = self
+            .ledger
+            .get_tx_out_proof_of_memberships(&quote.sci().tx_out_global_indices)
+            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
         //We should have a proof per txo.
-        if quote.sci().tx_in.ring.len() != quote.sci().tx_in.proofs.len() {
+        if quote.sci().tx_in.ring.len() != proofs.len() {
             return Err(Error::ImplementationSpecific(
                 "Missing membership proof".to_owned(),
             ));
         }
         //The implied root element of each proof should be the ledger root
-        for proof in &quote.sci().tx_in.proofs {
+        for proof in &proofs {
             let implied_root_element = compute_implied_merkle_root(proof)
                 .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
             if implied_root_element != root_element {
@@ -103,7 +107,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
             }
         }
         //The range of each of the proofs should be sensible
-        for root_proof in &quote.sci().tx_in.proofs {
+        for root_proof in &proofs {
             if root_proof
                 .elements
                 .iter()
@@ -125,13 +129,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
 
         //The membership proofs should be valid.
         let mut tx_outs_with_proofs: Vec<TxOutWithProofs> = Vec::new();
-        for (tx_out, proof) in quote
-            .sci()
-            .tx_in
-            .ring
-            .iter()
-            .zip(quote.sci().tx_in.proofs.iter())
-        {
+        for (tx_out, proof) in quote.sci().tx_in.ring.iter().zip(proofs.iter()) {
             let tx_out_with_proofs = TxOutWithProofs { tx_out, proof };
             tx_outs_with_proofs.push(tx_out_with_proofs);
         }
