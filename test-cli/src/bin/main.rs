@@ -2,12 +2,12 @@
 
 use clap::{Parser, Subcommand};
 use deqs_api::{
-    deqs::{QuoteStatusCode, RemoveQuoteRequest, SubmitQuotesRequest},
+    deqs::{QuoteStatusCode, SubmitQuotesRequest},
     deqs_grpc::DeqsClientApiClient,
     DeqsClientUri,
 };
 use deqs_mc_test_utils::{create_partial_sci, create_sci};
-use deqs_quote_book_api::{Quote, QuoteId};
+use deqs_quote_book_api::Quote;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_common::logger::{log, o};
 use mc_transaction_types::TokenId;
@@ -47,20 +47,6 @@ pub enum Command {
         /// Allow partial fills
         #[clap(long)]
         allow_partial_fills: bool,
-    },
-
-    /// Remove an quote.
-    RemoveQuote {
-        /// gRPC URI for client requests.
-        #[clap(long)]
-        deqs_uri: DeqsClientUri,
-
-        /// Quote id.
-        #[clap(
-            long,
-            value_parser = mc_util_parse::parse_hex::<[u8; 32]>
-        )]
-        quote_id: [u8; 32],
     },
 
     /// Generate a p2p keypair and write it to a file
@@ -173,17 +159,6 @@ fn main() {
                     }
                 }
             }
-        }
-
-        Command::RemoveQuote { quote_id, deqs_uri } => {
-            let ch =
-                ChannelBuilder::default_channel_builder(env).connect_to_uri(&deqs_uri, &logger);
-            let client_api = DeqsClientApiClient::new(ch);
-
-            let mut req = RemoveQuoteRequest::default();
-            req.set_quote_id((&QuoteId(quote_id)).into());
-            let resp = client_api.remove_quote(&req).expect("remove quote failed");
-            println!("{:#?}", resp);
         }
 
         Command::GenP2pKeypair { out } => {

@@ -17,9 +17,6 @@ service DeqsClientAPI {
     /// This is called to get the existing quotes
     rpc GetQuotes(GetQuotesRequest) returns (GetQuotesResponse) {}
 
-    /// Remove an quote from the quote book
-    rpc RemoveQuote(RemoveQuoteRequest) returns (RemoveQuoteResponse) {}
-
     /// Subscribe for live updates to the quote book
     rpc LiveUpdates(LiveUpdatesRequest) returns (stream LiveUpdate);
 }
@@ -48,7 +45,8 @@ enum QuoteStatusCode {
     INVALID_SCI = 1;
     UNSUPPORTED_SCI = 2;
     QUOTE_ALREADY_EXISTS = 3;
-    OTHER = 4;
+    QUOTE_IS_STALE = 4;
+    OTHER = 5;
 }
 
 message GetQuotesRequest {
@@ -65,14 +63,6 @@ message GetQuotesRequest {
 
 message GetQuotesResponse {
     repeated Quote quotes = 1;
-}
-
-message RemoveQuoteRequest {
-    QuoteId quote_id = 1;
-}
-
-message RemoveQuoteResponse {
-    Quote quote = 1;
 }
 
 message LiveUpdatesRequest {

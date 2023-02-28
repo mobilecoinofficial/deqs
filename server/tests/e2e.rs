@@ -1,10 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use deqs_api::{
-    deqs::{RemoveQuoteRequest, SubmitQuotesRequest},
-    deqs_grpc::DeqsClientApiClient,
-    DeqsClientUri,
-};
+use deqs_api::{deqs::SubmitQuotesRequest, deqs_grpc::DeqsClientApiClient, DeqsClientUri};
 use deqs_quote_book_api::{Pair, Quote, QuoteBook, QuoteId};
 use deqs_quote_book_in_memory::InMemoryQuoteBook;
 use deqs_quote_book_synchronized::SynchronizedQuoteBook;
@@ -75,31 +71,6 @@ async fn start_deqs_server(
     (deqs_server, synchronized_quote_book, client_api)
 }
 
-async fn start_in_memory_deqs_server(
-    p2p_bootstrap_from: &[&TestServer],
-    initial_scis: &[SignedContingentInput],
-    logger: &Logger,
-) -> (
-    Server<InMemoryQuoteBook>,
-    InMemoryQuoteBook,
-    DeqsClientApiClient,
-) {
-    let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(MSG_BUS_QUEUE_SIZE);
-    let internal_quote_book = InMemoryQuoteBook::default();
-
-    let (deqs_server, client_api) = start_deqs_server_for_quotebook(
-        initial_scis,
-        &internal_quote_book,
-        p2p_bootstrap_from,
-        msg_bus_tx,
-        msg_bus_rx,
-        logger,
-    )
-    .await;
-
-    (deqs_server, internal_quote_book, client_api)
-}
-
 async fn start_deqs_server_for_quotebook<Q: QuoteBook>(
     initial_scis: &[SignedContingentInput],
     quote_book: &Q,
@@ -167,10 +138,10 @@ async fn e2e_two_nodes_quote_propagation(logger: Logger) {
     let ledger_db = create_and_initialize_test_ledger();
 
     // Start two DEQS servers
-    let (deqs_server1, quote_book1, client1) =
+    let (deqs_server1, _quote_book1, client1) =
         start_deqs_server(&ledger_db, &[], &[], &logger).await;
 
-    let (_deqs_server2, quote_book2, client2) =
+    let (_deqs_server2, quote_book2, _client2) =
         start_deqs_server(&ledger_db, &[&deqs_server1], &[], &logger).await;
 
     // Submit an SCI to the first server
@@ -198,37 +169,12 @@ async fn e2e_two_nodes_quote_propagation(logger: Logger) {
     .unwrap();
 
     assert_eq!(quote.sci(), &sci);
-
-    // Request the second server to remove the SCI, the change should propagate to
-    // the first server. First sanity test that SCI is in fact in the quote book
-    // of the first server.
-    assert_eq!(
-        quote_book1.get_quote_by_id(&quote_id).unwrap().unwrap(),
-        quote
-    );
-
-    let mut req = RemoveQuoteRequest::default();
-    req.set_quote_id((&quote_id).into());
-    let _resp = client2.remove_quote(&req).expect("remove quote failed");
-
-    // Quote should eventually be removed from the first server
-    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(30); // limit to 30 retries
-    Retry::spawn(retry_strategy, || async {
-        let quote = quote_book1.get_quote_by_id(&quote_id);
-        match quote {
-            Ok(Some(_quote)) => Err("not yet".to_string()),
-            Ok(None) => Ok(()),
-            Err(e) => Err(format!("error: {:?}", e)),
-        }
-    })
-    .await
-    .unwrap();
 }
 
-/// Test that two nodes propagate quotes being added and removed to each other
-/// where one does not have a ledger.
+/// Test that two nodes propagate quotes being added, and when the ledger
+/// invalidates it, they both remove it
 #[async_test_with_logger]
-async fn e2e_two_nodes_quote_propagation_to_ledger_free_node(logger: Logger) {
+async fn e2e_two_nodes_quote_propagation_and_removal(logger: Logger) {
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
     let mut ledger_db = create_and_initialize_test_ledger();
 
@@ -237,7 +183,7 @@ async fn e2e_two_nodes_quote_propagation_to_ledger_free_node(logger: Logger) {
         start_deqs_server(&ledger_db, &[], &[], &logger).await;
 
     let (_deqs_server2, quote_book2, _client2) =
-        start_in_memory_deqs_server(&[&deqs_server1], &[], &logger).await;
+        start_deqs_server(&ledger_db, &[&deqs_server1], &[], &logger).await;
 
     // Submit an SCI to the first server
     let sci =
@@ -299,6 +245,19 @@ async fn e2e_two_nodes_quote_propagation_to_ledger_free_node(logger: Logger) {
     .unwrap();
 
     // Quote should eventually be removed from the first server
+    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(30); // limit to 30 retries
+    Retry::spawn(retry_strategy, || async {
+        let quote = quote_book1.get_quote_by_id(&quote_id);
+        match quote {
+            Ok(Some(_quote)) => Err("not yet".to_string()),
+            Ok(None) => Ok(()),
+            Err(e) => Err(format!("error: {:?}", e)),
+        }
+    })
+    .await
+    .unwrap();
+
+    // Quote should eventually be removed from the second server
     let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(30); // limit to 30 retries
     Retry::spawn(retry_strategy, || async {
         let quote = quote_book2.get_quote_by_id(&quote_id);
