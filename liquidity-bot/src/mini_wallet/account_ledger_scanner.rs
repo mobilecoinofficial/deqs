@@ -1,5 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+use crate::Error;
 use mc_account_keys::{AccountKey, CHANGE_SUBADDRESS_INDEX, DEFAULT_SUBADDRESS_INDEX};
 use mc_blockchain_types::{BlockContents, BlockIndex};
 use mc_common::logger::{log, Logger};
@@ -15,12 +16,14 @@ use mc_transaction_core::{
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use std::{
     collections::HashMap,
+    path::PathBuf,
+    sync::{Arc, Mutex},
     thread,
     thread::JoinHandle,
     time::{Duration, Instant},
 };
 
-use crate::Error;
+use super::{MatchedTxOut, State};
 
 pub struct AccountLedgerScanner {
     join_handle: Option<JoinHandle<()>>,
@@ -29,7 +32,8 @@ impl AccountLedgerScanner {
     pub fn new(
         ledger_db: LedgerDB,
         account_key: AccountKey,
-        next_block_index: BlockIndex,
+        state: Arc<Mutex<State>>,
+        state_file: PathBuf,
         logger: Logger,
     ) -> AccountLedgerScanner {
         // TODO
@@ -49,9 +53,10 @@ impl AccountLedgerScanner {
                         ledger_db,
                         account_key,
                         logger,
-                        next_block_index,
                         last_log_time: Instant::now(),
                         spsk_to_index,
+                        state,
+                        state_file,
                     };
                     thread.run();
                 })
@@ -64,44 +69,42 @@ impl AccountLedgerScanner {
 const SCAN_CHUNK_SIZE: usize = 1000;
 const LOG_INTERVAL: Duration = Duration::from_secs(1);
 
-struct MatchedTxOut {
-    tx_out: TxOut,
-    amount: Amount,
-    subaddress_index: u64,
-    key_image: KeyImage,
-}
 struct ScannedBlock {
     block_index: BlockIndex,
     matched_tx_outs: Vec<MatchedTxOut>,
+    key_images: Vec<KeyImage>,
 }
 
 struct AccountLedgerScannerWorker {
     ledger_db: LedgerDB,
     account_key: AccountKey,
     logger: Logger,
-    next_block_index: BlockIndex,
     last_log_time: Instant,
     spsk_to_index: HashMap<RistrettoPublic, u64>,
+    state: Arc<Mutex<State>>,
+    state_file: PathBuf,
 }
 impl AccountLedgerScannerWorker {
     // TODO stop trigger
     pub fn run(mut self) {
         loop {
-            let last_block_index = self.next_block_index + SCAN_CHUNK_SIZE as u64;
+            let next_block_index = self.state.lock().unwrap().next_block_index;
+
+            let last_block_index = next_block_index + SCAN_CHUNK_SIZE as u64;
             log::trace!(
                 self.logger,
                 "Trying to scan block {}-{}",
-                self.next_block_index,
+                next_block_index,
                 last_block_index,
             );
 
             if self.last_log_time.elapsed() > LOG_INTERVAL {
-                log::info!(self.logger, "Scanned up to block {}", self.next_block_index);
+                log::info!(self.logger, "Scanned up to block {}", next_block_index);
                 self.last_log_time = Instant::now();
             }
 
             // Try to load and scan blocks in parallel.
-            let results = (self.next_block_index..last_block_index)
+            let results = (next_block_index..last_block_index)
                 .into_par_iter()
                 .map(|block_index| {
                     let block_contents = self.ledger_db.get_block_contents(block_index);
@@ -117,13 +120,27 @@ impl AccountLedgerScannerWorker {
                 .expect("Could not scan blocks"); // TODO
 
             // Process the results.
-            let orig_next_block_index = self.next_block_index;
+            let mut state = self.state.lock().unwrap();
+            let orig_next_block_index = state.next_block_index;
             for result in results.into_iter().flatten() {
-                assert_eq!(result.block_index, self.next_block_index);
-                self.next_block_index += 1;
-            }
+                assert_eq!(result.block_index, state.next_block_index);
+                state.next_block_index += 1;
 
-            if orig_next_block_index == self.next_block_index {
+                for matched_tx_out in result.matched_tx_outs {
+                    state
+                        .matched_tx_outs
+                        .insert(matched_tx_out.key_image, matched_tx_out);
+                }
+
+                for key_image in result.key_images {
+                    state.matched_tx_outs.remove(&key_image);
+                }
+            }
+            state.save(&self.state_file).expect("Could not save state");
+            let next_block_index = state.next_block_index;
+            drop(state);
+
+            if orig_next_block_index == next_block_index {
                 // We didn't find any new blocks, so sleep for a bit.
                 thread::sleep(Duration::from_millis(100));
             }
@@ -150,9 +167,18 @@ impl AccountLedgerScannerWorker {
             }
         }
 
+        let state = self.state.lock().unwrap();
+        let key_images = block_contents
+            .key_images
+            .iter()
+            .filter(|key_image| state.matched_tx_outs.contains_key(key_image))
+            .cloned()
+            .collect();
+
         Ok(ScannedBlock {
             block_index,
             matched_tx_outs,
+            key_images,
         })
     }
 

@@ -3,7 +3,7 @@
 use std::sync::Arc;
 
 use clap::Parser;
-use deqs_liquidity_bot::{AccountLedgerScanner, Config};
+use deqs_liquidity_bot::{mini_wallet::MiniWallet, Config};
 use mc_common::logger::o;
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
@@ -42,7 +42,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // TODO
-    let _account_ledger_scanner = AccountLedgerScanner::new(ledger_db, account_key, 0, logger);
+    let wallet = MiniWallet::new(&config.wallet_db, ledger_db, account_key, logger)
+        .expect("Could not create MiniWallet");
 
     // Wait until we are asked to quit.
     tokio::signal::ctrl_c().await?;

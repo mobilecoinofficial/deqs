@@ -43,4 +43,8 @@ pub struct Config {
     /// Account key file
     #[clap(long, env = "MC_ACCOUNT_KEY")]
     pub account_key: PathBuf,
+
+    /// Wallet state file
+    #[clap(long, env = "WALLET_DB")]
+    pub wallet_db: PathBuf,
 }

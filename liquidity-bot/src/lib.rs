@@ -1,14 +1,13 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 mod config;
-mod account_ledger_scanner;
+pub mod mini_wallet;
 
 pub use config::Config;
-pub use account_ledger_scanner::AccountLedgerScanner;
 
 use displaydoc::Display;
 use mc_common::logger::{log, Logger};
-use mc_crypto_keys::{RistrettoPublic, KeyError};
+use mc_crypto_keys::{KeyError, RistrettoPublic};
 use mc_crypto_ring_signature_signer::LocalRingSigner;
 use mc_fog_report_resolver::FogResolver;
 use mc_ledger_db::{Ledger, LedgerDB};
@@ -20,12 +19,15 @@ use mc_transaction_core::{
     get_tx_out_shared_secret,
     onetime_keys::recover_onetime_private_key,
     tx::{TxOut, TxOutMembershipProof},
-    AccountKey, Amount, BlockVersion, TokenId, TxOutConversionError, AmountError,
+    AccountKey, Amount, AmountError, BlockVersion, TokenId, TxOutConversionError,
 };
 use mc_transaction_extra::SignedContingentInput;
 use rand::Rng;
 use rust_decimal::{prelude::ToPrimitive, Decimal};
-use std::collections::{HashMap, HashSet};
+use std::{
+    collections::{HashMap, HashSet},
+    io,
+};
 
 /// A TxOut
 
@@ -180,6 +182,7 @@ impl LiquidityBot {
 }
 
 use mc_ledger_db::Error as LedgerDbError;
+use serde_json::Error as JsonError;
 #[derive(Debug, Display)]
 pub enum Error {
     /// Ledger Db: {0}
@@ -199,6 +202,12 @@ pub enum Error {
 
     /// Crypto key: {0}
     Key(KeyError),
+
+    /// IO: {0}
+    IO(io::Error),
+
+    /// Json: {0}
+    Json(JsonError),
 }
 impl From<LedgerDbError> for Error {
     fn from(src: LedgerDbError) -> Self {
@@ -228,5 +237,15 @@ impl From<TxOutConversionError> for Error {
 impl From<KeyError> for Error {
     fn from(src: KeyError) -> Self {
         Self::Key(src)
+    }
+}
+impl From<io::Error> for Error {
+    fn from(src: io::Error) -> Self {
+        Self::IO(src)
+    }
+}
+impl From<JsonError> for Error {
+    fn from(src: JsonError) -> Self {
+        Self::Json(src)
     }
 }
