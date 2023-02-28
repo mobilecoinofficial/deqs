@@ -5,6 +5,10 @@ use mc_blockchain_types::BlockIndex;
 use mc_common::logger::{log, Logger};
 use mc_crypto_ring_signature::KeyImage;
 use mc_ledger_db::{Error as LedgerError, Ledger};
+use mc_transaction_core::{
+    membership_proofs::{compute_implied_merkle_root, is_membership_proof_valid},
+    tx::{TxOut, TxOutMembershipProof},
+};
 use std::{
     ops::RangeBounds,
     sync::{
@@ -76,6 +80,82 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
     pub fn get_current_block_index(&self) -> u64 {
         self.highest_processed_block_index.load(Ordering::SeqCst)
     }
+
+    fn validate_quote_membership_proofs(&self, quote: &Quote) -> Result<(), Error> {
+        let root_element = self
+            .ledger
+            .get_root_tx_out_membership_element()
+            .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
+        //We should have a proof per txo.
+        if quote.sci().tx_in.ring.len() != quote.sci().tx_in.proofs.len() {
+            return Err(Error::ImplementationSpecific(
+                "Missing membership proof".to_owned(),
+            ));
+        }
+        //The implied root element of each proof should be the ledger root
+        for proof in &quote.sci().tx_in.proofs {
+            let implied_root_element = compute_implied_merkle_root(proof)
+                .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
+            if implied_root_element != root_element {
+                return Err(Error::ImplementationSpecific(
+                    "Invalid root element".to_owned(),
+                ));
+            }
+        }
+        //The range of each of the proofs should be sensible
+        for root_proof in &quote.sci().tx_in.proofs {
+            if root_proof
+                .elements
+                .iter()
+                .any(|element| element.range.from > element.range.to)
+            {
+                return Err(Error::ImplementationSpecific(
+                    "Invalid proof range".to_owned(),
+                ));
+            }
+        }
+        struct TxOutWithProofs<'a> {
+            /// A TxOut used as an input ring element.
+            tx_out: &'a TxOut,
+
+            /// A membership proof for `tx_out` provided by the transaction
+            /// author.
+            proof: &'a TxOutMembershipProof,
+        }
+
+        //The membership proofs should be valid.
+        let mut tx_outs_with_proofs: Vec<TxOutWithProofs> = Vec::new();
+        for (tx_out, proof) in quote
+            .sci()
+            .tx_in
+            .ring
+            .iter()
+            .zip(quote.sci().tx_in.proofs.iter())
+        {
+            let tx_out_with_proofs = TxOutWithProofs { tx_out, proof };
+            tx_outs_with_proofs.push(tx_out_with_proofs);
+        }
+
+        for tx_out_with_proof in tx_outs_with_proofs {
+            // Check the tx_out's membership proof against this root hash.
+            match is_membership_proof_valid(
+                tx_out_with_proof.tx_out,
+                tx_out_with_proof.proof,
+                root_element.hash.as_ref(),
+            ) {
+                Err(err) => {
+                    return Err(Error::ImplementationSpecific(err.to_string()));
+                }
+                Ok(is_valid) => {
+                    if !is_valid {
+                        return Err(Error::ImplementationSpecific("Invalid proof".to_owned()));
+                    }
+                    // Else, the membership proof is valid.
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 impl<Q, L> QuoteBook for SynchronizedQuoteBook<Q, L>
@@ -107,6 +187,7 @@ where
         {
             return Err(Error::QuoteIsStale);
         }
+        self.validate_quote_membership_proofs(quote)?;
 
         // Try adding to quote book.
         self.quote_book.add_quote(quote)
