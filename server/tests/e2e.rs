@@ -132,7 +132,7 @@ async fn wait_for_quotes(
 }
 
 /// Test that two nodes propagate quotes being added and removed to eachother.
-#[async_test_with_logger]
+#[async_test_with_logger(flavor = "multi_thread")]
 async fn e2e_two_nodes_quote_propagation(logger: Logger) {
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
     let ledger_db = create_and_initialize_test_ledger();
@@ -173,7 +173,7 @@ async fn e2e_two_nodes_quote_propagation(logger: Logger) {
 
 /// Test that two nodes propagate quotes being added, and when the ledger
 /// invalidates it, they both remove it
-#[async_test_with_logger]
+#[async_test_with_logger(flavor = "multi_thread")]
 async fn e2e_two_nodes_quote_propagation_and_removal(logger: Logger) {
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
     let mut ledger_db = create_and_initialize_test_ledger();
@@ -273,7 +273,7 @@ async fn e2e_two_nodes_quote_propagation_and_removal(logger: Logger) {
 
 /// Test that two nodes exchange their quote books when they connect to
 /// eachother.
-#[async_test_with_logger]
+#[async_test_with_logger(flavor = "multi_thread")]
 async fn e2e_two_nodes_initial_sync(logger: Logger) {
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
     let ledger_db = create_and_initialize_test_ledger();
@@ -332,7 +332,7 @@ async fn e2e_two_nodes_initial_sync(logger: Logger) {
 
 /// Test that a five node network propagates quotes correctly. This is a
 /// combination of the two tests above, with a few more nodes.
-#[async_test_with_logger]
+#[async_test_with_logger(flavor = "multi_thread")]
 async fn e2e_multiple_nodes_play_nicely(logger: Logger) {
     const NUM_NODES: usize = 5;
     let pair = Pair {
