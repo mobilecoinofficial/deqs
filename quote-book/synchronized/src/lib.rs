@@ -118,29 +118,12 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
                 ));
             }
         }
-        struct TxOutWithProofs<'a> {
-            /// A TxOut used as an input ring element.
-            tx_out: &'a TxOut,
 
-            /// A membership proof for `tx_out` provided by the transaction
-            /// author.
-            proof: &'a TxOutMembershipProof,
-        }
-
-        //The membership proofs should be valid.
-        let mut tx_outs_with_proofs: Vec<TxOutWithProofs> = Vec::new();
-        for (tx_out, proof) in quote.sci().tx_in.ring.iter().zip(proofs.iter()) {
-            let tx_out_with_proofs = TxOutWithProofs { tx_out, proof };
-            tx_outs_with_proofs.push(tx_out_with_proofs);
-        }
-
-        for tx_out_with_proof in tx_outs_with_proofs {
+        let tx_outs_with_proofs: Vec<(&TxOut, &TxOutMembershipProof)> =
+            quote.sci().tx_in.ring.iter().zip(proofs.iter()).collect();
+        for (tx_out, proof) in tx_outs_with_proofs {
             // Check the tx_out's membership proof against this root hash.
-            match is_membership_proof_valid(
-                tx_out_with_proof.tx_out,
-                tx_out_with_proof.proof,
-                root_element.hash.as_ref(),
-            ) {
+            match is_membership_proof_valid(tx_out, proof, root_element.hash.as_ref()) {
                 Err(err) => {
                     return Err(Error::ImplementationSpecific(err.to_string()));
                 }
