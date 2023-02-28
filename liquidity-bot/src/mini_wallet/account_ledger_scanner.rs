@@ -173,7 +173,15 @@ impl AccountLedgerScannerWorker {
             .iter()
             .filter(|key_image| state.matched_tx_outs.contains_key(key_image))
             .cloned()
-            .collect();
+            .collect::<Vec<_>>();
+        if !key_images.is_empty() {
+            log::info!(
+                self.logger,
+                "Recognized {} key images belonging to our account in block {}",
+                key_images.len(),
+                block_index
+            );
+        }
 
         Ok(ScannedBlock {
             block_index,

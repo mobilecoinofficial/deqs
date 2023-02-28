@@ -1219,6 +1219,7 @@ dependencies = [
  "mc-util-grpc",
  "mc-util-keyfile",
  "mc-util-metrics",
+ "mc-util-serial",
  "mc-util-uri",
  "prometheus",
  "rand 0.8.5",

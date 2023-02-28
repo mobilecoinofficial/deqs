@@ -33,9 +33,17 @@ pub struct State {
     matched_tx_outs: HashMap<KeyImage, MatchedTxOut>,
 }
 impl State {
+    pub fn load(state_file: &PathBuf) -> Result<Self, Error> {
+        if state_file.exists() {
+            let bytes = std::fs::read(&state_file)?;
+            Ok(mc_util_serial::deserialize(&bytes).expect("TODO"))
+        } else {
+            Ok(Self::default())
+        }
+    }
     pub fn save(&self, path: &PathBuf) -> Result<(), Error> {
-        let state = serde_json::to_string(self)?;
-        std::fs::write(&path, state)?;
+        let bytes = mc_util_serial::serialize(&self).expect("TODO");
+        std::fs::write(&path, bytes)?;
         Ok(())
     }
 }
@@ -54,15 +62,7 @@ impl MiniWallet {
     ) -> Result<MiniWallet, Error> {
         let state_file = state_file.as_ref().to_path_buf();
 
-        let state = if state_file.exists() {
-            let state = std::fs::read_to_string(&state_file)?;
-            let state: State = serde_json::from_str(&state)?;
-            state
-        } else {
-            State::default()
-        };
-
-        let state = Arc::new(Mutex::new(state));
+        let state = Arc::new(Mutex::new(State::load(&state_file)?));
 
         let account_ledger_scanner =
             AccountLedgerScanner::new(ledger_db, account_key, state.clone(), state_file, logger);
