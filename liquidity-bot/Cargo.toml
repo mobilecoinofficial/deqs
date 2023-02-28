@@ -17,22 +17,25 @@ deqs-api = { path = "../api" }
 deqs-quote-book-api = { path = "../quote-book/api" }
 
 mc-account-keys = { path = "../mobilecoin/account-keys" }
+mc-blockchain-types = { path = "../mobilecoin/blockchain/types" }
 mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
 mc-crypto-keys = { path = "../mobilecoin/crypto/keys" }
 mc-crypto-ring-signature-signer = { path = "../mobilecoin/crypto/ring-signature/signer" }
+mc-fog-report-resolver = { path = "../mobilecoin/fog/report/resolver" }
 mc-ledger-db = { path = "../mobilecoin/ledger/db" }
 mc-transaction-builder = { path = "../mobilecoin/transaction/builder" }
 mc-transaction-core = { path = "../mobilecoin/transaction/core" }
 mc-transaction-extra = { path = "../mobilecoin/transaction/extra" }
-mc-fog-report-resolver = { path = "../mobilecoin/fog/report/resolver" }
 mc-transaction-types = { path = "../mobilecoin/transaction/types" }
 mc-util-grpc = { path = "../mobilecoin/util/grpc" }
+mc-util-keyfile = { path = "../mobilecoin/util/keyfile" }
 mc-util-metrics  = { path = "../mobilecoin/util/metrics" }
 mc-util-uri = { path = "../mobilecoin/util/uri" }
 
 clap = { version = "4.0", features = ["derive", "env"] }
 displaydoc = { version = "0.2", default-features = false }
 futures = "0.3"
+hex = "0.4"
 grpcio = "0.12.0"
 lazy_static = "1.4"
 prometheus = "0.13"
@@ -40,4 +43,5 @@ rand = "0.8"
 rust_decimal = "1.28"
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
 serde_json = "1.0"
+rayon = "1.6"
 tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros", "time", "signal", "sync"] }

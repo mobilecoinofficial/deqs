@@ -1,13 +1,14 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 mod config;
+mod account_ledger_scanner;
 
 pub use config::Config;
+pub use account_ledger_scanner::AccountLedgerScanner;
 
-use deqs_quote_book_api::Pair;
 use displaydoc::Display;
-use mc_common::logger::log;
-use mc_crypto_keys::RistrettoPublic;
+use mc_common::logger::{log, Logger};
+use mc_crypto_keys::{RistrettoPublic, KeyError};
 use mc_crypto_ring_signature_signer::LocalRingSigner;
 use mc_fog_report_resolver::FogResolver;
 use mc_ledger_db::{Ledger, LedgerDB};
@@ -19,7 +20,7 @@ use mc_transaction_core::{
     get_tx_out_shared_secret,
     onetime_keys::recover_onetime_private_key,
     tx::{TxOut, TxOutMembershipProof},
-    AccountKey, Amount, BlockVersion, TokenId,
+    AccountKey, Amount, BlockVersion, TokenId, TxOutConversionError, AmountError,
 };
 use mc_transaction_extra::SignedContingentInput;
 use rand::Rng;
@@ -169,6 +170,12 @@ impl LiquidityBot {
             &mut rng,
         )?;
         let sci = builder.build(&LocalRingSigner::from(&self.account_key), &mut rng)?;
+
+        Ok(TrackedTxOut {
+            tx_out,
+            sci,
+            quote: None,
+        })
     }
 }
 
@@ -183,6 +190,15 @@ pub enum Error {
 
     /// Signed Contingent Input Builder: {0}
     SignedContingentInputBuilder(SignedContingentInputBuilderError),
+
+    /// Amount: {0}
+    Amount(AmountError),
+
+    /// TxOut conversion: {0}
+    TxOutConversion(TxOutConversionError),
+
+    /// Crypto key: {0}
+    Key(KeyError),
 }
 impl From<LedgerDbError> for Error {
     fn from(src: LedgerDbError) -> Self {
@@ -197,5 +213,20 @@ impl From<TxBuilderError> for Error {
 impl From<SignedContingentInputBuilderError> for Error {
     fn from(src: SignedContingentInputBuilderError) -> Self {
         Self::SignedContingentInputBuilder(src)
+    }
+}
+impl From<AmountError> for Error {
+    fn from(src: AmountError) -> Self {
+        Self::Amount(src)
+    }
+}
+impl From<TxOutConversionError> for Error {
+    fn from(src: TxOutConversionError) -> Self {
+        Self::TxOutConversion(src)
+    }
+}
+impl From<KeyError> for Error {
+    fn from(src: KeyError) -> Self {
+        Self::Key(src)
     }
 }

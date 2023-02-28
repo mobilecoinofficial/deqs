@@ -2,6 +2,8 @@
 
 //! Configuration parameters for a liquidity bot
 
+use std::path::PathBuf;
+
 use clap::Parser;
 use deqs_api::DeqsClientUri;
 use mc_transaction_types::TokenId;
@@ -33,4 +35,12 @@ pub struct Config {
     /// This specifies how many counter tokens are needed to get one base token.
     #[clap(long, env = "DEQS_SWAP_RATE")]
     pub swap_rate: Decimal,
+
+    /// Ledger DB path
+    #[clap(long, env = "MC_LEDGER_DB")]
+    pub ledger_db: PathBuf,
+
+    /// Account key file
+    #[clap(long, env = "MC_ACCOUNT_KEY")]
+    pub account_key: PathBuf,
 }
