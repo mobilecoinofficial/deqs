@@ -21,3 +21,4 @@ mod convert;
 mod uri;
 
 pub use uri::DeqsClientUri;
+pub use mc_api::ConversionError;

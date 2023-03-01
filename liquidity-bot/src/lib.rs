@@ -11,7 +11,12 @@ pub mod mini_wallet;
 
 pub use config::Config;
 
-use deqs_api::{deqs::SubmitQuotesRequest, deqs_grpc::DeqsClientApiClient, DeqsClientUri};
+use deqs_api::{
+    deqs::{QuoteStatusCode, SubmitQuotesRequest, SubmitQuotesResponse},
+    deqs_grpc::DeqsClientApiClient,
+    DeqsClientUri,
+};
+use deqs_quote_book_api::QuoteId;
 use displaydoc::Display;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_common::logger::{log, Logger};
@@ -37,30 +42,29 @@ use rust_decimal::{prelude::ToPrimitive, Decimal};
 use std::{
     collections::{HashMap, HashSet},
     io,
-    sync::{Arc, Mutex},
+    sync::Arc,
+    time::Duration,
 };
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, time::interval};
 
-/// A TxOut
+// /// Possible statuses for a tracked TxOut
+// #[derive(Clone, Debug, Display)]
+// pub enum TrackedTxOutStatus {
+//     /// Pending submission to the DEQS
+//     PendingSubmission,
 
-/// Possible statuses for a tracked TxOut
-#[derive(Clone, Debug, Display)]
-pub enum TrackedTxOutStatus {
-    /// Pending submission to the DEQS
-    PendingSubmission,
+//     /// Live - listed on the DEQS
+//     Live,
 
-    /// Live - listed on the DEQS
-    Live,
+//     /**
+//      * Canceled - the TxOut was spent but we didn't get the counter tokens
+//      * in return.
+//      */
+//     Canceled,
 
-    /**
-     * Canceled - the TxOut was spent but we didn't get the counter tokens
-     * in return.
-     */
-    Canceled,
-
-    /// Used - the TxOut was consumed and we got some counter tokens in return.
-    Used,
-}
+//     /// Used - the TxOut was consumed and we got some counter tokens in
+// return.     Used,
+// }
 
 /// A TxOut we keep track of
 #[derive(Clone, Debug)]
@@ -91,6 +95,9 @@ struct LiquidityBotTask {
     /// List of TxOuts we would like to submit to the DEQS.
     pending_tx_outs: Vec<TrackedTxOut>,
 
+    /// List of TxOuts we successfully submitted to the DEQS.
+    live_tx_outs: Vec<TrackedTxOut>,
+
     /// Logger.
     logger: Logger,
 
@@ -102,13 +109,22 @@ struct LiquidityBotTask {
 }
 impl LiquidityBotTask {
     pub async fn run(mut self) {
+        // TODO
+        let mut resubmit_tx_outs_interval = interval(Duration::from_secs(1));
+        resubmit_tx_outs_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+
         loop {
             tokio::select! {
                 event = self.wallet_event_rx.recv() => {
                     match event {
                         Some(WalletEvent::ReceivedTxOut { matched_tx_out }) => {
                             match self.add_tx_out(matched_tx_out).await {
-                                Ok(_) => {}
+                                Ok(_) => {
+                                    if let Err(err) = self.submit_pending_tx_outs().await {
+                                        log::info!(self.logger, "Error resubmitting TxOuts: {}", err);
+                                    }
+
+                                }
                                 Err(err) => {
                                     log::error!(self.logger, "Error adding TxOut: {}", err);
                                 }
@@ -123,35 +139,86 @@ impl LiquidityBotTask {
                         }
                     }
                 }
+
+                _ = resubmit_tx_outs_interval.tick() => {
+                    if let Err(err) = self.submit_pending_tx_outs().await {
+                        log::info!(self.logger, "Error resubmitting TxOuts: {}", err);
+                    }
+                    if let Err(err) = self.resubmit_live_tx_outs().await {
+                        log::info!(self.logger, "Error resubmitting TxOuts: {}", err);
+                    }
+                }
             }
         }
     }
 
     async fn add_tx_out(&mut self, matched_tx_out: MatchedTxOut) -> Result<(), Error> {
         let tracked_tx_out = self.create_tracked_tx_out(matched_tx_out)?;
+        self.pending_tx_outs.push(tracked_tx_out);
 
-        // Try and submit to the DEQS.
-        match self.submit_to_deqs(&tracked_tx_out).await {
-            Ok(_) => {}
+        Ok(())
+    }
 
-            // TODO there are errors where we dont want to retry.
-            Err(err) => {
-                log::error!(self.logger, "Error submitting to DEQS: {}", err);
-                self.pending_tx_outs.push(tracked_tx_out);
+    async fn submit_pending_tx_outs(&mut self) -> Result<(), Error> {
+        // TODO should batch in case we have too many
+        if self.pending_tx_outs.is_empty() {
+            return Ok(());
+        }
+
+        let scis = self
+            .pending_tx_outs
+            .iter()
+            .map(|tracked_tx_out| (&tracked_tx_out.sci).into())
+            .collect();
+        let mut req = SubmitQuotesRequest::default();
+        req.set_quotes(scis);
+
+        let resp = self.deqs_client.submit_quotes_async(&req)?.await?;
+        sanity_check_submit_quotes_response(&resp, req.quotes.len())?;
+
+        for (tracked_tx_out, status_code, error_msg, quote) in itertools::izip!(
+            self.pending_tx_outs.drain(..),
+            &resp.status_codes,
+            &resp.error_messages,
+            &resp.quotes
+        ) {
+            match status_code {
+                QuoteStatusCode::CREATED => {
+                    let quote_id = QuoteId::try_from(quote.get_id())?;
+                    log::info!(
+                        self.logger,
+                        "Submitted TxOut to DEQS, quote id is {}",
+                        quote_id
+                    );
+                    let mut tracked_tx_out = tracked_tx_out.clone();
+                    tracked_tx_out.quote = Some(resp.quotes[0].clone());
+                    self.live_tx_outs.push(tracked_tx_out);
+                }
+
+                QuoteStatusCode::QUOTE_ALREADY_EXISTS => {
+                    log::info!(self.logger, "DEQS rejected TxOut: quote already exists");
+                }
+
+                QuoteStatusCode::QUOTE_IS_STALE => {
+                    log::info!(self.logger, "DEQS rejected TxOut: quote is stale");
+                }
+
+                err => {
+                    log::error!(
+                        self.logger,
+                        "DEQS rejected TxOut for a reason we did not expect: {:?} ({})",
+                        err,
+                        error_msg,
+                    );
+                }
             }
         }
 
         Ok(())
     }
 
-    async fn submit_to_deqs(&self, tracked_tx_out: &TrackedTxOut) -> Result<(), Error> {
-        let sci: deqs_api::external::SignedContingentInput = (&tracked_tx_out.sci).into();
-        let mut req = SubmitQuotesRequest::default();
-        req.set_quotes(vec![sci].into());
-
-        let resp = self.deqs_client.submit_quotes_async(&req)?.await?;
-
-        Ok(())
+    async fn resubmit_live_tx_outs(&mut self) -> Result<(), Error> {
+        todo!()
     }
 
     fn create_tracked_tx_out(&self, matched_tx_out: MatchedTxOut) -> Result<TrackedTxOut, Error> {
@@ -248,9 +315,6 @@ impl LiquidityBotTask {
 pub struct LiquidityBot {
     /// Wallet event tx
     wallet_event_tx: mpsc::UnboundedSender<WalletEvent>,
-
-    /// Logger.
-    logger: Logger,
 }
 impl LiquidityBot {
     /// Construct a new LiquidityBot instance.
@@ -272,15 +336,13 @@ impl LiquidityBot {
             ledger_db,
             pairs,
             pending_tx_outs: Vec::new(),
+            live_tx_outs: Vec::new(),
             wallet_event_rx,
             deqs_client,
             logger: logger.clone(),
         };
         tokio::spawn(task.run());
-        Self {
-            wallet_event_tx,
-            logger,
-        }
+        Self { wallet_event_tx }
     }
 
     /// Bridge in a wallet event.
@@ -289,6 +351,25 @@ impl LiquidityBot {
             .send(event)
             .expect("wallet event tx failed");
     }
+}
+
+fn sanity_check_submit_quotes_response(
+    resp: &SubmitQuotesResponse,
+    expected_len: usize,
+) -> Result<(), Error> {
+    if resp.status_codes.len() != expected_len {
+        return Err(Error::InvalidGrpcResponse(format!("Number of status codes in response does not match number of quotes in request. Expected {}, got {}.", expected_len, resp.status_codes.len())));
+    }
+
+    if resp.error_messages.len() != expected_len {
+        return Err(Error::InvalidGrpcResponse(format!("Number of error messages in response does not match number of quotes in request. Expected {}, got {}.", expected_len, resp.error_messages.len())));
+    }
+
+    if resp.quotes.len() != expected_len {
+        return Err(Error::InvalidGrpcResponse(format!("Number of quotes in response does not match number of quotes in request. Expected {}, got {}.", expected_len, resp.quotes.len())));
+    }
+
+    Ok(())
 }
 
 use mc_ledger_db::Error as LedgerDbError;
@@ -321,6 +402,12 @@ pub enum Error {
 
     /// GRPC: {0}
     Grpc(grpcio::Error),
+
+    /// Invalid GRPC response: {0}
+    InvalidGrpcResponse(String),
+
+    /// Api Conversion: {0}
+    ApiConversion(deqs_api::ConversionError),
 }
 impl From<LedgerDbError> for Error {
     fn from(src: LedgerDbError) -> Self {
@@ -365,5 +452,10 @@ impl From<JsonError> for Error {
 impl From<grpcio::Error> for Error {
     fn from(src: grpcio::Error) -> Self {
         Self::Grpc(src)
+    }
+}
+impl From<deqs_api::ConversionError> for Error {
+    fn from(src: deqs_api::ConversionError) -> Self {
+        Self::ApiConversion(src)
     }
 }
