@@ -65,7 +65,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         config.base_token_id,
         (config.counter_token_id, config.swap_rate),
     )]);
-    let liquidity_bot = LiquidityBot::new(account_key, ledger_db, pairs, logger.clone());
+    let liquidity_bot =
+        LiquidityBot::new(account_key, ledger_db, pairs, &config.deqs, logger.clone());
 
     loop {
         tokio::select! {

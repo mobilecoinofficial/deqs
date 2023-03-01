@@ -11,7 +11,9 @@ pub mod mini_wallet;
 
 pub use config::Config;
 
+use deqs_api::{deqs::SubmitQuotesRequest, deqs_grpc::DeqsClientApiClient, DeqsClientUri};
 use displaydoc::Display;
+use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_common::logger::{log, Logger};
 use mc_crypto_keys::{KeyError, RistrettoPublic};
 use mc_crypto_ring_signature_signer::LocalRingSigner;
@@ -28,6 +30,7 @@ use mc_transaction_core::{
     AccountKey, Amount, AmountError, BlockVersion, TokenId, TxOutConversionError,
 };
 use mc_transaction_extra::SignedContingentInput;
+use mc_util_grpc::ConnectionUriGrpcioChannel;
 use mini_wallet::{MatchedTxOut, WalletEvent};
 use rand::Rng;
 use rust_decimal::{prelude::ToPrimitive, Decimal};
@@ -93,6 +96,9 @@ struct LiquidityBotTask {
 
     /// Wallet event receiver.
     wallet_event_rx: mpsc::UnboundedReceiver<WalletEvent>,
+
+    /// DEQS client.
+    deqs_client: DeqsClientApiClient,
 }
 impl LiquidityBotTask {
     pub async fn run(mut self) {
@@ -123,6 +129,27 @@ impl LiquidityBotTask {
 
     async fn add_tx_out(&mut self, matched_tx_out: MatchedTxOut) -> Result<(), Error> {
         let tracked_tx_out = self.create_tracked_tx_out(matched_tx_out)?;
+
+        // Try and submit to the DEQS.
+        match self.submit_to_deqs(&tracked_tx_out).await {
+            Ok(_) => {}
+
+            // TODO there are errors where we dont want to retry.
+            Err(err) => {
+                log::error!(self.logger, "Error submitting to DEQS: {}", err);
+                self.pending_tx_outs.push(tracked_tx_out);
+            }
+        }
+
+        Ok(())
+    }
+
+    async fn submit_to_deqs(&self, tracked_tx_out: &TrackedTxOut) -> Result<(), Error> {
+        let sci: deqs_api::external::SignedContingentInput = (&tracked_tx_out.sci).into();
+        let mut req = SubmitQuotesRequest::default();
+        req.set_quotes(vec![sci].into());
+
+        let resp = self.deqs_client.submit_quotes_async(&req)?.await?;
 
         Ok(())
     }
@@ -231,9 +258,14 @@ impl LiquidityBot {
         account_key: AccountKey,
         ledger_db: LedgerDB,
         pairs: HashMap<TokenId, (TokenId, Decimal)>,
+        deqs_uri: &DeqsClientUri,
         logger: Logger,
     ) -> Self {
         let (wallet_event_tx, wallet_event_rx) = mpsc::unbounded_channel();
+
+        let env = Arc::new(EnvBuilder::new().name_prefix("deqs-client-grpc").build());
+        let ch = ChannelBuilder::default_channel_builder(env).connect_to_uri(deqs_uri, &logger);
+        let deqs_client = DeqsClientApiClient::new(ch);
 
         let task = LiquidityBotTask {
             account_key,
@@ -241,6 +273,7 @@ impl LiquidityBot {
             pairs,
             pending_tx_outs: Vec::new(),
             wallet_event_rx,
+            deqs_client,
             logger: logger.clone(),
         };
         tokio::spawn(task.run());
@@ -285,6 +318,9 @@ pub enum Error {
 
     /// Json: {0}
     Json(JsonError),
+
+    /// GRPC: {0}
+    Grpc(grpcio::Error),
 }
 impl From<LedgerDbError> for Error {
     fn from(src: LedgerDbError) -> Self {
@@ -324,5 +360,10 @@ impl From<io::Error> for Error {
 impl From<JsonError> for Error {
     fn from(src: JsonError) -> Self {
         Self::Json(src)
+    }
+}
+impl From<grpcio::Error> for Error {
+    fn from(src: grpcio::Error) -> Self {
+        Self::Grpc(src)
     }
 }
