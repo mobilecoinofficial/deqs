@@ -3,10 +3,7 @@
 use std::{collections::HashMap, sync::Arc};
 
 use clap::Parser;
-use deqs_liquidity_bot::{
-    mini_wallet::{MiniWallet, WalletEvent},
-    Config, LiquidityBot,
-};
+use deqs_liquidity_bot::{mini_wallet::MiniWallet, Config, LiquidityBot};
 use mc_common::logger::{log, o};
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
@@ -89,6 +86,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
     }
+
+    // TODO nicely ask the liquidity bot to stop
 
     Ok(())
 }

@@ -20,8 +20,8 @@ use deqs_quote_book_api::QuoteId;
 use displaydoc::Display;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_common::logger::{log, Logger};
-use mc_crypto_keys::{KeyError, RistrettoPublic};
-use mc_crypto_ring_signature_signer::LocalRingSigner;
+use mc_crypto_keys::KeyError;
+use mc_crypto_ring_signature_signer::{LocalRingSigner, OneTimeKeyDeriveData};
 use mc_fog_report_resolver::FogResolver;
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_transaction_builder::{
@@ -29,9 +29,6 @@ use mc_transaction_builder::{
     SignedContingentInputBuilderError, TxBuilderError,
 };
 use mc_transaction_core::{
-    get_tx_out_shared_secret,
-    onetime_keys::recover_onetime_private_key,
-    tx::{TxOut, TxOutMembershipProof},
     AccountKey, Amount, AmountError, BlockVersion, TokenId, TxOutConversionError,
 };
 use mc_transaction_extra::SignedContingentInput;
@@ -43,7 +40,7 @@ use std::{
     collections::{HashMap, HashSet},
     io,
     sync::Arc,
-    time::Duration,
+    time::{Duration, Instant},
 };
 use tokio::{sync::mpsc, time::interval};
 
@@ -66,9 +63,19 @@ use tokio::{sync::mpsc, time::interval};
 // return.     Used,
 // }
 
-/// A TxOut we keep track of
+/// A TxOut we want to submit to the DEQS
 #[derive(Clone, Debug)]
-pub struct TrackedTxOut {
+pub struct PendingTxOut {
+    /// The TxOut we are tracking
+    matched_tx_out: MatchedTxOut,
+
+    /// The SCI we generated from the TxOut
+    sci: SignedContingentInput,
+}
+
+/// A TxOut we listed on the DEQS
+#[derive(Clone, Debug)]
+pub struct ListedTxOut {
     /// The TxOut we are tracking
     matched_tx_out: MatchedTxOut,
 
@@ -76,7 +83,10 @@ pub struct TrackedTxOut {
     sci: SignedContingentInput,
 
     /// The quote we got from the DEQS (if we successfully submitted it).
-    quote: Option<deqs_api::deqs::Quote>,
+    quote: deqs_api::deqs::Quote,
+
+    /// Last time we tried to submit this TxOut to the DEQS
+    last_submitted_at: Instant,
 }
 
 struct LiquidityBotTask {
@@ -93,10 +103,10 @@ struct LiquidityBotTask {
     pairs: HashMap<TokenId, (TokenId, Decimal)>,
 
     /// List of TxOuts we would like to submit to the DEQS.
-    pending_tx_outs: Vec<TrackedTxOut>,
+    pending_tx_outs: Vec<PendingTxOut>,
 
     /// List of TxOuts we successfully submitted to the DEQS.
-    live_tx_outs: Vec<TrackedTxOut>,
+    listed_tx_outs: Vec<ListedTxOut>,
 
     /// Logger.
     logger: Logger,
@@ -130,7 +140,7 @@ impl LiquidityBotTask {
                                 }
                             }
                         }
-                        Some(WalletEvent::SpentTxOut { matched_tx_out }) => {
+                        Some(WalletEvent::SpentTxOut { .. }) => {
                             // TODO
                         }
                         None => {
@@ -144,7 +154,7 @@ impl LiquidityBotTask {
                     if let Err(err) = self.submit_pending_tx_outs().await {
                         log::info!(self.logger, "Error resubmitting TxOuts: {}", err);
                     }
-                    if let Err(err) = self.resubmit_live_tx_outs().await {
+                    if let Err(err) = self.resubmit_listed_tx_outs().await {
                         log::info!(self.logger, "Error resubmitting TxOuts: {}", err);
                     }
                 }
@@ -153,7 +163,7 @@ impl LiquidityBotTask {
     }
 
     async fn add_tx_out(&mut self, matched_tx_out: MatchedTxOut) -> Result<(), Error> {
-        let tracked_tx_out = self.create_tracked_tx_out(matched_tx_out)?;
+        let tracked_tx_out = self.create_pending_tx_out(matched_tx_out)?;
         self.pending_tx_outs.push(tracked_tx_out);
 
         Ok(())
@@ -176,37 +186,51 @@ impl LiquidityBotTask {
         let resp = self.deqs_client.submit_quotes_async(&req)?.await?;
         sanity_check_submit_quotes_response(&resp, req.quotes.len())?;
 
-        for (tracked_tx_out, status_code, error_msg, quote) in itertools::izip!(
+        for (pending_tx_out, status_code, error_msg, quote) in itertools::izip!(
             self.pending_tx_outs.drain(..),
             &resp.status_codes,
             &resp.error_messages,
             &resp.quotes
         ) {
             match status_code {
-                QuoteStatusCode::CREATED => {
+                QuoteStatusCode::CREATED | QuoteStatusCode::QUOTE_ALREADY_EXISTS => {
                     let quote_id = QuoteId::try_from(quote.get_id())?;
                     log::info!(
                         self.logger,
-                        "Submitted TxOut to DEQS, quote id is {}",
+                        "Submitted TxOut {} to DEQS, quote id is {}",
+                        hex::encode(pending_tx_out.matched_tx_out.tx_out.public_key),
                         quote_id
                     );
-                    let mut tracked_tx_out = tracked_tx_out.clone();
-                    tracked_tx_out.quote = Some(resp.quotes[0].clone());
-                    self.live_tx_outs.push(tracked_tx_out);
+                    let listed_tx_out = ListedTxOut {
+                        matched_tx_out: pending_tx_out.matched_tx_out,
+                        sci: pending_tx_out.sci,
+                        quote: quote.clone(),
+                        last_submitted_at: Instant::now(),
+                    };
+                    self.listed_tx_outs.push(listed_tx_out);
                 }
 
                 QuoteStatusCode::QUOTE_ALREADY_EXISTS => {
-                    log::info!(self.logger, "DEQS rejected TxOut: quote already exists");
+                    log::info!(
+                        self.logger,
+                        "DEQS rejected TxOut {}: quote already exists",
+                        hex::encode(pending_tx_out.matched_tx_out.tx_out.public_key)
+                    );
                 }
 
                 QuoteStatusCode::QUOTE_IS_STALE => {
-                    log::info!(self.logger, "DEQS rejected TxOut: quote is stale");
+                    log::info!(
+                        self.logger,
+                        "DEQS rejected TxOut {}: quote is stale",
+                        hex::encode(pending_tx_out.matched_tx_out.tx_out.public_key)
+                    );
                 }
 
                 err => {
                     log::error!(
                         self.logger,
-                        "DEQS rejected TxOut for a reason we did not expect: {:?} ({})",
+                        "DEQS rejected TxOut {} for a reason we did not expect: {:?} ({})",
+                        hex::encode(pending_tx_out.matched_tx_out.tx_out.public_key),
                         err,
                         error_msg,
                     );
@@ -217,11 +241,92 @@ impl LiquidityBotTask {
         Ok(())
     }
 
-    async fn resubmit_live_tx_outs(&mut self) -> Result<(), Error> {
-        todo!()
+    async fn resubmit_listed_tx_outs(&mut self) -> Result<(), Error> {
+        // Split our listed list into two: those that we want to try and resubmit and
+        // those that have been resubmitted recently enough.
+        let (to_resubmit, to_keep) =
+            self.listed_tx_outs
+                .drain(..)
+                .partition::<Vec<_>, _>(|listed_tx_out| {
+                    listed_tx_out.last_submitted_at.elapsed() > Duration::from_secs(10)
+                    // TODO make configurable
+                });
+
+        if to_resubmit.is_empty() {
+            return Ok(());
+        }
+
+        log::debug!(
+            self.logger,
+            "Need to resubmit {} TxOuts and hold on {} TxOuts",
+            to_resubmit.len(),
+            to_keep.len()
+        );
+        self.listed_tx_outs = to_keep;
+
+        let scis = to_resubmit
+            .iter()
+            .map(|tracked_tx_out| (&tracked_tx_out.sci).into())
+            .collect();
+        let mut req = SubmitQuotesRequest::default();
+        req.set_quotes(scis);
+
+        let resp = self.deqs_client.submit_quotes_async(&req)?.await?;
+        sanity_check_submit_quotes_response(&resp, req.quotes.len())?;
+
+        for (mut listed_tx_out, status_code, error_msg, quote) in itertools::izip!(
+            to_resubmit,
+            &resp.status_codes,
+            &resp.error_messages,
+            &resp.quotes
+        ) {
+            let quote_id = QuoteId::try_from(quote.get_id())?;
+
+            match status_code {
+                QuoteStatusCode::CREATED => {
+                    let quote_id = QuoteId::try_from(quote.get_id())?;
+                    log::info!(
+                        self.logger,
+                        "Re-submitted TxOut {} to DEQS, quote id is {}",
+                        hex::encode(listed_tx_out.matched_tx_out.tx_out.public_key),
+                        quote_id
+                    );
+                    listed_tx_out.quote = quote.clone();
+                    listed_tx_out.last_submitted_at = Instant::now();
+                    self.listed_tx_outs.push(listed_tx_out);
+                }
+
+                QuoteStatusCode::QUOTE_ALREADY_EXISTS => {
+                    log::debug!(
+                        self.logger,
+                        "DEQS confirmed quote {} is still listed",
+                        quote_id
+                    );
+                    listed_tx_out.last_submitted_at = Instant::now();
+                    self.listed_tx_outs.push(listed_tx_out);
+                }
+
+                QuoteStatusCode::QUOTE_IS_STALE => {
+                    log::info!(self.logger, "Quote {} expired", quote_id);
+                }
+
+                err => {
+                    // NOTE: Right now this implies we stop tracking the listed TxOut.
+                    log::error!(
+                        self.logger,
+                        "DEQS rejected TxOut {} for a reason we did not expect: {:?} ({})",
+                        hex::encode(listed_tx_out.matched_tx_out.tx_out.public_key),
+                        err,
+                        error_msg,
+                    );
+                }
+            }
+        }
+
+        Ok(())
     }
 
-    fn create_tracked_tx_out(&self, matched_tx_out: MatchedTxOut) -> Result<TrackedTxOut, Error> {
+    fn create_pending_tx_out(&self, matched_tx_out: MatchedTxOut) -> Result<PendingTxOut, Error> {
         let (counter_token_id, swap_rate) =
             self.pairs.get(&matched_tx_out.amount.token_id).unwrap(); // TODO will fail for unknown tokens
 
@@ -267,18 +372,11 @@ impl LiquidityBotTask {
             .get_tx_out_proof_of_memberships(&sampled_indices_vec)?;
 
         // Create our InputCredentials
-        let public_key = RistrettoPublic::try_from(&matched_tx_out.tx_out.public_key)?;
-        let onetime_private_key = recover_onetime_private_key(
-            &public_key,
-            self.account_key.view_private_key(),
-            &self.account_key.default_subaddress_spend_private(),
-        );
-
         let input_credentials = InputCredentials::new(
             tx_outs,
             proofs,
             0,
-            onetime_private_key, // TODO we dont need this if we use LocalRingSigner
+            OneTimeKeyDeriveData::SubaddressIndex(matched_tx_out.subaddress_index),
             *self.account_key.view_private_key(),
         )?;
 
@@ -304,10 +402,9 @@ impl LiquidityBotTask {
         )?;
         let sci = builder.build(&LocalRingSigner::from(&self.account_key), &mut rng)?;
 
-        Ok(TrackedTxOut {
+        Ok(PendingTxOut {
             matched_tx_out,
             sci,
-            quote: None,
         })
     }
 }
@@ -336,7 +433,7 @@ impl LiquidityBot {
             ledger_db,
             pairs,
             pending_tx_outs: Vec::new(),
-            live_tx_outs: Vec::new(),
+            listed_tx_outs: Vec::new(),
             wallet_event_rx,
             deqs_client,
             logger: logger.clone(),

@@ -17,7 +17,10 @@ use std::{
     cmp::min,
     collections::HashMap,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
     thread,
     thread::JoinHandle,
     time::{Duration, Instant},
@@ -26,6 +29,7 @@ use std::{
 use super::{MatchedTxOut, State, WalletEventCallback};
 
 pub struct AccountLedgerScanner {
+    stop_requested: Arc<AtomicBool>,
     join_handle: Option<JoinHandle<()>>,
 }
 impl AccountLedgerScanner {
@@ -46,6 +50,9 @@ impl AccountLedgerScanner {
             );
         }
 
+        let stop_requested = Arc::new(AtomicBool::new(false));
+        let thread_stop_requested = stop_requested.clone();
+
         let join_handle = Some(
             thread::Builder::new()
                 .name("AccountLedgerScanner".into())
@@ -59,12 +66,25 @@ impl AccountLedgerScanner {
                         state,
                         state_file,
                         wallet_event_callback,
+                        stop_requested: thread_stop_requested,
                     };
                     thread.run();
                 })
                 .expect("Could not spawn thread"),
         );
-        AccountLedgerScanner { join_handle }
+        AccountLedgerScanner {
+            join_handle,
+            stop_requested,
+        }
+    }
+}
+
+impl Drop for AccountLedgerScanner {
+    fn drop(&mut self) {
+        self.stop_requested.store(true, Ordering::SeqCst);
+        if let Some(join_handle) = self.join_handle.take() {
+            join_handle.join().expect("Could not join thread");
+        }
     }
 }
 
@@ -86,11 +106,11 @@ struct AccountLedgerScannerWorker {
     state: Arc<Mutex<State>>,
     state_file: PathBuf,
     wallet_event_callback: WalletEventCallback,
+    stop_requested: Arc<AtomicBool>,
 }
 impl AccountLedgerScannerWorker {
-    // TODO stop trigger
     pub fn run(mut self) {
-        loop {
+        while !self.stop_requested.load(Ordering::SeqCst) {
             let ledger_last_block_index = self
                 .ledger_db
                 .num_blocks()
