@@ -1,5 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+use crate::Quote;
 use displaydoc::Display;
 use mc_transaction_core::RevealedTxOutError;
 use mc_transaction_extra::SignedContingentInputError;
@@ -15,7 +16,7 @@ pub enum Error {
     UnsupportedSci(String),
 
     /// Quote already exists in book
-    QuoteAlreadyExists,
+    QuoteAlreadyExists(Quote),
 
     /// Quote not found
     QuoteNotFound,

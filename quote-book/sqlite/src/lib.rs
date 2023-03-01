@@ -164,14 +164,35 @@ impl<QB: QuoteBook> QuoteBook for SqliteQuoteBook<QB> {
                         diesel::result::Error::DatabaseError(
                             DatabaseErrorKind::UniqueViolation,
                             _,
-                        ) => QuoteBookError::QuoteAlreadyExists.into(),
+                        ) => {
+                            // This is kinda ugly. If we got a UniqueViolation that implies a duplicate quote.
+                            // When that happens, our API trait (`QuoteBook`) requires us to return the quote that we are conflicting with.
+                            // The only way we can get it at this point is by querying the database for it, it is not expected to fail, but software breaks in unexpected ways sometimes.
+                            // If it does fails, we return a generic error.
+                            // If it succeeds, we return the quote wrapped in an QuoteAlreadyExists error, which is what the API requires.
+                            match models::Quote::get_by_id(conn, quote.id())
+                                .and_then(|maybe_quote| maybe_quote.ok_or_else(|| QuoteBookError::ImplementationSpecific(format!("Quote with id {} not found in database (but it should've been!)", quote.id()))))
+                                .and_then(|quote| Quote::try_from(&quote))
+                                {
+                            Ok(quote) => {
+                                QuoteBookError::QuoteAlreadyExists(quote).into()
+                            }
+                            Err(err) => QuoteBookError::ImplementationSpecific(format!(
+                                "Getting quote by id {} failed, but we expected it to succeed: {}",
+                                quote.id(),
+                                err,
+                            ))
+                            .into(),
+                        }},
                         err => err.into(),
                     }
                 })?;
 
             // Try to add to our in-memory quote book. If this fails, we will rollback the
             // transaction.
-            self.quote_book.add_quote(quote)?;
+            if let Err(err) = self.quote_book.add_quote(quote) {
+                return Err(err.into());
+            }
 
             Ok(())
         })?;
