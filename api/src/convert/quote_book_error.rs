@@ -8,7 +8,7 @@ impl From<&Error> for api::QuoteStatusCode {
         match src {
             Error::Sci(_) => Self::INVALID_SCI,
             Error::UnsupportedSci(_) => Self::UNSUPPORTED_SCI,
-            Error::QuoteAlreadyExists(_) => Self::QUOTE_ALREADY_EXISTS,
+            Error::QuoteAlreadyExists { .. } => Self::QUOTE_ALREADY_EXISTS,
             Error::QuoteIsStale => Self::QUOTE_IS_STALE,
             _ => Self::OTHER,
         }

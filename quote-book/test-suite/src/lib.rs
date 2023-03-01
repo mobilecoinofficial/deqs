@@ -225,7 +225,7 @@ pub fn cannot_add_duplicate_sci(quote_book: &impl QuoteBook) {
     // Trying to add the exact same SCI should fail
     assert_matches!(
         quote_book.add_sci(sci.clone(), None).unwrap_err(),
-        Error::QuoteAlreadyExists(quote) if quote == quote1
+        Error::QuoteAlreadyExists { existing_quote } if existing_quote == quote1
     );
 
     // Trying to add a different SCI with the same key image should fail
@@ -234,7 +234,7 @@ pub fn cannot_add_duplicate_sci(quote_book: &impl QuoteBook) {
 
     assert_matches!(
         quote_book.add_sci(sci2.clone(), None).unwrap_err(),
-        Error::QuoteAlreadyExists(quote) if quote == quote1
+        Error::QuoteAlreadyExists { existing_quote } if existing_quote == quote1
     );
 
     // Test sanity: Quote id should be different but key image should be

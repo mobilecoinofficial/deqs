@@ -16,7 +16,7 @@ pub enum Error {
     UnsupportedSci(String),
 
     /// Quote already exists in book
-    QuoteAlreadyExists(Quote),
+    QuoteAlreadyExists { existing_quote: Quote },
 
     /// Quote not found
     QuoteNotFound,

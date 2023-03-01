@@ -174,8 +174,8 @@ impl<QB: QuoteBook> QuoteBook for SqliteQuoteBook<QB> {
                                 .and_then(|maybe_quote| maybe_quote.ok_or_else(|| QuoteBookError::ImplementationSpecific(format!("Quote with id {} not found in database (but it should've been!)", quote.id()))))
                                 .and_then(|quote| Quote::try_from(&quote))
                                 {
-                            Ok(quote) => {
-                                QuoteBookError::QuoteAlreadyExists(quote).into()
+                            Ok(existing_quote) => {
+                                QuoteBookError::QuoteAlreadyExists { existing_quote }.into()
                             }
                             Err(err) => QuoteBookError::ImplementationSpecific(format!(
                                 "Getting quote by id {} failed, but we expected it to succeed: {}",
