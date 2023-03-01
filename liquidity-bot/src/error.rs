@@ -8,6 +8,8 @@ use mc_ledger_db::Error as LedgerDbError;
 use mc_transaction_builder::{SignedContingentInputBuilderError, TxBuilderError};
 use mc_transaction_core::{AmountError, TokenId, TxOutConversionError};
 use serde_json::Error as JsonError;
+use mc_util_serial::decode::Error as DeserializeError;
+use mc_util_serial::encode::Error as SerializeError;
 
 #[derive(Debug, Display)]
 pub enum Error {
@@ -47,8 +49,14 @@ pub enum Error {
     /// Unknown token id: {0}
     UnknownTokenId(TokenId),
 
-    /// Decimal conversion error: {0}
+    /// Decimal conversion: {0}
     DecimalConversion(String),
+
+    /// Deserialize: {0}
+    Deserialize(DeserializeError),
+
+    /// Serialize: {0}
+    Serialize(SerializeError),
 }
 impl From<LedgerDbError> for Error {
     fn from(src: LedgerDbError) -> Self {
@@ -98,5 +106,15 @@ impl From<grpcio::Error> for Error {
 impl From<deqs_api::ConversionError> for Error {
     fn from(src: deqs_api::ConversionError) -> Self {
         Self::ApiConversion(src)
+    }
+}
+impl From<DeserializeError> for Error {
+    fn from(src: DeserializeError) -> Self {
+        Self::Deserialize(src)
+    }
+}
+impl From<SerializeError> for Error {
+    fn from(src: SerializeError) -> Self {
+        Self::Serialize(src)
     }
 }

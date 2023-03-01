@@ -1,10 +1,21 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 // TODO:
+//
 // - The bot loses all state when it dies, and the wallet will not re-feed it
 //   TxOuts. Even if it did re-feed it, we wouldn't know which ones where
 //   already previously submitted to the DEQS. As such, we will need to persist
 //   the bot's state
+//
+// - It could be nice for the bot to try and figure out if its orders got
+//   fulfilled. It can do that by looking at spent key images in a given
+//   processed block. If it sees a key image for one of its SCIs, it can look
+//   and see if the public key of its required output appears in the same block.
+//
+// - Unit tests
+// - Prometheus metrics
+// - Fog support (grep for "FogResolver::default")
+// - RTH support (grep for "EmptyMemoBuilder::default")
 
 mod config;
 mod error;

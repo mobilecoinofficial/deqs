@@ -42,7 +42,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .expect("Failed starting admin server")
     });
 
-    // TODO
+    // Start our mini wallet scanner thingie.
     let (wallet_tx, mut wallet_rx) = mpsc::unbounded_channel();
     let _wallet = MiniWallet::new(
         &config.wallet_db,
@@ -58,6 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )
     .expect("Could not create MiniWallet");
 
+    // Start the liquidity bot.
     let pairs = HashMap::from_iter([(
         config.base_token_id,
         (config.counter_token_id, config.swap_rate),

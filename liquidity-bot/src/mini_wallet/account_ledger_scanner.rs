@@ -1,6 +1,9 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{mini_wallet::WalletEvent, Error};
+use crate::{
+    mini_wallet::{MatchedTxOut, State, WalletEvent, WalletEventCallback},
+    Error,
+};
 use mc_account_keys::{AccountKey, CHANGE_SUBADDRESS_INDEX, DEFAULT_SUBADDRESS_INDEX};
 use mc_blockchain_types::{BlockContents, BlockIndex};
 use mc_common::logger::{log, Logger};
@@ -26,7 +29,17 @@ use std::{
     time::{Duration, Instant},
 };
 
-use super::{MatchedTxOut, State, WalletEventCallback};
+/// How many blocks to try and scan at each iteration.
+const SCAN_CHUNK_SIZE: usize = 1000;
+
+/// Time between periodic progress log messages.
+const LOG_INTERVAL: Duration = Duration::from_secs(1);
+
+/// Polling interval when waiting for new blocks.
+const POLL_INTERVAL: Duration = Duration::from_millis(10);
+
+/// Time to wait after retrying a failed operation.
+const ERROR_SLEEP_INTERVAL: Duration = Duration::from_secs(1);
 
 pub struct AccountLedgerScanner {
     stop_requested: Arc<AtomicBool>,
@@ -41,9 +54,15 @@ impl AccountLedgerScanner {
         wallet_event_callback: WalletEventCallback,
         logger: Logger,
     ) -> AccountLedgerScanner {
-        // TODO
+        // TODO - for now, we only support a few hardcoded subaddresses.
         let mut spsk_to_index = HashMap::new();
-        for idx in [DEFAULT_SUBADDRESS_INDEX, CHANGE_SUBADDRESS_INDEX].iter() {
+        for idx in [
+            DEFAULT_SUBADDRESS_INDEX,
+            1, // Historical change subaddress
+            CHANGE_SUBADDRESS_INDEX,
+        ]
+        .iter()
+        {
             spsk_to_index.insert(
                 *account_key.subaddress(*idx).spend_public_key(),
                 *idx as u64,
@@ -88,9 +107,6 @@ impl Drop for AccountLedgerScanner {
     }
 }
 
-const SCAN_CHUNK_SIZE: usize = 1000;
-const LOG_INTERVAL: Duration = Duration::from_secs(1);
-
 struct ScannedBlock {
     block_index: BlockIndex,
     matched_tx_outs: Vec<MatchedTxOut>,
@@ -116,7 +132,7 @@ impl AccountLedgerScannerWorker {
                 .num_blocks()
                 .expect("Could not get num blocks")
                 - 1;
-            let next_block_index = self.state.lock().unwrap().next_block_index;
+            let next_block_index = self.state.lock().expect("mutex poisoned").next_block_index;
             let last_block_index = min(
                 ledger_last_block_index,
                 next_block_index + SCAN_CHUNK_SIZE as u64,
@@ -142,7 +158,7 @@ impl AccountLedgerScannerWorker {
             }
 
             // Try to load and scan blocks in parallel.
-            let results = (next_block_index..last_block_index)
+            let results = match (next_block_index..last_block_index)
                 .into_par_iter()
                 .map(|block_index| {
                     let block_contents = self.ledger_db.get_block_contents(block_index);
@@ -155,10 +171,20 @@ impl AccountLedgerScannerWorker {
                     }
                 })
                 .collect::<Result<Vec<_>, Error>>()
-                .expect("Could not scan blocks"); // TODO
+            {
+                Ok(results) => results,
+                Err(err) => {
+                    // While we retry here, the reality is tha the block scanning part really isn't
+                    // expected to fail with the current LedgerDB/process_block
+                    // implementation...
+                    log::error!(self.logger, "Error scanning blocks: {:?}. Will retry.", err);
+                    thread::sleep(ERROR_SLEEP_INTERVAL);
+                    continue;
+                }
+            };
 
             // Process the results.
-            let mut state = self.state.lock().unwrap();
+            let mut state = self.state.lock().expect("mutex poisoned");
             let orig_next_block_index = state.next_block_index;
             for result in results.into_iter().flatten() {
                 assert_eq!(result.block_index, state.next_block_index);
@@ -182,11 +208,11 @@ impl AccountLedgerScannerWorker {
             }
             state.save(&self.state_file).expect("Could not save state");
             let next_block_index = state.next_block_index;
-            drop(state);
+            drop(state); // Release the lock before we sleep.
 
             if orig_next_block_index == next_block_index {
                 // We didn't find any new blocks, so sleep for a bit.
-                thread::sleep(Duration::from_millis(100));
+                thread::sleep(POLL_INTERVAL);
             }
         }
     }
@@ -211,7 +237,7 @@ impl AccountLedgerScannerWorker {
             }
         }
 
-        let state = self.state.lock().unwrap();
+        let state = self.state.lock().expect("mutex poisoned");
         let key_images = block_contents
             .key_images
             .iter()
@@ -237,7 +263,7 @@ impl AccountLedgerScannerWorker {
     fn match_tx_out(&self, tx_out: &TxOut) -> Result<Option<MatchedTxOut>, Error> {
         // This is view key scanning part, getting the value fails if view-key scanning
         // fails
-        let decompressed_tx_pub = RistrettoPublic::try_from(&tx_out.public_key).unwrap(); // TODO
+        let decompressed_tx_pub = RistrettoPublic::try_from(&tx_out.public_key)?;
         let shared_secret =
             get_tx_out_shared_secret(self.account_key.view_private_key(), &decompressed_tx_pub);
         let (amount, _blinding) = match tx_out

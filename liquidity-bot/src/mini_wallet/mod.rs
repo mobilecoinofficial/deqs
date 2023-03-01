@@ -44,7 +44,7 @@ impl State {
     ) -> Result<Self, Error> {
         if state_file.exists() {
             let bytes = std::fs::read(&state_file)?;
-            Ok(mc_util_serial::deserialize(&bytes).expect("TODO"))
+            Ok(mc_util_serial::deserialize(&bytes)?)
         } else {
             Ok(Self {
                 next_block_index: default_first_block_index,
@@ -53,7 +53,7 @@ impl State {
         }
     }
     pub fn save(&self, path: &PathBuf) -> Result<(), Error> {
-        let bytes = mc_util_serial::serialize(&self).expect("TODO");
+        let bytes = mc_util_serial::serialize(&self)?;
         std::fs::write(&path, bytes)?;
         Ok(())
     }
