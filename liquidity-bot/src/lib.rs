@@ -152,7 +152,7 @@ impl LiquidityBotTask {
 
                 _ = resubmit_tx_outs_interval.tick() => {
                     if let Err(err) = self.submit_pending_tx_outs().await {
-                        log::info!(self.logger, "Error resubmitting TxOuts: {}", err);
+                        log::info!(self.logger, "Error submitting pending TxOuts: {}", err);
                     }
                     if let Err(err) = self.resubmit_listed_tx_outs().await {
                         log::info!(self.logger, "Error resubmitting TxOuts: {}", err);
@@ -195,27 +195,49 @@ impl LiquidityBotTask {
             match status_code {
                 QuoteStatusCode::CREATED | QuoteStatusCode::QUOTE_ALREADY_EXISTS => {
                     let quote_id = QuoteId::try_from(quote.get_id())?;
-                    log::info!(
-                        self.logger,
-                        "Submitted TxOut {} to DEQS, quote id is {}",
-                        hex::encode(pending_tx_out.matched_tx_out.tx_out.public_key),
-                        quote_id
-                    );
+
+                    // Check if the SCI is actually the one we submitted, or a different one.
+                    let quote_sci = SignedContingentInput::try_from(quote.get_sci())?;
+                    if quote_sci == pending_tx_out.sci {
+                        log::info!(
+                            self.logger,
+                            "Submitted TxOut {} to DEQS, quote id is {}",
+                            hex::encode(pending_tx_out.matched_tx_out.tx_out.public_key),
+                            quote_id
+                        );
+                    } else {
+                        assert_eq!(status_code, &QuoteStatusCode::QUOTE_ALREADY_EXISTS);
+                        log::warn!(
+                            self.logger,
+                            "DEQS returned a different SCI than the one we submitted for TxOut {}",
+                            hex::encode(pending_tx_out.matched_tx_out.tx_out.public_key),
+                        );
+                    }
+
+                    // NOTE: We are taking the SCI that is returned from the DEQS, and not the one
+                    // we submitted. We do this because it is possible that the
+                    // DEQS will already have an SCI for the TxOut we just tried
+                    // using. For example, this could happen when the bot restarts.
+                    // The important implication of this is that once we pick up whatever SCI we got
+                    // from the DEQS and put it in our `listed_tx_outs` list, we
+                    // will keep re-submitting it (trying to keep it listed). In
+                    // the future we might want to change this behavior to only do this if the swap
+                    // rate is the one we are configured for. Some other options
+                    // for followup work are:
+                    //
+                    // 1. Have the bot persist which SCIs it submitted, so after a restart it does
+                    // not get surprised when its  TxOutss are already listed.
+                    //
+                    // 2. Have the bot cancel SCIs that are not the one it submitted, but this would
+                    // only make sense if it persists state since otherwise it will cancel all of
+                    // its SCIs every time it restarts.
                     let listed_tx_out = ListedTxOut {
                         matched_tx_out: pending_tx_out.matched_tx_out,
-                        sci: pending_tx_out.sci,
+                        sci: quote_sci,
                         quote: quote.clone(),
                         last_submitted_at: Instant::now(),
                     };
                     self.listed_tx_outs.push(listed_tx_out);
-                }
-
-                QuoteStatusCode::QUOTE_ALREADY_EXISTS => {
-                    log::info!(
-                        self.logger,
-                        "DEQS rejected TxOut {}: quote already exists",
-                        hex::encode(pending_tx_out.matched_tx_out.tx_out.public_key)
-                    );
                 }
 
                 QuoteStatusCode::QUOTE_IS_STALE => {
@@ -249,8 +271,9 @@ impl LiquidityBotTask {
                 .drain(..)
                 .partition::<Vec<_>, _>(|listed_tx_out| {
                     listed_tx_out.last_submitted_at.elapsed() > Duration::from_secs(10)
-                    // TODO make configurable
+                    // TODO make resubmit time configurable
                 });
+        self.listed_tx_outs = to_keep;
 
         if to_resubmit.is_empty() {
             return Ok(());
@@ -260,9 +283,10 @@ impl LiquidityBotTask {
             self.logger,
             "Need to resubmit {} TxOuts and hold on {} TxOuts",
             to_resubmit.len(),
-            to_keep.len()
+            self.listed_tx_outs.len()
         );
-        self.listed_tx_outs = to_keep;
+
+        // TODO should batch in case we have too many to resubmit
 
         let scis = to_resubmit
             .iter()
@@ -271,7 +295,21 @@ impl LiquidityBotTask {
         let mut req = SubmitQuotesRequest::default();
         req.set_quotes(scis);
 
-        let resp = self.deqs_client.submit_quotes_async(&req)?.await?;
+        // Try and submit the quotes to the DEQS, if it fails we need to put them back
+        // and assume they are still listed. We will try again later.
+        let resp = match self.deqs_client.submit_quotes_async(&req) {
+            Ok(async_resp) => match async_resp.await {
+                Ok(resp) => resp,
+                Err(err) => {
+                    self.listed_tx_outs.extend(to_resubmit);
+                    return Err(err.into());
+                }
+            },
+            Err(err) => {
+                self.listed_tx_outs.extend(to_resubmit);
+                return Err(err.into());
+            }
+        };
         sanity_check_submit_quotes_response(&resp, req.quotes.len())?;
 
         for (mut listed_tx_out, status_code, error_msg, quote) in itertools::izip!(
@@ -281,10 +319,13 @@ impl LiquidityBotTask {
             &resp.quotes
         ) {
             let quote_id = QuoteId::try_from(quote.get_id())?;
+            let quote_sci = SignedContingentInput::try_from(quote.get_sci())?;
 
             match status_code {
                 QuoteStatusCode::CREATED => {
-                    let quote_id = QuoteId::try_from(quote.get_id())?;
+                    // Sanity tha the DEQS is behaving as expected.
+                    assert_eq!(quote_sci, listed_tx_out.sci);
+
                     log::info!(
                         self.logger,
                         "Re-submitted TxOut {} to DEQS, quote id is {}",
@@ -297,11 +338,23 @@ impl LiquidityBotTask {
                 }
 
                 QuoteStatusCode::QUOTE_ALREADY_EXISTS => {
-                    log::debug!(
-                        self.logger,
-                        "DEQS confirmed quote {} is still listed",
-                        quote_id
-                    );
+                    if quote_sci == listed_tx_out.sci {
+                        log::debug!(
+                            self.logger,
+                            "DEQS confirmed quote {} is still listed",
+                            quote_id
+                        );
+                    } else {
+                        log::warn!(
+                            self.logger,
+                            "DEQS returned a different SCI than the one we submitted for TxOut {}",
+                            hex::encode(listed_tx_out.matched_tx_out.tx_out.public_key),
+                        );
+
+                        // See long comment in `submit_pending_tx_outs` about why we do this.
+                        listed_tx_out.sci = quote_sci;
+                    }
+
                     listed_tx_out.last_submitted_at = Instant::now();
                     self.listed_tx_outs.push(listed_tx_out);
                 }
