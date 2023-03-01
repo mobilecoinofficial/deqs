@@ -33,7 +33,9 @@ message SubmitQuotesResponse {
     /// String error messages for each case where status code is not CREATED
     repeated string error_messages = 2;
 
-    /// Quotes created. Will contain a valid quote only for entries whose status code is CREATED.
+    /// Quotes - the contents will depend on the status code:
+    /// - CREATED: Contains the newly created quote
+    /// - QUOTE_ALREADY_EXISTS: Contains the existing quote
     repeated Quote quotes = 3;
 }
 
