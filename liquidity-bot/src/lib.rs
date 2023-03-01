@@ -7,9 +7,11 @@
 //   the bot's state
 
 mod config;
+mod error;
 pub mod mini_wallet;
 
 pub use config::Config;
+pub use error::Error;
 
 use deqs_api::{
     deqs::{QuoteStatusCode, SubmitQuotesRequest, SubmitQuotesResponse},
@@ -17,20 +19,15 @@ use deqs_api::{
     DeqsClientUri,
 };
 use deqs_quote_book_api::QuoteId;
-use displaydoc::Display;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_common::logger::{log, Logger};
-use mc_crypto_keys::KeyError;
 use mc_crypto_ring_signature_signer::{LocalRingSigner, OneTimeKeyDeriveData};
 use mc_fog_report_resolver::FogResolver;
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_transaction_builder::{
     EmptyMemoBuilder, InputCredentials, ReservedSubaddresses, SignedContingentInputBuilder,
-    SignedContingentInputBuilderError, TxBuilderError,
 };
-use mc_transaction_core::{
-    AccountKey, Amount, AmountError, BlockVersion, TokenId, TxOutConversionError,
-};
+use mc_transaction_core::{AccountKey, Amount, BlockVersion, TokenId};
 use mc_transaction_extra::SignedContingentInput;
 use mc_util_grpc::ConnectionUriGrpcioChannel;
 use mini_wallet::{MatchedTxOut, WalletEvent};
@@ -38,30 +35,10 @@ use rand::Rng;
 use rust_decimal::{prelude::ToPrimitive, Decimal};
 use std::{
     collections::{HashMap, HashSet},
-    io,
     sync::Arc,
     time::{Duration, Instant},
 };
 use tokio::{sync::mpsc, time::interval};
-
-// /// Possible statuses for a tracked TxOut
-// #[derive(Clone, Debug, Display)]
-// pub enum TrackedTxOutStatus {
-//     /// Pending submission to the DEQS
-//     PendingSubmission,
-
-//     /// Live - listed on the DEQS
-//     Live,
-
-//     /**
-//      * Canceled - the TxOut was spent but we didn't get the counter tokens
-//      * in return.
-//      */
-//     Canceled,
-
-//     /// Used - the TxOut was consumed and we got some counter tokens in
-// return.     Used,
-// }
 
 /// A TxOut we want to submit to the DEQS
 #[derive(Clone, Debug)]
@@ -163,18 +140,20 @@ impl LiquidityBotTask {
     }
 
     async fn add_tx_out(&mut self, matched_tx_out: MatchedTxOut) -> Result<(), Error> {
-        let tracked_tx_out = self.create_pending_tx_out(matched_tx_out)?;
-        self.pending_tx_outs.push(tracked_tx_out);
+        if self.pairs.contains_key(&matched_tx_out.amount.token_id) {
+            let tracked_tx_out = self.create_pending_tx_out(matched_tx_out)?;
+            self.pending_tx_outs.push(tracked_tx_out);
+        }
 
         Ok(())
     }
 
     async fn submit_pending_tx_outs(&mut self) -> Result<(), Error> {
-        // TODO should batch in case we have too many
         if self.pending_tx_outs.is_empty() {
             return Ok(());
         }
 
+        // TODO should batch in case we have too many
         let scis = self
             .pending_tx_outs
             .iter()
@@ -380,12 +359,20 @@ impl LiquidityBotTask {
     }
 
     fn create_pending_tx_out(&self, matched_tx_out: MatchedTxOut) -> Result<PendingTxOut, Error> {
-        let (counter_token_id, swap_rate) =
-            self.pairs.get(&matched_tx_out.amount.token_id).unwrap(); // TODO will fail for unknown tokens
+        let (counter_token_id, swap_rate) = self
+            .pairs
+            .get(&matched_tx_out.amount.token_id)
+            .ok_or(Error::UnknownTokenId(matched_tx_out.amount.token_id))?;
 
         let counter_amount: u64 = (Decimal::from(matched_tx_out.amount.value) * swap_rate)
             .to_u64()
-            .unwrap(); // TODO
+            .ok_or_else(|| {
+                Error::DecimalConversion(format!(
+                    "Could not convert {} times {} to u64",
+                    matched_tx_out.amount.value, swap_rate
+                ))
+            })?;
+
         log::info!(
             self.logger,
             "Creating SCI for TxOut with amount {}: wanting {} counter tokens (token id {})",
@@ -499,7 +486,9 @@ impl LiquidityBot {
     pub fn notify_wallet_event(&self, event: WalletEvent) {
         self.wallet_event_tx
             .send(event)
-            .expect("wallet event tx failed");
+            .expect("wallet event tx failed"); // We assume the channel stays
+                                               // open for as long as the bot is
+                                               // running.
     }
 }
 
@@ -520,92 +509,4 @@ fn sanity_check_submit_quotes_response(
     }
 
     Ok(())
-}
-
-use mc_ledger_db::Error as LedgerDbError;
-use serde_json::Error as JsonError;
-#[derive(Debug, Display)]
-pub enum Error {
-    /// Ledger Db: {0}
-    LedgerDb(LedgerDbError),
-
-    /// Tx Builder: {0}
-    TxBuilderError(TxBuilderError),
-
-    /// Signed Contingent Input Builder: {0}
-    SignedContingentInputBuilder(SignedContingentInputBuilderError),
-
-    /// Amount: {0}
-    Amount(AmountError),
-
-    /// TxOut conversion: {0}
-    TxOutConversion(TxOutConversionError),
-
-    /// Crypto key: {0}
-    Key(KeyError),
-
-    /// IO: {0}
-    IO(io::Error),
-
-    /// Json: {0}
-    Json(JsonError),
-
-    /// GRPC: {0}
-    Grpc(grpcio::Error),
-
-    /// Invalid GRPC response: {0}
-    InvalidGrpcResponse(String),
-
-    /// Api Conversion: {0}
-    ApiConversion(deqs_api::ConversionError),
-}
-impl From<LedgerDbError> for Error {
-    fn from(src: LedgerDbError) -> Self {
-        Self::LedgerDb(src)
-    }
-}
-impl From<TxBuilderError> for Error {
-    fn from(src: TxBuilderError) -> Self {
-        Self::TxBuilderError(src)
-    }
-}
-impl From<SignedContingentInputBuilderError> for Error {
-    fn from(src: SignedContingentInputBuilderError) -> Self {
-        Self::SignedContingentInputBuilder(src)
-    }
-}
-impl From<AmountError> for Error {
-    fn from(src: AmountError) -> Self {
-        Self::Amount(src)
-    }
-}
-impl From<TxOutConversionError> for Error {
-    fn from(src: TxOutConversionError) -> Self {
-        Self::TxOutConversion(src)
-    }
-}
-impl From<KeyError> for Error {
-    fn from(src: KeyError) -> Self {
-        Self::Key(src)
-    }
-}
-impl From<io::Error> for Error {
-    fn from(src: io::Error) -> Self {
-        Self::IO(src)
-    }
-}
-impl From<JsonError> for Error {
-    fn from(src: JsonError) -> Self {
-        Self::Json(src)
-    }
-}
-impl From<grpcio::Error> for Error {
-    fn from(src: grpcio::Error) -> Self {
-        Self::Grpc(src)
-    }
-}
-impl From<deqs_api::ConversionError> for Error {
-    fn from(src: deqs_api::ConversionError) -> Self {
-        Self::ApiConversion(src)
-    }
 }
