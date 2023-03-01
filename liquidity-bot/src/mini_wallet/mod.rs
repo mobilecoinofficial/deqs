@@ -2,13 +2,7 @@
 
 mod account_ledger_scanner;
 
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex},
-};
-
-// TODO
+use crate::Error;
 use account_ledger_scanner::AccountLedgerScanner;
 use mc_account_keys::AccountKey;
 use mc_blockchain_types::BlockIndex;
@@ -16,15 +10,26 @@ use mc_common::logger::Logger;
 use mc_ledger_db::LedgerDB;
 use mc_transaction_core::{ring_signature::KeyImage, tx::TxOut, Amount};
 use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::{Arc, Mutex},
+};
 
-use crate::Error;
+#[derive(Clone, Debug)]
+pub enum WalletEvent {
+    ReceivedTxOut { matched_tx_out: MatchedTxOut },
+    SpentTxOut { matched_tx_out: MatchedTxOut },
+}
+
+pub type WalletEventCallback = Arc<dyn Fn(WalletEvent) + Send + Sync>;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct MatchedTxOut {
-    tx_out: TxOut,
-    amount: Amount,
-    subaddress_index: u64,
-    key_image: KeyImage,
+    pub tx_out: TxOut,
+    pub amount: Amount,
+    pub subaddress_index: u64,
+    pub key_image: KeyImage,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -33,12 +38,18 @@ pub struct State {
     matched_tx_outs: HashMap<KeyImage, MatchedTxOut>,
 }
 impl State {
-    pub fn load(state_file: &PathBuf) -> Result<Self, Error> {
+    pub fn load(
+        state_file: &PathBuf,
+        default_first_block_index: BlockIndex,
+    ) -> Result<Self, Error> {
         if state_file.exists() {
             let bytes = std::fs::read(&state_file)?;
             Ok(mc_util_serial::deserialize(&bytes).expect("TODO"))
         } else {
-            Ok(Self::default())
+            Ok(Self {
+                next_block_index: default_first_block_index,
+                ..Default::default()
+            })
         }
     }
     pub fn save(&self, path: &PathBuf) -> Result<(), Error> {
@@ -58,14 +69,25 @@ impl MiniWallet {
         state_file: impl AsRef<Path>,
         ledger_db: LedgerDB,
         account_key: AccountKey,
+        default_first_block_index: BlockIndex,
+        wallet_event_callback: WalletEventCallback,
         logger: Logger,
     ) -> Result<MiniWallet, Error> {
         let state_file = state_file.as_ref().to_path_buf();
 
-        let state = Arc::new(Mutex::new(State::load(&state_file)?));
+        let state = Arc::new(Mutex::new(State::load(
+            &state_file,
+            default_first_block_index,
+        )?));
 
-        let account_ledger_scanner =
-            AccountLedgerScanner::new(ledger_db, account_key, state.clone(), state_file, logger);
+        let account_ledger_scanner = AccountLedgerScanner::new(
+            ledger_db,
+            account_key,
+            state.clone(),
+            state_file,
+            wallet_event_callback,
+            logger,
+        );
 
         Ok(MiniWallet {
             state,

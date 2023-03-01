@@ -1,20 +1,20 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::Error;
+use crate::{mini_wallet::WalletEvent, Error};
 use mc_account_keys::{AccountKey, CHANGE_SUBADDRESS_INDEX, DEFAULT_SUBADDRESS_INDEX};
 use mc_blockchain_types::{BlockContents, BlockIndex};
 use mc_common::logger::{log, Logger};
-use mc_crypto_keys::{RistrettoPrivate, RistrettoPublic};
+use mc_crypto_keys::RistrettoPublic;
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_transaction_core::{
     get_tx_out_shared_secret,
     onetime_keys::{recover_onetime_private_key, recover_public_subaddress_spend_key},
     ring_signature::KeyImage,
     tx::TxOut,
-    Amount,
 };
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use std::{
+    cmp::min,
     collections::HashMap,
     path::PathBuf,
     sync::{Arc, Mutex},
@@ -23,7 +23,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use super::{MatchedTxOut, State};
+use super::{MatchedTxOut, State, WalletEventCallback};
 
 pub struct AccountLedgerScanner {
     join_handle: Option<JoinHandle<()>>,
@@ -34,6 +34,7 @@ impl AccountLedgerScanner {
         account_key: AccountKey,
         state: Arc<Mutex<State>>,
         state_file: PathBuf,
+        wallet_event_callback: WalletEventCallback,
         logger: Logger,
     ) -> AccountLedgerScanner {
         // TODO
@@ -57,6 +58,7 @@ impl AccountLedgerScanner {
                         spsk_to_index,
                         state,
                         state_file,
+                        wallet_event_callback,
                     };
                     thread.run();
                 })
@@ -83,14 +85,23 @@ struct AccountLedgerScannerWorker {
     spsk_to_index: HashMap<RistrettoPublic, u64>,
     state: Arc<Mutex<State>>,
     state_file: PathBuf,
+    wallet_event_callback: WalletEventCallback,
 }
 impl AccountLedgerScannerWorker {
     // TODO stop trigger
     pub fn run(mut self) {
         loop {
+            let ledger_last_block_index = self
+                .ledger_db
+                .num_blocks()
+                .expect("Could not get num blocks")
+                - 1;
             let next_block_index = self.state.lock().unwrap().next_block_index;
+            let last_block_index = min(
+                ledger_last_block_index,
+                next_block_index + SCAN_CHUNK_SIZE as u64,
+            );
 
-            let last_block_index = next_block_index + SCAN_CHUNK_SIZE as u64;
             log::trace!(
                 self.logger,
                 "Trying to scan block {}-{}",
@@ -98,8 +109,15 @@ impl AccountLedgerScannerWorker {
                 last_block_index,
             );
 
-            if self.last_log_time.elapsed() > LOG_INTERVAL {
-                log::info!(self.logger, "Scanned up to block {}", next_block_index);
+            if self.last_log_time.elapsed() > LOG_INTERVAL
+                && next_block_index < ledger_last_block_index
+            {
+                log::info!(
+                    self.logger,
+                    "Scanned up to block {} (ledger last block index is {})",
+                    next_block_index,
+                    ledger_last_block_index
+                );
                 self.last_log_time = Instant::now();
             }
 
@@ -127,13 +145,19 @@ impl AccountLedgerScannerWorker {
                 state.next_block_index += 1;
 
                 for matched_tx_out in result.matched_tx_outs {
+                    (self.wallet_event_callback)(WalletEvent::ReceivedTxOut {
+                        matched_tx_out: matched_tx_out.clone(),
+                    });
+
                     state
                         .matched_tx_outs
                         .insert(matched_tx_out.key_image, matched_tx_out);
                 }
 
                 for key_image in result.key_images {
-                    state.matched_tx_outs.remove(&key_image);
+                    if let Some(matched_tx_out) = state.matched_tx_outs.remove(&key_image) {
+                        (self.wallet_event_callback)(WalletEvent::SpentTxOut { matched_tx_out });
+                    }
                 }
             }
             state.save(&self.state_file).expect("Could not save state");

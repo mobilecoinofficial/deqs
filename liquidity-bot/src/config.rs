@@ -44,6 +44,10 @@ pub struct Config {
     #[clap(long, env = "MC_ACCOUNT_KEY")]
     pub account_key: PathBuf,
 
+    /// First block index to look at
+    #[clap(long, env = "FIRST_BLOCK_INDEX", default_value = "0")]
+    pub first_block_index: u64,
+
     /// Wallet state file
     #[clap(long, env = "WALLET_DB")]
     pub wallet_db: PathBuf,

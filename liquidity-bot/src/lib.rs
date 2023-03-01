@@ -1,5 +1,11 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+// TODO:
+// - The bot loses all state when it dies, and the wallet will not re-feed it
+//   TxOuts. Even if it did re-feed it, we wouldn't know which ones where
+//   already previously submitted to the DEQS. As such, we will need to persist
+//   the bot's state
+
 mod config;
 pub mod mini_wallet;
 
@@ -22,12 +28,15 @@ use mc_transaction_core::{
     AccountKey, Amount, AmountError, BlockVersion, TokenId, TxOutConversionError,
 };
 use mc_transaction_extra::SignedContingentInput;
+use mini_wallet::{MatchedTxOut, WalletEvent};
 use rand::Rng;
 use rust_decimal::{prelude::ToPrimitive, Decimal};
 use std::{
     collections::{HashMap, HashSet},
     io,
+    sync::{Arc, Mutex},
 };
+use tokio::sync::mpsc;
 
 /// A TxOut
 
@@ -54,7 +63,7 @@ pub enum TrackedTxOutStatus {
 #[derive(Clone, Debug)]
 pub struct TrackedTxOut {
     /// The TxOut we are tracking
-    tx_out: TxOut,
+    matched_tx_out: MatchedTxOut,
 
     /// The SCI we generated from the TxOut
     sci: SignedContingentInput,
@@ -63,7 +72,7 @@ pub struct TrackedTxOut {
     quote: Option<deqs_api::deqs::Quote>,
 }
 
-pub struct LiquidityBot {
+struct LiquidityBotTask {
     /// Account key
     account_key: AccountKey,
 
@@ -77,31 +86,58 @@ pub struct LiquidityBot {
     pairs: HashMap<TokenId, (TokenId, Decimal)>,
 
     /// List of TxOuts we would like to submit to the DEQS.
-    pending_tx_outs: Vec<TxOut>,
+    pending_tx_outs: Vec<TrackedTxOut>,
 
     /// Logger.
     logger: Logger,
+
+    /// Wallet event receiver.
+    wallet_event_rx: mpsc::UnboundedReceiver<WalletEvent>,
 }
-impl LiquidityBot {
-    fn create_tracked_tx_out(&self, tx_out: TxOut) -> Result<TrackedTxOut, Error> {
-        let public_key = RistrettoPublic::try_from(&tx_out.public_key).unwrap(); // TODO
+impl LiquidityBotTask {
+    pub async fn run(mut self) {
+        loop {
+            tokio::select! {
+                event = self.wallet_event_rx.recv() => {
+                    match event {
+                        Some(WalletEvent::ReceivedTxOut { matched_tx_out }) => {
+                            match self.add_tx_out(matched_tx_out).await {
+                                Ok(_) => {}
+                                Err(err) => {
+                                    log::error!(self.logger, "Error adding TxOut: {}", err);
+                                }
+                            }
+                        }
+                        Some(WalletEvent::SpentTxOut { matched_tx_out }) => {
+                            // TODO
+                        }
+                        None => {
+                            log::error!(self.logger, "Wallet event receiver closed");
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
 
-        let shared_secret =
-            get_tx_out_shared_secret(self.account_key.view_private_key(), &public_key);
+    async fn add_tx_out(&mut self, matched_tx_out: MatchedTxOut) -> Result<(), Error> {
+        let tracked_tx_out = self.create_tracked_tx_out(matched_tx_out)?;
 
-        let (amount, _blinding_factor) = tx_out
-            .get_masked_amount()
-            .expect("TxOut missing masked value") // TODO
-            .get_value(&shared_secret)
-            .expect("TxOut not owned by us"); // TODO
+        Ok(())
+    }
 
-        let (counter_token_id, swap_rate) = self.pairs.get(&amount.token_id).unwrap(); // TODO
+    fn create_tracked_tx_out(&self, matched_tx_out: MatchedTxOut) -> Result<TrackedTxOut, Error> {
+        let (counter_token_id, swap_rate) =
+            self.pairs.get(&matched_tx_out.amount.token_id).unwrap(); // TODO will fail for unknown tokens
 
-        let counter_amount: u64 = (Decimal::from(amount.value) * swap_rate).to_u64().unwrap(); // TODO
-        log::debug!(
+        let counter_amount: u64 = (Decimal::from(matched_tx_out.amount.value) * swap_rate)
+            .to_u64()
+            .unwrap(); // TODO
+        log::info!(
             self.logger,
             "Creating SCI for TxOut with amount {}: wanting {} counter tokens (token id {})",
-            amount.value,
+            matched_tx_out.amount.value,
             counter_amount,
             counter_token_id,
         );
@@ -122,7 +158,7 @@ impl LiquidityBot {
         // InputCredentials::new sorts the ring.
         let our_tx_out_index = self
             .ledger_db
-            .get_tx_out_index_by_public_key(&tx_out.public_key)?;
+            .get_tx_out_index_by_public_key(&matched_tx_out.tx_out.public_key)?;
         sampled_indices_vec[0] = our_tx_out_index;
 
         // Get the actual TxOuts
@@ -137,6 +173,7 @@ impl LiquidityBot {
             .get_tx_out_proof_of_memberships(&sampled_indices_vec)?;
 
         // Create our InputCredentials
+        let public_key = RistrettoPublic::try_from(&matched_tx_out.tx_out.public_key)?;
         let onetime_private_key = recover_onetime_private_key(
             &public_key,
             self.account_key.view_private_key(),
@@ -167,17 +204,57 @@ impl LiquidityBot {
             &mut rng,
         )?;
         builder.add_partial_fill_change_output(
-            amount,
+            matched_tx_out.amount,
             &ReservedSubaddresses::from(&self.account_key),
             &mut rng,
         )?;
         let sci = builder.build(&LocalRingSigner::from(&self.account_key), &mut rng)?;
 
         Ok(TrackedTxOut {
-            tx_out,
+            matched_tx_out,
             sci,
             quote: None,
         })
+    }
+}
+
+pub struct LiquidityBot {
+    /// Wallet event tx
+    wallet_event_tx: mpsc::UnboundedSender<WalletEvent>,
+
+    /// Logger.
+    logger: Logger,
+}
+impl LiquidityBot {
+    /// Construct a new LiquidityBot instance.
+    pub fn new(
+        account_key: AccountKey,
+        ledger_db: LedgerDB,
+        pairs: HashMap<TokenId, (TokenId, Decimal)>,
+        logger: Logger,
+    ) -> Self {
+        let (wallet_event_tx, wallet_event_rx) = mpsc::unbounded_channel();
+
+        let task = LiquidityBotTask {
+            account_key,
+            ledger_db,
+            pairs,
+            pending_tx_outs: Vec::new(),
+            wallet_event_rx,
+            logger: logger.clone(),
+        };
+        tokio::spawn(task.run());
+        Self {
+            wallet_event_tx,
+            logger,
+        }
+    }
+
+    /// Bridge in a wallet event.
+    pub fn notify_wallet_event(&self, event: WalletEvent) {
+        self.wallet_event_tx
+            .send(event)
+            .expect("wallet event tx failed");
     }
 }
 
