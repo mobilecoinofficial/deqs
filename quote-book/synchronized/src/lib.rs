@@ -82,9 +82,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
         let ring = &quote.sci().tx_in.ring;
         //We should have an index per txo.
         if ring.len() != indices.len() {
-            return Err(Error::ImplementationSpecific(
-                "Missing index for ring".to_owned(),
-            ));
+            return Err(Error::InvalidRing("Missing index for txo".to_owned()));
         }
 
         for (index, tx_out) in indices.iter().zip(ring.iter()) {
@@ -93,9 +91,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
                 .get_tx_out_by_index(*index)
                 .map_err(|err| Error::ImplementationSpecific(err.to_string()))?;
             if real_tx_out != *tx_out {
-                return Err(Error::ImplementationSpecific(
-                    "Invalid ring member".to_owned(),
-                ));
+                return Err(Error::InvalidRing("Invalid ring member".to_owned()));
             }
         }
         Ok(())
