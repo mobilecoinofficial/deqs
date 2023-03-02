@@ -703,4 +703,53 @@ mod tests {
             assert_eq!(removed_quotes, vec![quote.clone()])
         }
     }
+
+    #[test_with_logger]
+    fn sci_with_invalid_ring_is_rejected(logger: Logger) {
+        let pair = test_suite::pair();
+        let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+        let test_context = setup(logger.clone());
+        let ledger = test_context.ledger.clone();
+        let starting_blocks = test_context.ledger.num_blocks().unwrap();
+        let synchronized_quote_book = test_context.synchronized_quote_book;
+
+        // Adding an SCi with TXOs not in the ledger should fail if the sci_builder does
+        // not add the txos used by the sci into the ledger.
+        let sci_builder = test_suite::create_sci_builder(&pair, 10, 20, &mut rng, None);
+        // Number of blocks has not advanced because the TXOs being used by this SCI
+        // were not added to the ledger.
+        assert_eq!(ledger.num_blocks().unwrap(), starting_blocks);
+        let sci = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
+
+        assert_eq!(
+            synchronized_quote_book.add_sci(sci, None).unwrap_err(),
+            Error::InvalidRing("Invalid ring member".to_owned())
+        );
+
+        assert_eq!(
+            synchronized_quote_book.get_quotes(&pair, .., 0).unwrap(),
+            vec![]
+        );
+
+        // Adding an SCI with txos in the ledger should succeed. The sci_builder adds
+        // the txos used by the SCI into the ledger.
+        let sci_builder2 = test_suite::create_sci_builder(
+            &pair,
+            10,
+            20,
+            &mut rng,
+            Some(test_context.ledger.clone()),
+        );
+        // Number of blocks has advanced because the TXOs being used by this SCI were
+        // added to the ledger.
+        assert_eq!(ledger.num_blocks().unwrap(), starting_blocks + 1);
+        let sci2 = sci_builder2.build(&NoKeysRingSigner {}, &mut rng).unwrap();
+
+        let quote = synchronized_quote_book.add_sci(sci2, None).unwrap();
+
+        assert_eq!(
+            synchronized_quote_book.get_quotes(&pair, .., 0).unwrap(),
+            vec![quote.clone()]
+        );
+    }
 }
