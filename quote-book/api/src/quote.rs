@@ -349,6 +349,7 @@ mod tests {
             base_amount,
             counter_amount,
             rng,
+            None,
         )
     }
 
@@ -371,6 +372,7 @@ mod tests {
             required_base_change_amount,
             counter_amount,
             rng,
+            None,
         )
     }
 

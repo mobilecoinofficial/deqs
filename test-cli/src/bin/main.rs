@@ -123,6 +123,7 @@ fn main() {
                             0,
                             counter_amount,
                             &mut rng,
+                            None,
                         )
                     } else {
                         create_sci(
@@ -131,6 +132,7 @@ fn main() {
                             base_amount,
                             counter_amount,
                             &mut rng,
+                            None,
                         )
                     }
                 })

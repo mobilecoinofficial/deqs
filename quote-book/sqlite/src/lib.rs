@@ -315,41 +315,41 @@ mod tests {
     fn basic_happy_flow(logger: Logger) {
         let dir = TempDir::new().unwrap();
         let quote_book = create_quote_book(&dir, logger);
-        test_suite::basic_happy_flow(&quote_book);
+        test_suite::basic_happy_flow(&quote_book, None);
     }
 
     #[test_with_logger]
     fn cannot_add_duplicate_sci(logger: Logger) {
         let dir = TempDir::new().unwrap();
         let quote_book = create_quote_book(&dir, logger);
-        test_suite::cannot_add_duplicate_sci(&quote_book);
+        test_suite::cannot_add_duplicate_sci(&quote_book, None);
     }
 
     #[test_with_logger]
     fn cannot_add_invalid_sci(logger: Logger) {
         let dir = TempDir::new().unwrap();
         let quote_book = create_quote_book(&dir, logger);
-        test_suite::cannot_add_invalid_sci(&quote_book);
+        test_suite::cannot_add_invalid_sci(&quote_book, None);
     }
 
     #[test_with_logger]
     fn get_quotes_filtering_works(logger: Logger) {
         let dir = TempDir::new().unwrap();
         let quote_book = create_quote_book(&dir, logger);
-        test_suite::get_quotes_filtering_works(&quote_book);
+        test_suite::get_quotes_filtering_works(&quote_book, None);
     }
 
     #[test_with_logger]
     fn get_quote_ids_works(logger: Logger) {
         let dir = TempDir::new().unwrap();
         let quote_book = create_quote_book(&dir, logger);
-        test_suite::get_quote_ids_works(&quote_book);
+        test_suite::get_quote_ids_works(&quote_book, None);
     }
 
     #[test_with_logger]
     fn get_quote_by_id_works(logger: Logger) {
         let dir = TempDir::new().unwrap();
         let quote_book = create_quote_book(&dir, logger);
-        test_suite::get_quote_by_id_works(&quote_book);
+        test_suite::get_quote_by_id_works(&quote_book, None);
     }
 }

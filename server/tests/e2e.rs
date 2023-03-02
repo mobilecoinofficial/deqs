@@ -145,8 +145,14 @@ async fn e2e_two_nodes_quote_propagation(logger: Logger) {
         start_deqs_server(&ledger_db, &[&deqs_server1], &[], &logger).await;
 
     // Submit an SCI to the first server
-    let sci =
-        deqs_mc_test_utils::create_sci(TokenId::from(1), TokenId::from(2), 10000, 20000, &mut rng);
+    let sci = deqs_mc_test_utils::create_sci(
+        TokenId::from(1),
+        TokenId::from(2),
+        10000,
+        20000,
+        &mut rng,
+        Some(ledger_db.clone()),
+    );
 
     let req = SubmitQuotesRequest {
         quotes: vec![(&sci).into()].into(),
@@ -186,8 +192,14 @@ async fn e2e_two_nodes_quote_propagation_and_removal(logger: Logger) {
         start_deqs_server(&ledger_db, &[&deqs_server1], &[], &logger).await;
 
     // Submit an SCI to the first server
-    let sci =
-        deqs_mc_test_utils::create_sci(TokenId::from(1), TokenId::from(2), 10000, 20000, &mut rng);
+    let sci = deqs_mc_test_utils::create_sci(
+        TokenId::from(1),
+        TokenId::from(2),
+        10000,
+        20000,
+        &mut rng,
+        Some(ledger_db.clone()),
+    );
 
     let req = SubmitQuotesRequest {
         quotes: vec![(&sci).into()].into(),
@@ -291,6 +303,7 @@ async fn e2e_two_nodes_initial_sync(logger: Logger) {
                 10000 * i,
                 20000,
                 &mut rng,
+                Some(ledger_db.clone()),
             )
         })
         .collect::<Vec<_>>();
@@ -303,6 +316,7 @@ async fn e2e_two_nodes_initial_sync(logger: Logger) {
                 10000,
                 20000 * i,
                 &mut rng,
+                Some(ledger_db.clone()),
             )
         })
         .collect::<Vec<_>>();
@@ -357,6 +371,7 @@ async fn e2e_multiple_nodes_play_nicely(logger: Logger) {
                     10000 * i,
                     20000,
                     &mut rng,
+                    Some(ledger_db.clone()),
                 )
             })
             .collect::<Vec<_>>();
@@ -396,6 +411,7 @@ async fn e2e_multiple_nodes_play_nicely(logger: Logger) {
         1234,
         20000,
         &mut rng,
+        Some(ledger_db.clone()),
     );
 
     let req = SubmitQuotesRequest {

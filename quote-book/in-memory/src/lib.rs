@@ -215,30 +215,30 @@ mod tests {
     #[test]
     fn basic_happy_flow() {
         let quote_book = InMemoryQuoteBook::default();
-        test_suite::basic_happy_flow(&quote_book);
+        test_suite::basic_happy_flow(&quote_book, None);
     }
 
     #[test]
     fn cannot_add_invalid_sci() {
         let quote_book = InMemoryQuoteBook::default();
-        test_suite::cannot_add_invalid_sci(&quote_book);
+        test_suite::cannot_add_invalid_sci(&quote_book, None);
     }
 
     #[test]
     fn get_quotes_filtering_works() {
         let quote_book = InMemoryQuoteBook::default();
-        test_suite::get_quotes_filtering_works(&quote_book);
+        test_suite::get_quotes_filtering_works(&quote_book, None);
     }
 
     #[test]
     fn get_quote_ids_works() {
         let quote_book = InMemoryQuoteBook::default();
-        test_suite::get_quote_ids_works(&quote_book);
+        test_suite::get_quote_ids_works(&quote_book, None);
     }
 
     #[test]
     fn get_quote_by_id_works() {
         let quote_book = InMemoryQuoteBook::default();
-        test_suite::get_quote_by_id_works(&quote_book);
+        test_suite::get_quote_by_id_works(&quote_book, None);
     }
 }

@@ -66,6 +66,7 @@ mod tests {
             10,
             30,
             &mut rng,
+            None,
         );
         let source = Quote::try_from(sci).unwrap();
 

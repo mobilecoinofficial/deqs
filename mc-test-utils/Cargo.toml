@@ -8,6 +8,7 @@ edition = "2021"
 mc-account-keys = { path = "../mobilecoin/account-keys" }
 mc-crypto-ring-signature-signer = { path = "../mobilecoin/crypto/ring-signature/signer", default-features = false }
 mc-fog-report-validation-test-utils = { path = "../mobilecoin/fog/report/validation/test-utils" }
+mc-ledger-db = { path = "../mobilecoin/ledger/db", features = ["test_utils"] }
 mc-transaction-builder = { path = "../mobilecoin/transaction/builder", features = ["test-only"] }
 mc-transaction-extra = { path = "../mobilecoin/transaction/extra" }
 mc-transaction-types = { path = "../mobilecoin/transaction/types" }
