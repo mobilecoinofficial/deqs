@@ -53,7 +53,7 @@ impl From<QuoteBookError> for RpcQuoteBookError {
         match err {
             QuoteBookError::Sci(err) => Self::Sci(err),
             QuoteBookError::UnsupportedSci(err) => Self::UnsupportedSci(err),
-            QuoteBookError::QuoteAlreadyExists => Self::QuoteAlreadyExists,
+            QuoteBookError::QuoteAlreadyExists { .. } => Self::QuoteAlreadyExists,
             QuoteBookError::QuoteNotFound => Self::QuoteNotFound,
             QuoteBookError::QuoteIsStale => Self::QuoteIsStale,
             err => Self::Other(err.to_string()),

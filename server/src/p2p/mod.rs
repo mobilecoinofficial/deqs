@@ -365,13 +365,13 @@ async fn sync_quotes_from_peer(
                                     );
                                     Ok(())
                                 }
-                                Err(err @ QuoteBookError::QuoteAlreadyExists) => {
+                                Err(err @ QuoteBookError::QuoteAlreadyExists{..}) => {
                                     log::debug!(
-                            logger,
-                            "Failed to add quote {} from {:?}: Already exists (this is acceptable)",
-                            quote.id(),
-                            peer_id,
-                        );
+                                        logger,
+                                        "Failed to add quote {} from {:?}: Already exists (this is acceptable)",
+                                        quote.id(),
+                                        peer_id,
+                                    );
                                     Err(err.into())
                                 }
                                 Err(err) => {
@@ -413,7 +413,9 @@ async fn sync_quotes_from_peer(
     {
         match result {
             Ok(_) => num_added_quotes += 1,
-            Err(Error::QuoteBook(QuoteBookError::QuoteAlreadyExists)) => num_duplicate_quotes += 1,
+            Err(Error::QuoteBook(QuoteBookError::QuoteAlreadyExists { .. })) => {
+                num_duplicate_quotes += 1
+            }
             Err(Error::QuoteBook(QuoteBookError::QuoteNotFound)) => num_missing_quotes += 1,
             Err(err) => {
                 log::warn!(logger, "Failed to sync quote: {}", err);

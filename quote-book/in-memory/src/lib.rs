@@ -39,11 +39,13 @@ impl QuoteBook for InMemoryQuoteBook {
         // different pricing.
         // This also ensures that we do not encounter a duplicate id, since the id is a
         // hash of the entire SCI including its key image.
-        if quotes
+        if let Some(existing_quote) = quotes
             .iter()
-            .any(|entry| entry.sci().key_image() == quote.sci().key_image())
+            .find(|entry| entry.sci().key_image() == quote.sci().key_image())
         {
-            return Err(QuoteBookError::QuoteAlreadyExists);
+            return Err(QuoteBookError::QuoteAlreadyExists {
+                existing_quote: existing_quote.clone(),
+            });
         }
 
         // Add quote. We assert it doesn't fail since we do not expect duplicate quotes

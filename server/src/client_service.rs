@@ -8,7 +8,7 @@ use deqs_api::{
     },
     deqs_grpc::{create_deqs_client_api, DeqsClientApi},
 };
-use deqs_quote_book_api::{Pair, QuoteBook};
+use deqs_quote_book_api::{Error as QuoteBookError, Pair, QuoteBook};
 use futures::{FutureExt, SinkExt};
 use grpcio::{RpcContext, RpcStatus, ServerStreamingSink, Service, UnarySink, WriteFlags};
 use mc_common::logger::{log, scoped_global_logger, Logger};
@@ -113,6 +113,11 @@ impl<OB: QuoteBook> ClientService<OB> {
                             );
                         }
                     }
+                }
+                Err(ref err @ QuoteBookError::QuoteAlreadyExists { ref existing_quote }) => {
+                    error_messages.push(err.to_string());
+                    status_codes.push(err.into());
+                    quotes.push(existing_quote.into());
                 }
                 Err(err) => {
                     error_messages.push(err.to_string());
@@ -422,12 +427,16 @@ mod tests {
         };
         let resp = client_api.submit_quotes(&req).expect("submit quote failed");
         assert_eq!(resp.status_codes, vec![QuoteStatusCode::CREATED]);
+        let quote = Quote::try_from(&resp.quotes[0]).unwrap();
 
         let resp = client_api.submit_quotes(&req).expect("submit quote failed");
         assert_eq!(
             resp.status_codes,
             vec![QuoteStatusCode::QUOTE_ALREADY_EXISTS]
         );
+        let quote2 = Quote::try_from(&resp.quotes[0]).unwrap();
+
+        assert_eq!(quote, quote2);
     }
 
     #[test_with_logger]
@@ -453,6 +462,8 @@ mod tests {
             resp.status_codes,
             vec![QuoteStatusCode::CREATED, QuoteStatusCode::CREATED]
         );
+        let quote1 = Quote::try_from(&resp.quotes[0]).unwrap();
+        let quote2 = Quote::try_from(&resp.quotes[1]).unwrap();
 
         let req = SubmitQuotesRequest {
             quotes: vec![(&sci1).into(), (&sci3).into(), (&sci2).into()].into(),
@@ -467,6 +478,9 @@ mod tests {
                 QuoteStatusCode::QUOTE_ALREADY_EXISTS
             ]
         );
+
+        assert_eq!(quote1, Quote::try_from(&resp.quotes[0]).unwrap());
+        assert_eq!(quote2, Quote::try_from(&resp.quotes[2]).unwrap());
     }
 
     #[test_with_logger]

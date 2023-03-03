@@ -2,7 +2,7 @@
 
 use crate::{schema, sql_types::VecU64};
 use deqs_quote_book_api::{Error, Pair, QuoteId};
-use diesel::{Insertable, Queryable};
+use diesel::prelude::*;
 use mc_transaction_extra::SignedContingentInput;
 use mc_transaction_types::TokenId;
 use mc_util_serial::{decode, encode};
@@ -62,6 +62,15 @@ impl Quote {
     }
     pub fn timestamp(&self) -> u64 {
         self.timestamp as u64
+    }
+
+    pub fn get_by_id(conn: &mut SqliteConnection, id: &QuoteId) -> Result<Option<Self>, Error> {
+        let id = id.0.to_vec();
+        Ok(schema::quotes::table
+            .filter(schema::quotes::dsl::id.eq(id))
+            .first(conn)
+            .optional()
+            .map_err(crate::error::Error::from)?)
     }
 }
 

@@ -1,5 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+#![feature(assert_matches)]
+
 use deqs_quote_book_api::{Error, Pair, Quote, QuoteBook, QuoteId};
 use mc_account_keys::AccountKey;
 use mc_crypto_ring_signature::Error as RingSignatureError;
@@ -10,7 +12,7 @@ use mc_transaction_extra::{SignedContingentInput, SignedContingentInputError};
 use mc_transaction_types::{Amount, TokenId};
 use rand::{rngs::StdRng, SeedableRng};
 use rand_core::{CryptoRng, RngCore};
-use std::collections::HashSet;
+use std::{assert_matches::assert_matches, collections::HashSet};
 
 /// Default test pair
 pub fn pair() -> Pair {
@@ -218,12 +220,30 @@ pub fn cannot_add_duplicate_sci(quote_book: &impl QuoteBook) {
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
     let sci = create_sci(&pair, 10, 20, &mut rng);
-    quote_book.add_sci(sci.clone(), None).unwrap();
+    let quote1 = quote_book.add_sci(sci.clone(), None).unwrap();
 
-    assert_eq!(
-        quote_book.add_sci(sci, None).unwrap_err(),
-        Error::QuoteAlreadyExists
+    // Trying to add the exact same SCI should fail
+    assert_matches!(
+        quote_book.add_sci(sci.clone(), None).unwrap_err(),
+        Error::QuoteAlreadyExists { existing_quote } if existing_quote == quote1
     );
+
+    // Trying to add a different SCI with the same key image should fail
+    let mut sci2 = sci.clone();
+    sci2.tx_out_global_indices[0] += 1;
+
+    assert_matches!(
+        quote_book.add_sci(sci2.clone(), None).unwrap_err(),
+        Error::QuoteAlreadyExists { existing_quote } if existing_quote == quote1
+    );
+
+    // Test sanity: Quote id should be different but key image should be
+    // identical.
+    assert_eq!(sci.key_image(), sci2.key_image());
+
+    let quote2 = Quote::new(sci2, None).unwrap();
+    assert_ne!(quote1.id(), quote2.id());
+    assert_eq!(quote1.key_image(), quote2.key_image());
 }
 
 /// Test that get_quotes filter correctly.
