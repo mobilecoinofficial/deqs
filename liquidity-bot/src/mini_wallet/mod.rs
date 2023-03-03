@@ -18,8 +18,11 @@ use std::{
 
 #[derive(Clone, Debug)]
 pub enum WalletEvent {
-    ReceivedTxOut { matched_tx_out: MatchedTxOut },
-    SpentTxOut { matched_tx_out: MatchedTxOut },
+    BlockProcessed {
+        block_index: BlockIndex,
+        received_tx_outs: Vec<MatchedTxOut>,
+        spent_tx_outs: Vec<MatchedTxOut>,
+    },
 }
 
 pub type WalletEventCallback = Arc<dyn Fn(WalletEvent) + Send + Sync>;

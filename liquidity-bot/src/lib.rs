@@ -125,23 +125,28 @@ impl LiquidityBotTask {
             tokio::select! {
                 event = self.wallet_event_rx.recv() => {
                     match event {
-                        Some(WalletEvent::ReceivedTxOut { matched_tx_out }) => {
-                            match self.add_tx_out(matched_tx_out).await {
-                                Ok(_) => {
-                                    if let Err(err) = self.submit_pending_tx_outs().await {
-                                        log::info!(self.logger, "Error resubmitting TxOuts: {}", err);
-                                    }
+                        Some(WalletEvent::BlockProcessed { received_tx_outs, .. }) => {
+                            // TODO look at spent TxOuts and see if they match any SCIs we submitted
 
+                            // Try and add any new TxOuts to the pending list.
+                            match self.update_pending_tx_outs_from_received_tx_outs(&received_tx_outs) {
+                                Ok(true) => {
+                                    // New tx outs were added to the pending queue, so lets try and submit it.
+                                    if let Err(err) = self.submit_pending_tx_outs().await {
+                                        log::info!(self.logger, "Error submitting pending TxOuts: {}", err);
+                                    }
                                 }
+
+                                Ok(false) => {
+                                    // Nothing new was added.
+                                }
+
                                 Err(err) => {
                                     log::error!(self.logger, "Error adding TxOut: {}", err);
                                 }
                             }
                         }
-                        Some(WalletEvent::SpentTxOut { .. }) => {
-                            // TODO
-                        }
-                        None => {
+                       None => {
                             log::error!(self.logger, "Wallet event receiver closed");
                             break;
                         }
@@ -168,13 +173,23 @@ impl LiquidityBotTask {
         drop(shutdown_ack_tx);
     }
 
-    async fn add_tx_out(&mut self, matched_tx_out: MatchedTxOut) -> Result<(), Error> {
-        if self.pairs.contains_key(&matched_tx_out.amount.token_id) {
-            let tracked_tx_out = self.create_pending_tx_out(matched_tx_out)?;
-            self.pending_tx_outs.push(tracked_tx_out);
+    // Updates our pending TxOuts from the received TxOuts, returning Ok(true) if we
+    // added any new ones.
+    fn update_pending_tx_outs_from_received_tx_outs(
+        &mut self,
+        matched_tx_outs: &[MatchedTxOut],
+    ) -> Result<bool, Error> {
+        let mut added = false;
+
+        for matched_tx_out in matched_tx_outs.iter().cloned() {
+            if self.pairs.contains_key(&matched_tx_out.amount.token_id) {
+                let tracked_tx_out = self.create_pending_tx_out(matched_tx_out)?;
+                self.pending_tx_outs.push(tracked_tx_out);
+                added = true;
+            }
         }
 
-        Ok(())
+        Ok(added)
     }
 
     async fn submit_pending_tx_outs(&mut self) -> Result<(), Error> {
@@ -215,7 +230,7 @@ impl LiquidityBotTask {
                         );
                     } else {
                         assert_eq!(status_code, &QuoteStatusCode::QUOTE_ALREADY_EXISTS);
-                        log::warn!(
+                        log::info!(
                             self.logger,
                             "DEQS returned a different SCI than the one we submitted for TxOut {}",
                             hex::encode(pending_tx_out.matched_tx_out.tx_out.public_key),
@@ -353,7 +368,7 @@ impl LiquidityBotTask {
                             quote_id
                         );
                     } else {
-                        log::warn!(
+                        log::info!(
                             self.logger,
                             "DEQS returned a different SCI than the one we submitted for TxOut {}",
                             hex::encode(listed_tx_out.matched_tx_out.tx_out.public_key),

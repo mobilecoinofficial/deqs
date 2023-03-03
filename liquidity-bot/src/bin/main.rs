@@ -76,7 +76,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             event = wallet_rx.recv() => {
                 match event {
                     Some(event) => {
-                        log::debug!(logger, "Wallet event: {:?}", event);
+                        log::trace!(logger, "Wallet event: {:?}", event);
                         liquidity_bot.notify_wallet_event(event);
                     }
                    None => {

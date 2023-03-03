@@ -190,21 +190,28 @@ impl AccountLedgerScannerWorker {
                 assert_eq!(result.block_index, state.next_block_index);
                 state.next_block_index += 1;
 
-                for matched_tx_out in result.matched_tx_outs {
-                    (self.wallet_event_callback)(WalletEvent::ReceivedTxOut {
-                        matched_tx_out: matched_tx_out.clone(),
-                    });
+                let spent_tx_outs = result
+                    .key_images
+                    .iter()
+                    // This implicitly skips key images that we identified as ours but failed to
+                    // find a MatchedTxOut for. A more robust implementation
+                    // would error when this happens, since it is unexpected unless we started
+                    // scanning from the middle of the ledger.
+                    .filter_map(|key_image| state.matched_tx_outs.remove(key_image))
+                    .collect::<Vec<_>>();
 
+                // Update our map of key image -> MatchedTxOut so that we can track spending.
+                for matched_tx_out in result.matched_tx_outs.clone() {
                     state
                         .matched_tx_outs
                         .insert(matched_tx_out.key_image, matched_tx_out);
                 }
 
-                for key_image in result.key_images {
-                    if let Some(matched_tx_out) = state.matched_tx_outs.remove(&key_image) {
-                        (self.wallet_event_callback)(WalletEvent::SpentTxOut { matched_tx_out });
-                    }
-                }
+                (self.wallet_event_callback)(WalletEvent::BlockProcessed {
+                    block_index: result.block_index,
+                    received_tx_outs: result.matched_tx_outs,
+                    spent_tx_outs,
+                });
             }
             state.save(&self.state_file).expect("Could not save state");
             let next_block_index = state.next_block_index;
