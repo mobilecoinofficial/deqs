@@ -30,6 +30,7 @@ use deqs_api::{
     DeqsClientUri,
 };
 use deqs_quote_book_api::QuoteId;
+use futures::executor::block_on;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_common::logger::{log, Logger};
 use mc_crypto_ring_signature_signer::{LocalRingSigner, OneTimeKeyDeriveData};
@@ -102,11 +103,20 @@ struct LiquidityBotTask {
     /// Wallet event receiver.
     wallet_event_rx: mpsc::UnboundedReceiver<WalletEvent>,
 
+    /// Shutdown receiver, used to signal the event loop to shutdown.
+    shutdown_rx: mpsc::UnboundedReceiver<()>,
+
+    /// Shutdown acknowledgement sender, used to signal the caller that the the
+    /// event loop terminated (when it goes out of scope).
+    shutdown_ack_tx: Option<mpsc::UnboundedSender<()>>,
+
     /// DEQS client.
     deqs_client: DeqsClientApiClient,
 }
 impl LiquidityBotTask {
     pub async fn run(mut self) {
+        let shutdown_ack_tx = self.shutdown_ack_tx.take();
+
         // TODO
         let mut resubmit_tx_outs_interval = interval(Duration::from_secs(1));
         resubmit_tx_outs_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
@@ -146,8 +156,16 @@ impl LiquidityBotTask {
                         log::info!(self.logger, "Error resubmitting TxOuts: {}", err);
                     }
                 }
+
+                _ = self.shutdown_rx.recv() => {
+                    log::info!(&self.logger, "shutdown requested");
+                    break
+                }
+
             }
         }
+
+        drop(shutdown_ack_tx);
     }
 
     async fn add_tx_out(&mut self, matched_tx_out: MatchedTxOut) -> Result<(), Error> {
@@ -463,6 +481,12 @@ impl LiquidityBotTask {
 pub struct LiquidityBot {
     /// Wallet event tx
     wallet_event_tx: mpsc::UnboundedSender<WalletEvent>,
+
+    /// Shutdown sender, used to signal the event loop to shutdown.
+    shutdown_tx: mpsc::UnboundedSender<()>,
+
+    /// Shutdown acknowledged receiver.
+    shutdown_ack_rx: mpsc::UnboundedReceiver<()>,
 }
 impl LiquidityBot {
     /// Construct a new LiquidityBot instance.
@@ -474,6 +498,8 @@ impl LiquidityBot {
         logger: Logger,
     ) -> Self {
         let (wallet_event_tx, wallet_event_rx) = mpsc::unbounded_channel();
+        let (shutdown_tx, shutdown_rx) = mpsc::unbounded_channel();
+        let (shutdown_ack_tx, shutdown_ack_rx) = mpsc::unbounded_channel();
 
         let env = Arc::new(EnvBuilder::new().name_prefix("deqs-client-grpc").build());
         let ch = ChannelBuilder::default_channel_builder(env).connect_to_uri(deqs_uri, &logger);
@@ -487,10 +513,16 @@ impl LiquidityBot {
             listed_tx_outs: Vec::new(),
             wallet_event_rx,
             deqs_client,
+            shutdown_rx,
+            shutdown_ack_tx: Some(shutdown_ack_tx),
             logger: logger.clone(),
         };
         tokio::spawn(task.run());
-        Self { wallet_event_tx }
+        Self {
+            wallet_event_tx,
+            shutdown_tx,
+            shutdown_ack_rx,
+        }
     }
 
     /// Bridge in a wallet event.
@@ -500,6 +532,22 @@ impl LiquidityBot {
             .expect("wallet event tx failed"); // We assume the channel stays
                                                // open for as long as the bot is
                                                // running.
+    }
+
+    /// Request the event loop task to shut down.
+    pub async fn shutdown(&mut self) {
+        if self.shutdown_tx.send(()).is_err() {
+            return;
+        }
+
+        // Wait for the event loop to drop the ack sender.
+        let _ = self.shutdown_ack_rx.recv().await;
+    }
+}
+
+impl Drop for LiquidityBot {
+    fn drop(&mut self) {
+        block_on(self.shutdown());
     }
 }
 

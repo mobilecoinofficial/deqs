@@ -7,9 +7,8 @@ use mc_crypto_keys::KeyError;
 use mc_ledger_db::Error as LedgerDbError;
 use mc_transaction_builder::{SignedContingentInputBuilderError, TxBuilderError};
 use mc_transaction_core::{AmountError, TokenId, TxOutConversionError};
+use mc_util_serial::{decode::Error as DeserializeError, encode::Error as SerializeError};
 use serde_json::Error as JsonError;
-use mc_util_serial::decode::Error as DeserializeError;
-use mc_util_serial::encode::Error as SerializeError;
 
 #[derive(Debug, Display)]
 pub enum Error {
