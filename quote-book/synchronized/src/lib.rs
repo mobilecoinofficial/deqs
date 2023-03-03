@@ -713,7 +713,7 @@ mod tests {
         let starting_blocks = test_context.ledger.num_blocks().unwrap();
         let synchronized_quote_book = test_context.synchronized_quote_book;
 
-        // Adding an SCi with TXOs not in the ledger should fail if the sci_builder does
+        // Adding an SCI with TXOs not in the ledger should fail if the sci_builder does
         // not add the txos used by the sci into the ledger.
         let sci_builder = test_suite::create_sci_builder(&pair, 10, 20, &mut rng, None);
         // Number of blocks has not advanced because the TXOs being used by this SCI
