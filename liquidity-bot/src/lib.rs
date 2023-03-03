@@ -3,9 +3,10 @@
 // TODO:
 //
 // - The bot loses all state when it dies, and the wallet will not re-feed it
-//   TxOuts. Even if it did re-feed it, we wouldn't know which ones where
-//   already previously submitted to the DEQS. As such, we will need to persist
-//   the bot's state
+//   TxOuts (because the wallet does keep track of which block it last scanned).
+//   Even if it did re-feed it, we wouldn't know which ones where already
+//   previously submitted to the DEQS. As such, we will need to persist the
+//   bot's state
 //
 // - It could be nice for the bot to try and figure out if its orders got
 //   fulfilled. It can do that by looking at spent key images in a given

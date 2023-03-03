@@ -47,3 +47,11 @@ rust_decimal = "1.28"
 serde = { version = "1.0", default-features = false, features = ["alloc", "derive"] }
 serde_json = "1.0"
 tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros", "time", "signal", "sync"] }
+
+[dev-dependencies]
+deqs-test-server = { path = "../test-server" }
+
+mc-ledger-db = { path = "../mobilecoin/ledger/db", features = ["test_utils"] }
+
+rust_decimal_macros = "1.28"
+tokio-retry = "0.3"

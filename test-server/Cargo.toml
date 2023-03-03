@@ -1,0 +1,15 @@
+[package]
+name = "deqs-test-server"
+version = "1.3.0-pre0"
+authors = ["MobileCoin"]
+edition = "2021"
+
+[dependencies]
+deqs-api = { path = "../api" }
+
+mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
+mc-util-grpc = { path = "../mobilecoin/util/grpc" }
+mc-util-uri = { path = "../mobilecoin/util/uri" }
+
+futures = "0.3"
+grpcio = "0.12.0"

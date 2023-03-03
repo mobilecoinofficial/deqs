@@ -13,6 +13,7 @@ members = [
     "quote-book/test-suite",
     "server",
     "test-cli",
+    "test-server",
 ]
 exclude = [
     "mobilecoin/",
