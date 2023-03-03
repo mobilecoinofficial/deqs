@@ -52,6 +52,7 @@ tokio = { version = "1.0", features = ["rt", "rt-multi-thread", "macros", "time"
 deqs-test-server = { path = "../test-server" }
 
 mc-ledger-db = { path = "../mobilecoin/ledger/db", features = ["test_utils"] }
+mc-transaction-core-test-utils = { path = "../mobilecoin/transaction/core/test-utils" }
 
 rust_decimal_macros = "1.28"
 tokio-retry = "0.3"
