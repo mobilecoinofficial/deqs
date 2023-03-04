@@ -5,26 +5,28 @@
 
 mod client_service;
 
-use std::{str::FromStr, sync::Arc};
-
 use client_service::ClientService;
 use deqs_api::{
     deqs::{GetQuotesRequest, GetQuotesResponse, SubmitQuotesRequest, SubmitQuotesResponse},
+    deqs_grpc::DeqsClientApiClient,
     DeqsClientUri,
 };
 use futures::executor::block_on;
-use grpcio::{RpcStatus, ServerCredentials};
+use grpcio::{ChannelBuilder, EnvBuilder, RpcStatus, ServerCredentials};
 use mc_common::logger::Logger;
+use mc_util_grpc::ConnectionUriGrpcioChannel;
+use std::{str::FromStr, sync::Arc};
 
 pub struct DeqsTestServer {
     server: Option<grpcio::Server>,
     client_service: ClientService,
     client_uri: DeqsClientUri,
+    logger: Logger,
 }
 
 impl DeqsTestServer {
     pub fn start(logger: Logger) -> Self {
-        let client_service = ClientService::new(logger);
+        let client_service = ClientService::new(logger.clone());
 
         let grpc_env = Arc::new(
             grpcio::EnvBuilder::new()
@@ -46,7 +48,15 @@ impl DeqsTestServer {
             client_service,
             client_uri: DeqsClientUri::from_str(&format!("insecure-deqs://127.0.0.1:{}", port))
                 .unwrap(),
+            logger,
         }
+    }
+
+    pub fn client(&self) -> DeqsClientApiClient {
+        let env = Arc::new(EnvBuilder::new().name_prefix("deqs-client-grpc").build());
+        let ch = ChannelBuilder::default_channel_builder(env)
+            .connect_to_uri(&self.client_uri, &self.logger);
+        DeqsClientApiClient::new(ch)
     }
 
     pub fn set_submit_quotes_response(&self, resp: Result<SubmitQuotesResponse, RpcStatus>) {

@@ -585,3 +585,154 @@ fn sanity_check_submit_quotes_response(
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use deqs_test_server::DeqsTestServer;
+    use mc_common::logger::{async_test_with_logger, Logger};
+    use mc_ledger_db::test_utils::{
+        add_txos_and_key_images_to_ledger, create_ledger, initialize_ledger,
+    };
+    use mc_transaction_core_test_utils::{get_outputs, KeyImage};
+    use rand::{rngs::StdRng, RngCore, SeedableRng};
+    use rust_decimal_macros::dec;
+
+    struct TestContext {
+        _deqs_server: DeqsTestServer,
+        task: LiquidityBotTask,
+        ledger_db: LedgerDB,
+        account_key: AccountKey,
+        rng: StdRng,
+    }
+    impl TestContext {
+        pub fn new(pairs: &[(TokenId, TokenId, Decimal)], logger: &Logger) -> Self {
+            let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+            let account_key = AccountKey::random(&mut rng);
+
+            let mut ledger_db = create_ledger();
+            let n_blocks = 3;
+            initialize_ledger(
+                BlockVersion::MAX,
+                &mut ledger_db,
+                n_blocks,
+                &account_key,
+                &mut rng,
+            );
+
+            let deqs_server = DeqsTestServer::start(logger.clone());
+            let deqs_client = deqs_server.client();
+
+            let (_wallet_event_tx, wallet_event_rx) = mpsc::unbounded_channel();
+            let (_shutdown_tx, shutdown_rx) = mpsc::unbounded_channel();
+            let (shutdown_ack_tx, _shutdown_ack_rx) = mpsc::unbounded_channel();
+
+            let pairs = pairs
+                .into_iter()
+                .map(|(base_token, counter_token, rate)| (*base_token, (*counter_token, *rate)))
+                .collect();
+
+            let task = LiquidityBotTask {
+                account_key: account_key.clone(),
+                ledger_db: ledger_db.clone(),
+                pairs,
+                pending_tx_outs: Vec::new(),
+                listed_tx_outs: Vec::new(),
+                wallet_event_rx,
+                deqs_client,
+                shutdown_rx,
+                shutdown_ack_tx: Some(shutdown_ack_tx),
+                logger: logger.clone(),
+            };
+
+            Self {
+                _deqs_server: deqs_server,
+                task,
+                ledger_db,
+                account_key,
+                rng,
+            }
+        }
+
+        pub fn create_matched_tx_out(&mut self, amount: Amount) -> MatchedTxOut {
+            let recipient = self.account_key.default_subaddress();
+            let recipient_and_amount = vec![(recipient.clone(), amount)];
+            let outputs = get_outputs(BlockVersion::MAX, &recipient_and_amount, &mut self.rng);
+
+            let block_data = add_txos_and_key_images_to_ledger(
+                &mut self.ledger_db,
+                BlockVersion::MAX,
+                outputs,
+                vec![KeyImage::from(self.rng.next_u64())],
+                &mut self.rng,
+            )
+            .unwrap();
+
+            MatchedTxOut {
+                tx_out: block_data.contents().outputs[0].clone(),
+                amount,
+                subaddress_index: 0,
+                key_image: KeyImage::from(self.rng.next_u64()),
+            }
+        }
+    }
+
+    fn default_pairs() -> Vec<(TokenId, TokenId, Decimal)> {
+        vec![
+            // MOB for eUSD at a rate of 0.5eUSD per MOB
+            (TokenId::MOB, TokenId::from(1), dec!(0.5)),
+            // eUSD for MOB at a rate of 3.0MOB per eUSD
+            (TokenId::from(1), TokenId::MOB, dec!(3.0)),
+        ]
+    }
+
+    #[async_test_with_logger]
+    async fn update_pending_tx_outs_from_received_tx_outs_behaves_correctly(logger: Logger) {
+        let mut test_ctx = TestContext::new(&default_pairs(), &logger);
+        assert_eq!(test_ctx.task.pending_tx_outs.len(), 0);
+
+        // Create four MatchedTxOuts, two for each pair the bot is offering and two
+        // unrelated ones.
+        let matched_tx_outs = vec![
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB)),
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::from(1))),
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::from(2))),
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::from(3))),
+        ];
+
+        assert_eq!(
+            test_ctx
+                .task
+                .update_pending_tx_outs_from_received_tx_outs(&matched_tx_outs)
+                .unwrap(),
+            true // The bot should have updated its pending tx outs.
+        );
+
+        // We should see two pending tx outs, one for each pair the bot is offering.
+        assert_eq!(test_ctx.task.pending_tx_outs.len(), 2);
+
+        for (idx, (expected_token_id, expected_partial_amount)) in
+            [(TokenId::from(1), dec!(50)), (TokenId::from(0), dec!(300))]
+                .iter()
+                .enumerate()
+        {
+            assert_eq!(
+                test_ctx.task.pending_tx_outs[idx].matched_tx_out,
+                matched_tx_outs[idx]
+            );
+            let sci = &test_ctx.task.pending_tx_outs[idx].sci;
+
+            assert!(sci.tx_in.ring.contains(&matched_tx_outs[idx].tx_out));
+
+            let input_rules = sci.tx_in.input_rules.as_ref().unwrap();
+            assert_eq!(input_rules.partial_fill_outputs.len(), 1);
+            let (partial_fill_amount, _) =
+                input_rules.partial_fill_outputs[0].reveal_amount().unwrap();
+            assert_eq!(partial_fill_amount.token_id, *expected_token_id);
+            assert_eq!(
+                Decimal::from(partial_fill_amount.value),
+                *expected_partial_amount
+            );
+        }
+    }
+}

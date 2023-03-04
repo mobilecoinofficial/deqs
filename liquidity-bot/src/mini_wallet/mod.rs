@@ -27,7 +27,7 @@ pub enum WalletEvent {
 
 pub type WalletEventCallback = Arc<dyn Fn(WalletEvent) + Send + Sync>;
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub struct MatchedTxOut {
     pub tx_out: TxOut,
     pub amount: Amount,
