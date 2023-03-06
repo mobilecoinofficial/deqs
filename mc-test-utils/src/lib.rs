@@ -42,8 +42,8 @@ pub fn create_sci_builder(
         offered_input_credentials
             .membership_proofs
             .iter_mut()
-            .zip(0u64..)
-            .for_each(|(proof, index)| proof.index = num_txos + index);
+            .enumerate()
+            .for_each(|(index, proof)| proof.index = num_txos + index as u64);
         add_txos_to_ledger(
             &mut ledger,
             BlockVersion::MAX,
@@ -133,8 +133,8 @@ pub fn create_partial_sci(
         offered_input_credentials
             .membership_proofs
             .iter_mut()
-            .zip(0u64..)
-            .for_each(|(proof, index)| proof.index = num_txos + index);
+            .enumerate()
+            .for_each(|(index, proof)| proof.index = num_txos + index as u64);
         add_txos_to_ledger(
             &mut ledger,
             BlockVersion::MAX,
