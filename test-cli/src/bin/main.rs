@@ -10,6 +10,7 @@ use deqs_mc_test_utils::{create_partial_sci, create_sci};
 use deqs_quote_book_api::Quote;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_common::logger::{log, o};
+use mc_ledger_db::LedgerDB;
 use mc_transaction_types::TokenId;
 use mc_util_grpc::ConnectionUriGrpcioChannel;
 use rand::{rngs::StdRng, thread_rng, RngCore, SeedableRng};
@@ -67,6 +68,10 @@ pub struct Config {
 
     #[clap(subcommand)]
     pub command: Command,
+
+    /// Path to ledgerdb used by the server
+    #[clap(long = "ledger-db", env = "MC_LEDGER_DB")]
+    pub ledger_db: PathBuf,
 }
 
 fn main() {
@@ -81,6 +86,9 @@ fn main() {
         thread_rng().fill_bytes(&mut seed_bytes);
     };
     let mut rng: StdRng = SeedableRng::from_seed(seed_bytes);
+
+    // Open the ledger db
+    let ledger_db = LedgerDB::open(&config.ledger_db).expect("Could not open ledger db");
 
     match config.command {
         Command::SubmitQuotes {
@@ -123,7 +131,7 @@ fn main() {
                             0,
                             counter_amount,
                             &mut rng,
-                            None,
+                            Some(ledger_db.clone()),
                         )
                     } else {
                         create_sci(
@@ -132,7 +140,7 @@ fn main() {
                             base_amount,
                             counter_amount,
                             &mut rng,
-                            None,
+                            Some(ledger_db.clone()),
                         )
                     }
                 })

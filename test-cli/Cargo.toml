@@ -16,6 +16,7 @@ deqs-quote-book-api = { path = "../quote-book/api" }
 
 mc-api = { path = "../mobilecoin/api" }
 mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
+mc-ledger-db = { path = "../mobilecoin/ledger/db" }
 mc-transaction-types = { path = "../mobilecoin/transaction/types" }
 mc-util-grpc = { path = "../mobilecoin/util/grpc" }
 mc-util-parse = { path = "../mobilecoin/util/parse" }

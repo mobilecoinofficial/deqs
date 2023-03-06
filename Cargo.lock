@@ -1265,6 +1265,7 @@ dependencies = [
  "hex",
  "mc-api",
  "mc-common",
+ "mc-ledger-db",
  "mc-transaction-types",
  "mc-util-grpc",
  "mc-util-parse",
