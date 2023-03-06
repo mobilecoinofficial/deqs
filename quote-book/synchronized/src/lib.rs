@@ -399,40 +399,28 @@ mod tests {
     fn cannot_add_invalid_sci(logger: Logger) {
         let test_context = setup(logger.clone());
         let synchronized_quote_book = test_context.synchronized_quote_book;
-        test_suite::cannot_add_invalid_sci(
-            &synchronized_quote_book,
-            Some(test_context.ledger.clone()),
-        );
+        test_suite::cannot_add_invalid_sci(&synchronized_quote_book, Some(test_context.ledger));
     }
 
     #[test_with_logger]
     fn get_quotes_filtering_works(logger: Logger) {
         let test_context = setup(logger.clone());
         let synchronized_quote_book = test_context.synchronized_quote_book;
-        test_suite::get_quotes_filtering_works(
-            &synchronized_quote_book,
-            Some(test_context.ledger.clone()),
-        );
+        test_suite::get_quotes_filtering_works(&synchronized_quote_book, Some(test_context.ledger));
     }
 
     #[test_with_logger]
     fn get_quote_ids_works(logger: Logger) {
         let test_context = setup(logger.clone());
         let synchronized_quote_book = test_context.synchronized_quote_book;
-        test_suite::get_quote_ids_works(
-            &synchronized_quote_book,
-            Some(test_context.ledger.clone()),
-        );
+        test_suite::get_quote_ids_works(&synchronized_quote_book, Some(test_context.ledger));
     }
 
     #[test_with_logger]
     fn get_quote_by_id_works(logger: Logger) {
         let test_context = setup(logger.clone());
         let synchronized_quote_book = test_context.synchronized_quote_book;
-        test_suite::get_quote_by_id_works(
-            &synchronized_quote_book,
-            Some(test_context.ledger.clone()),
-        );
+        test_suite::get_quote_by_id_works(&synchronized_quote_book, Some(test_context.ledger));
     }
 
     #[test_with_logger]
@@ -485,12 +473,11 @@ mod tests {
         );
 
         // Adding a quote that isn't already in the ledger should work
-        let sci =
-            test_suite::create_sci(&pair, 10, 20, &mut rng, Some(test_context.ledger.clone()));
+        let sci = test_suite::create_sci(&pair, 10, 20, &mut rng, Some(test_context.ledger));
         let quote = synchronized_quote_book.add_sci(sci, None).unwrap();
 
         let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
-        assert_eq!(quotes, vec![quote.clone()]);
+        assert_eq!(quotes, vec![quote]);
     }
 
     #[test_with_logger]
@@ -556,7 +543,7 @@ mod tests {
                 .lock()
                 .expect("mutex poisoned")
                 .clone();
-            assert_eq!(removed_quotes, vec![quote.clone()])
+            assert_eq!(removed_quotes, vec![quote])
         }
     }
 
@@ -616,17 +603,12 @@ mod tests {
         let quote3 = synchronized_quote_book.add_sci(sci3, None).unwrap();
 
         let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
-        assert_eq!(quotes, vec![quote2.clone(), quote3.clone()]);
+        assert_eq!(quotes, vec![quote2, quote3]);
 
         // Because the tombstone block is equal to the current block index, adding this
         // sci should fail
-        let mut sci_builder4 = test_suite::create_sci_builder(
-            &pair,
-            10,
-            20,
-            &mut rng,
-            Some(test_context.ledger.clone()),
-        );
+        let mut sci_builder4 =
+            test_suite::create_sci_builder(&pair, 10, 20, &mut rng, Some(test_context.ledger));
         sci_builder4.set_tombstone_block(ledger.num_blocks().unwrap() - 1);
         let sci4 = sci_builder4.build(&NoKeysRingSigner {}, &mut rng).unwrap();
 
@@ -700,7 +682,7 @@ mod tests {
                 .lock()
                 .expect("mutex poisoned")
                 .clone();
-            assert_eq!(removed_quotes, vec![quote.clone()])
+            assert_eq!(removed_quotes, vec![quote])
         }
     }
 
@@ -733,13 +715,8 @@ mod tests {
 
         // Adding an SCI with txos in the ledger should succeed. The sci_builder adds
         // the txos used by the SCI into the ledger.
-        let sci_builder2 = test_suite::create_sci_builder(
-            &pair,
-            10,
-            20,
-            &mut rng,
-            Some(test_context.ledger.clone()),
-        );
+        let sci_builder2 =
+            test_suite::create_sci_builder(&pair, 10, 20, &mut rng, Some(test_context.ledger));
         // Number of blocks has advanced because the TXOs being used by this SCI were
         // added to the ledger.
         assert_eq!(ledger.num_blocks().unwrap(), starting_blocks + 1);
@@ -749,7 +726,7 @@ mod tests {
 
         assert_eq!(
             synchronized_quote_book.get_quotes(&pair, .., 0).unwrap(),
-            vec![quote.clone()]
+            vec![quote]
         );
     }
 }

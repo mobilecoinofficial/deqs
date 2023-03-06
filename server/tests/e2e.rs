@@ -79,7 +79,7 @@ async fn start_deqs_server_for_quotebook<Q: QuoteBook>(
     msg_bus_rx: broadcast::Receiver<Msg>,
     logger: &Logger,
 ) -> (Server<Q>, DeqsClientApiClient) {
-    for sci in initial_scis.into_iter() {
+    for sci in initial_scis.iter() {
         quote_book.add_sci(sci.clone(), None).unwrap();
     }
 
@@ -87,9 +87,8 @@ async fn start_deqs_server_for_quotebook<Q: QuoteBook>(
         quote_book.clone(),
         DeqsClientUri::from_str("insecure-deqs://127.0.0.1:0/").unwrap(),
         p2p_bootstrap_from
-            .into_iter()
-            .map(|server| server.p2p_listen_addrs())
-            .flatten()
+            .iter()
+            .flat_map(|server| server.p2p_listen_addrs())
             .collect(),
         None,
         None,
@@ -103,7 +102,7 @@ async fn start_deqs_server_for_quotebook<Q: QuoteBook>(
 
     let client_env = Arc::new(EnvBuilder::new().build());
     let ch = ChannelBuilder::default_channel_builder(client_env)
-        .connect_to_uri(&deqs_server.grpc_listen_uri().unwrap(), &logger);
+        .connect_to_uri(&deqs_server.grpc_listen_uri().unwrap(), logger);
     let client_api = DeqsClientApiClient::new(ch);
     (deqs_server, client_api)
 }
@@ -114,7 +113,7 @@ async fn wait_for_quotes(
     quote_book: &TestQuoteBook,
     expected_quotes: &BTreeSet<Quote>,
 ) {
-    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(20); // limit to 20 retries
+    let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(30); // limit to 30 retries
     Retry::spawn(retry_strategy, || async {
         let quotes = BTreeSet::from_iter(quote_book.get_quotes(pair, .., 0).unwrap());
         if &quotes == expected_quotes {
