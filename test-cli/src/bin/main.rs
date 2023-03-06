@@ -14,7 +14,6 @@ use mc_ledger_db::LedgerDB;
 use mc_transaction_types::TokenId;
 use mc_util_grpc::ConnectionUriGrpcioChannel;
 use rand::{rngs::StdRng, thread_rng, RngCore, SeedableRng};
-use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use std::{path::PathBuf, sync::Arc};
 
 #[derive(Subcommand)]
@@ -118,7 +117,7 @@ fn main() {
                 .collect::<Vec<_>>();
 
             let scis = rng_seeds
-                .into_par_iter()
+                .into_iter()
                 .map(|rng_seed| {
                     let mut rng: StdRng = SeedableRng::from_seed(rng_seed);
 
