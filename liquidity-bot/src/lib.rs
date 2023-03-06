@@ -32,7 +32,7 @@ use deqs_api::{
     deqs_grpc::DeqsClientApiClient,
     DeqsClientUri,
 };
-use deqs_quote_book_api::QuoteId;
+use deqs_quote_book_api::Quote;
 use futures::executor::block_on;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_common::logger::{log, Logger};
@@ -66,16 +66,13 @@ pub struct PendingTxOut {
 }
 
 /// A TxOut we listed on the DEQS
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ListedTxOut {
     /// The TxOut we are tracking
     matched_tx_out: MatchedTxOut,
 
-    /// The SCI we generated from the TxOut
-    sci: SignedContingentInput,
-
-    /// The quote we got from the DEQS (if we successfully submitted it).
-    quote: deqs_api::deqs::Quote,
+    /// The quote we got from the DEQS.
+    quote: Quote,
 
     /// Last time we tried to submit this TxOut to the DEQS
     last_submitted_at: Instant,
@@ -160,7 +157,9 @@ impl LiquidityBotTask {
                     if let Err(err) = self.submit_pending_tx_outs().await {
                         log::info!(self.logger, "Error submitting pending TxOuts: {}", err);
                     }
-                    if let Err(err) = self.resubmit_listed_tx_outs().await {
+
+                    // TODO: make this time configurable
+                    if let Err(err) = self.resubmit_listed_tx_outs(Duration::from_secs(60)).await {
                         log::info!(self.logger, "Error resubmitting TxOuts: {}", err);
                     }
                 }
@@ -220,16 +219,15 @@ impl LiquidityBotTask {
         ) {
             match status_code {
                 QuoteStatusCode::CREATED | QuoteStatusCode::QUOTE_ALREADY_EXISTS => {
-                    let quote_id = QuoteId::try_from(quote.get_id())?;
+                    let quote = Quote::try_from(quote)?;
 
                     // Check if the SCI is actually the one we submitted, or a different one.
-                    let quote_sci = SignedContingentInput::try_from(quote.get_sci())?;
-                    if quote_sci == pending_tx_out.sci {
+                    if quote.sci() == &pending_tx_out.sci {
                         log::info!(
                             self.logger,
                             "Submitted TxOut {} to DEQS, quote id is {}",
                             hex::encode(pending_tx_out.matched_tx_out.tx_out.public_key),
-                            quote_id
+                            quote.id(),
                         );
                     } else {
                         assert_eq!(status_code, &QuoteStatusCode::QUOTE_ALREADY_EXISTS);
@@ -259,8 +257,7 @@ impl LiquidityBotTask {
                     // its SCIs every time it restarts.
                     let listed_tx_out = ListedTxOut {
                         matched_tx_out: pending_tx_out.matched_tx_out,
-                        sci: quote_sci,
-                        quote: quote.clone(),
+                        quote,
                         last_submitted_at: Instant::now(),
                     };
                     self.listed_tx_outs.push(listed_tx_out);
@@ -289,15 +286,14 @@ impl LiquidityBotTask {
         Ok(())
     }
 
-    async fn resubmit_listed_tx_outs(&mut self) -> Result<(), Error> {
+    async fn resubmit_listed_tx_outs(&mut self, older_than: Duration) -> Result<(), Error> {
         // Split our listed list into two: those that we want to try and resubmit and
         // those that have been resubmitted recently enough.
         let (to_resubmit, to_keep) =
             self.listed_tx_outs
                 .drain(..)
                 .partition::<Vec<_>, _>(|listed_tx_out| {
-                    listed_tx_out.last_submitted_at.elapsed() > Duration::from_secs(10)
-                    // TODO make resubmit time configurable
+                    listed_tx_out.last_submitted_at.elapsed() > older_than
                 });
         self.listed_tx_outs = to_keep;
 
@@ -316,7 +312,7 @@ impl LiquidityBotTask {
 
         let scis = to_resubmit
             .iter()
-            .map(|tracked_tx_out| (&tracked_tx_out.sci).into())
+            .map(|tracked_tx_out| tracked_tx_out.quote.sci().into())
             .collect();
         let mut req = SubmitQuotesRequest::default();
         req.set_quotes(scis);
@@ -344,19 +340,18 @@ impl LiquidityBotTask {
             &resp.error_messages,
             &resp.quotes
         ) {
-            let quote_id = QuoteId::try_from(quote.get_id())?;
-            let quote_sci = SignedContingentInput::try_from(quote.get_sci())?;
+            let quote = Quote::try_from(quote)?;
 
             match status_code {
                 QuoteStatusCode::CREATED => {
                     // Sanity tha the DEQS is behaving as expected.
-                    assert_eq!(quote_sci, listed_tx_out.sci);
+                    assert_eq!(quote.sci(), listed_tx_out.quote.sci());
 
                     log::info!(
                         self.logger,
                         "Re-submitted TxOut {} to DEQS, quote id is {}",
                         hex::encode(listed_tx_out.matched_tx_out.tx_out.public_key),
-                        quote_id
+                        quote.id(),
                     );
                     listed_tx_out.quote = quote.clone();
                     listed_tx_out.last_submitted_at = Instant::now();
@@ -364,11 +359,11 @@ impl LiquidityBotTask {
                 }
 
                 QuoteStatusCode::QUOTE_ALREADY_EXISTS => {
-                    if quote_sci == listed_tx_out.sci {
+                    if quote == listed_tx_out.quote {
                         log::debug!(
                             self.logger,
                             "DEQS confirmed quote {} is still listed",
-                            quote_id
+                            quote.id(),
                         );
                     } else {
                         log::info!(
@@ -378,7 +373,7 @@ impl LiquidityBotTask {
                         );
 
                         // See long comment in `submit_pending_tx_outs` about why we do this.
-                        listed_tx_out.sci = quote_sci;
+                        listed_tx_out.quote = quote;
                     }
 
                     listed_tx_out.last_submitted_at = Instant::now();
@@ -386,7 +381,7 @@ impl LiquidityBotTask {
                 }
 
                 QuoteStatusCode::QUOTE_IS_STALE => {
-                    log::info!(self.logger, "Quote {} expired", quote_id);
+                    log::info!(self.logger, "Quote {} expired", quote.id());
                 }
 
                 err => {
@@ -840,12 +835,45 @@ mod tests {
             test_ctx.task.listed_tx_outs[0].matched_tx_out,
             matched_tx_outs[0]
         );
-        assert_eq!(&test_ctx.task.listed_tx_outs[0].sci, quote1.sci());
+        assert_eq!(test_ctx.task.listed_tx_outs[0].quote, quote1);
 
         assert_eq!(
             test_ctx.task.listed_tx_outs[1].matched_tx_out,
             matched_tx_outs[1]
         );
-        assert_eq!(&test_ctx.task.listed_tx_outs[1].sci, quote2.sci());
+        assert_eq!(test_ctx.task.listed_tx_outs[1].quote, quote2);
+    }
+
+    #[async_test_with_logger]
+    async fn resubmit_listed_tx_outs_behaves_correctly(logger: Logger) {
+        let mut test_ctx = TestContext::new(&default_pairs(), &logger);
+
+        let mtxo1 = test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB));
+        let mtxo2 = test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB));
+        let pending_tx_outs = vec![
+            test_ctx.task.create_pending_tx_out(mtxo1).unwrap(),
+            test_ctx.task.create_pending_tx_out(mtxo2).unwrap(),
+        ];
+
+        test_ctx.task.listed_tx_outs = pending_tx_outs
+            .iter()
+            .map(|ptxo| {
+                let quote = Quote::new(ptxo.sci.clone(), None).unwrap();
+                ListedTxOut {
+                    matched_tx_out: ptxo.matched_tx_out.clone(),
+                    quote,
+                    last_submitted_at: Instant::now(),
+                }
+            })
+            .collect();
+
+        // When not enough time has passted, the listed tx outs list should not change.
+        let orig_listed_tx_outs = test_ctx.task.listed_tx_outs.clone();
+        test_ctx
+            .task
+            .resubmit_listed_tx_outs(Duration::from_secs(10))
+            .await
+            .unwrap();
+        assert_eq!(test_ctx.task.listed_tx_outs, orig_listed_tx_outs);
     }
 }
