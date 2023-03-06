@@ -134,7 +134,7 @@ impl AccountLedgerScannerWorker {
                 - 1;
             let next_block_index = self.state.lock().expect("mutex poisoned").next_block_index;
             let last_block_index = min(
-                ledger_last_block_index,
+                ledger_last_block_index + 1,
                 next_block_index + SCAN_CHUNK_SIZE as u64,
             );
 
@@ -197,7 +197,20 @@ impl AccountLedgerScannerWorker {
                     // find a MatchedTxOut for. A more robust implementation
                     // would error when this happens, since it is unexpected unless we started
                     // scanning from the middle of the ledger.
-                    .filter_map(|key_image| state.matched_tx_outs.remove(key_image))
+                    .filter_map(|key_image| {
+                        state
+                            .matched_tx_outs
+                            .remove(key_image)
+                            .and_then(|matched_tx_out| {
+                                log::info!(
+                                    self.logger,
+                                    "Recognized keyimage {} belonging to our account at block {}",
+                                    matched_tx_out.key_image,
+                                    result.block_index
+                                );
+                                Some(matched_tx_out)
+                            })
+                    })
                     .collect::<Vec<_>>();
 
                 // Update our map of key image -> MatchedTxOut so that we can track spending.
@@ -244,26 +257,13 @@ impl AccountLedgerScannerWorker {
             }
         }
 
-        let state = self.state.lock().expect("mutex poisoned");
-        let key_images = block_contents
-            .key_images
-            .iter()
-            .filter(|key_image| state.matched_tx_outs.contains_key(key_image))
-            .cloned()
-            .collect::<Vec<_>>();
-        if !key_images.is_empty() {
-            log::info!(
-                self.logger,
-                "Recognized {} key images belonging to our account in block {}",
-                key_images.len(),
-                block_index
-            );
-        }
-
         Ok(ScannedBlock {
             block_index,
             matched_tx_outs,
-            key_images,
+            // We include all key images and not do the filtering in this function since we can only
+            // filter after we placed all newly discovered TxOuts in our state map, and this only
+            // happens after we are done parallel-scanning blocks.
+            key_images: block_contents.key_images,
         })
     }
 
