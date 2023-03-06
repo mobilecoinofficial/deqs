@@ -70,7 +70,7 @@ pub struct Config {
     pub command: Command,
 
     /// Path to ledgerdb used by the server
-    #[clap(long = "ledger-db", env = "MC_LEDGER_DB")]
+    #[clap(long, env = "MC_LEDGER_DB")]
     pub ledger_db: PathBuf,
 }
 
