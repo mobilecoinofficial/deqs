@@ -375,6 +375,8 @@ impl LiquidityBotTask {
                         );
 
                         // See long comment in `submit_pending_tx_outs` about why we do this.
+                        // The TLDR is that its possible there was a different quote listed for the
+                        // SCI we submitted.
                         listed_tx_out.quote = quote;
                     }
 
@@ -409,6 +411,7 @@ impl LiquidityBotTask {
             .ok_or(Error::UnknownTokenId(matched_tx_out.amount.token_id))?;
 
         let counter_amount: u64 = (Decimal::from(matched_tx_out.amount.value) * swap_rate)
+            .ceil() // We round up in case the conversion results in a fractional amount.
             .to_u64()
             .ok_or_else(|| {
                 Error::DecimalConversion(format!(
@@ -1000,5 +1003,70 @@ mod tests {
             .unwrap();
 
         assert_eq!(test_ctx.task.listed_tx_outs.len(), 0);
+    }
+
+    #[async_test_with_logger]
+    async fn create_pending_tx_out_errors_on_unconfigured_token(logger: Logger) {
+        let mut test_ctx = TestContext::new(&default_pairs(), &logger);
+
+        let token_id = TokenId::from(123);
+        let mtxo = test_ctx.create_matched_tx_out(Amount::new(100, token_id));
+        assert_matches!(
+            test_ctx.task.create_pending_tx_out(mtxo),
+            Err(Error::UnknownTokenId(token_id)) if token_id == token_id
+        );
+    }
+
+    #[async_test_with_logger]
+    async fn create_pending_tx_out_calculates_correct_swap_rate(logger: Logger) {
+        let mut test_ctx = TestContext::new(&default_pairs(), &logger);
+
+        // MOB -> eUSD (token id 1) ratio is 2:1 (see default_pairs())
+        for (mob_amount, expected_eusd_amount) in [
+            (99, 50),
+            (100, 50),
+            (101, 51),
+            (2, 1),
+            (1, 1),
+            (u64::MAX, u64::MAX / 2 + 1), // +1 becaus u64::MAX is odd
+        ] {
+            let mtxo = test_ctx.create_matched_tx_out(Amount::new(mob_amount, TokenId::MOB));
+            let ptxo = test_ctx.task.create_pending_tx_out(mtxo).unwrap();
+
+            let (amount, _) = ptxo
+                .sci
+                .tx_in
+                .input_rules
+                .as_ref()
+                .unwrap()
+                .partial_fill_outputs[0]
+                .reveal_amount()
+                .unwrap();
+            assert_eq!(amount, Amount::new(expected_eusd_amount, TokenId::from(1)));
+        }
+
+        //  eUSD (token id 1) -> MOB ratio is 1:3 (see default_pairs())
+        for (eusd_amount, expected_mob_amount) in [(1, 3), (100, 300)] {
+            let mtxo = test_ctx.create_matched_tx_out(Amount::new(eusd_amount, TokenId::from(1)));
+            let ptxo = test_ctx.task.create_pending_tx_out(mtxo).unwrap();
+
+            let (amount, _) = ptxo
+                .sci
+                .tx_in
+                .input_rules
+                .as_ref()
+                .unwrap()
+                .partial_fill_outputs[0]
+                .reveal_amount()
+                .unwrap();
+            assert_eq!(amount, Amount::new(expected_mob_amount, TokenId::MOB));
+        }
+
+        // Try a conversion that overflows u64
+        let mtxo = test_ctx.create_matched_tx_out(Amount::new(u64::MAX, TokenId::from(1)));
+        assert_matches!(
+            test_ctx.task.create_pending_tx_out(mtxo),
+            Err(Error::DecimalConversion(..))
+        );
     }
 }
