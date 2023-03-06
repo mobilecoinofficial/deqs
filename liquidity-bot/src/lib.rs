@@ -593,6 +593,8 @@ mod tests {
     use std::assert_matches::assert_matches;
 
     use super::*;
+    use deqs_api::deqs as grpc_api;
+    use deqs_quote_book_api::Quote;
     use deqs_test_server::DeqsTestServer;
     use mc_common::logger::{async_test_with_logger, Logger};
     use mc_ledger_db::test_utils::{
@@ -603,7 +605,7 @@ mod tests {
     use rust_decimal_macros::dec;
 
     struct TestContext {
-        _deqs_server: DeqsTestServer,
+        deqs_server: DeqsTestServer,
         task: LiquidityBotTask,
         ledger_db: LedgerDB,
         account_key: AccountKey,
@@ -650,7 +652,7 @@ mod tests {
             };
 
             Self {
-                _deqs_server: deqs_server,
+                deqs_server,
                 task,
                 ledger_db,
                 account_key,
@@ -776,5 +778,74 @@ mod tests {
             test_ctx.task.submit_pending_tx_outs().await,
             Err(Error::Grpc(..))
         );
+
+        assert_eq!(test_ctx.task.pending_tx_outs, orig_pending_tx_outs);
+
+        // Set the test DEQS server to return a quote is stale response for the first
+        // quote, and an invalid SCI response for the second quote. In both
+        // cases the bot should remove the pending tx out from the queue and not
+        // track them in listed_tx_outs.
+        let resp = SubmitQuotesResponse {
+            status_codes: vec![
+                QuoteStatusCode::QUOTE_IS_STALE,
+                QuoteStatusCode::INVALID_SCI,
+            ]
+            .into(),
+            quotes: vec![grpc_api::Quote::default(), grpc_api::Quote::default()].into(),
+            error_messages: vec!["".to_string(), "".to_string()].into(),
+            ..Default::default()
+        };
+        test_ctx.deqs_server.set_submit_quotes_response(Ok(resp));
+
+        test_ctx.task.submit_pending_tx_outs().await.unwrap();
+        assert!(test_ctx.task.pending_tx_outs.is_empty());
+        assert!(test_ctx.task.listed_tx_outs.is_empty());
+
+        // Put the two pending tx outs back in the queue and set the test DEQS
+        // server to accept one of them and pretend the other one is a
+        // duplicate.
+        assert!(test_ctx
+            .task
+            .update_pending_tx_outs_from_received_tx_outs(&matched_tx_outs)
+            .unwrap());
+
+        let mtxo = test_ctx.create_matched_tx_out(Amount::new(100, TokenId::from(1)));
+        let ptxo = test_ctx.task.create_pending_tx_out(mtxo).unwrap();
+
+        let quote1 = Quote::new(test_ctx.task.pending_tx_outs[0].sci.clone(), None).unwrap();
+        let quote2 = Quote::new(ptxo.sci, None).unwrap();
+
+        let resp = SubmitQuotesResponse {
+            status_codes: vec![
+                QuoteStatusCode::CREATED,
+                QuoteStatusCode::QUOTE_ALREADY_EXISTS,
+            ]
+            .into(),
+            quotes: vec![
+                grpc_api::Quote::from(&quote1),
+                grpc_api::Quote::from(&quote2),
+            ]
+            .into(),
+            error_messages: vec!["".to_string(), "".to_string()].into(),
+            ..Default::default()
+        };
+        test_ctx.deqs_server.set_submit_quotes_response(Ok(resp));
+
+        test_ctx.task.submit_pending_tx_outs().await.unwrap();
+        assert!(test_ctx.task.pending_tx_outs.is_empty());
+
+        assert_eq!(test_ctx.task.listed_tx_outs.len(), 2);
+
+        assert_eq!(
+            test_ctx.task.listed_tx_outs[0].matched_tx_out,
+            matched_tx_outs[0]
+        );
+        assert_eq!(&test_ctx.task.listed_tx_outs[0].sci, quote1.sci());
+
+        assert_eq!(
+            test_ctx.task.listed_tx_outs[1].matched_tx_out,
+            matched_tx_outs[1]
+        );
+        assert_eq!(&test_ctx.task.listed_tx_outs[1].sci, quote2.sci());
     }
 }
