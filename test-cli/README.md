@@ -14,5 +14,5 @@ A test cli for the decentralized quoting service.
 
 3. Test liveupdates via grpcurl:
 
-    /build-protoset
+    ./build-protoset
     grpcurl -d '' -vv -plaintext -protoset ./deqs.protoset 127.0.0.1:7000 deqs.DeqsClientAPI.LiveUpdates
