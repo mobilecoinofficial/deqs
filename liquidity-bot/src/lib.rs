@@ -1,5 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
+#![feature(assert_matches)]
+
 // TODO:
 //
 // - The bot loses all state when it dies, and the wallet will not re-feed it
@@ -54,7 +56,7 @@ use std::{
 use tokio::{sync::mpsc, time::interval};
 
 /// A TxOut we want to submit to the DEQS
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub struct PendingTxOut {
     /// The TxOut we are tracking
     matched_tx_out: MatchedTxOut,
@@ -202,7 +204,7 @@ impl LiquidityBotTask {
         let scis = self
             .pending_tx_outs
             .iter()
-            .map(|tracked_tx_out| (&tracked_tx_out.sci).into())
+            .map(|pending_tx_out| (&pending_tx_out.sci).into())
             .collect();
         let mut req = SubmitQuotesRequest::default();
         req.set_quotes(scis);
@@ -588,6 +590,8 @@ fn sanity_check_submit_quotes_response(
 
 #[cfg(test)]
 mod tests {
+    use std::assert_matches::assert_matches;
+
     use super::*;
     use deqs_test_server::DeqsTestServer;
     use mc_common::logger::{async_test_with_logger, Logger};
@@ -700,13 +704,10 @@ mod tests {
             test_ctx.create_matched_tx_out(Amount::new(100, TokenId::from(3))),
         ];
 
-        assert_eq!(
-            test_ctx
-                .task
-                .update_pending_tx_outs_from_received_tx_outs(&matched_tx_outs)
-                .unwrap(),
-            true // The bot should have updated its pending tx outs.
-        );
+        assert!(test_ctx
+            .task
+            .update_pending_tx_outs_from_received_tx_outs(&matched_tx_outs)
+            .unwrap());
 
         // We should see two pending tx outs, one for each pair the bot is offering.
         assert_eq!(test_ctx.task.pending_tx_outs.len(), 2);
@@ -734,5 +735,46 @@ mod tests {
                 *expected_partial_amount
             );
         }
+
+        // Calling update_pending_tx_outs_from_received_tx_outs with just TxOuts for
+        // tokens the bot is not configured for should result in nothing getting
+        // added..
+        let orig_pending_tx_outs = test_ctx.task.pending_tx_outs.clone();
+
+        assert!(!test_ctx
+            .task
+            .update_pending_tx_outs_from_received_tx_outs(&[
+                matched_tx_outs[2].clone(),
+                matched_tx_outs[3].clone()
+            ])
+            .unwrap(),);
+
+        assert_eq!(test_ctx.task.pending_tx_outs, orig_pending_tx_outs);
+    }
+
+    #[async_test_with_logger]
+    async fn submit_pending_tx_outs_behaves_correctly(logger: Logger) {
+        let mut test_ctx = TestContext::new(&default_pairs(), &logger);
+
+        let matched_tx_outs = vec![
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB)),
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::from(1))),
+        ];
+
+        assert!(test_ctx
+            .task
+            .update_pending_tx_outs_from_received_tx_outs(&matched_tx_outs)
+            .unwrap());
+
+        // We now have two pending tx outs, and our test DEQS server currently returns
+        // an error response for submit requests. Calling submit_pending_tx_outs
+        // is expected to try and submit our two SCIs and when it gets a failure
+        // put them back in the pending queue.
+        let orig_pending_tx_outs = test_ctx.task.pending_tx_outs.clone();
+
+        assert_matches!(
+            test_ctx.task.submit_pending_tx_outs().await,
+            Err(Error::Grpc(..))
+        );
     }
 }
