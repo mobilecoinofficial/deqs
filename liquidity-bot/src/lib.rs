@@ -340,10 +340,10 @@ impl LiquidityBotTask {
             &resp.error_messages,
             &resp.quotes
         ) {
-            let quote = Quote::try_from(quote)?;
-
             match status_code {
                 QuoteStatusCode::CREATED => {
+                    let quote = Quote::try_from(quote)?;
+
                     // Sanity tha the DEQS is behaving as expected.
                     assert_eq!(quote.sci(), listed_tx_out.quote.sci());
 
@@ -359,6 +359,8 @@ impl LiquidityBotTask {
                 }
 
                 QuoteStatusCode::QUOTE_ALREADY_EXISTS => {
+                    let quote = Quote::try_from(quote)?;
+
                     if quote == listed_tx_out.quote {
                         log::debug!(
                             self.logger,
@@ -381,7 +383,7 @@ impl LiquidityBotTask {
                 }
 
                 QuoteStatusCode::QUOTE_IS_STALE => {
-                    log::info!(self.logger, "Quote {} expired", quote.id());
+                    log::info!(self.logger, "Quote {} expired", listed_tx_out.quote.id());
                 }
 
                 err => {
@@ -875,5 +877,128 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(test_ctx.task.listed_tx_outs, orig_listed_tx_outs);
+
+        // Set one of the listed tx outs to be older than the resubmit threshold and try
+        // to resubmit. By default our test DEQS server returns a GRPC error, so while
+        // the order of the listed tx outs should change, the contents of each
+        // one should not.
+        // The order changes because resubmit_listed_tx_outs() first splits
+        // the listed_tx_outs list into two parts: the ones that are older than the
+        // resubmit threshold, and the ones that are not.
+        test_ctx.task.listed_tx_outs[0].last_submitted_at -= Duration::from_secs(20);
+        let orig_listed_tx_outs = test_ctx.task.listed_tx_outs.clone();
+        assert_matches!(
+            test_ctx
+                .task
+                .resubmit_listed_tx_outs(Duration::from_secs(10))
+                .await,
+            Err(Error::Grpc(..))
+        );
+        assert_eq!(test_ctx.task.listed_tx_outs.len(), 2);
+        assert_eq!(test_ctx.task.listed_tx_outs[0], orig_listed_tx_outs[1]);
+        assert_eq!(test_ctx.task.listed_tx_outs[1], orig_listed_tx_outs[0]);
+
+        // Leave only the listed_tx_out that needs to be resubmitted to make testing a
+        // bit easier to follow.
+        test_ctx.task.listed_tx_outs.remove(0);
+
+        // Set the DEQS server to return a QUOTE_ALREADY_EXISTS response with the same
+        // quote.  In this case the last_submitted_at value should update, but
+        // everything else should stay the same.
+        let resp = SubmitQuotesResponse {
+            status_codes: vec![QuoteStatusCode::QUOTE_ALREADY_EXISTS].into(),
+            quotes: vec![grpc_api::Quote::from(
+                &test_ctx.task.listed_tx_outs[0].quote,
+            )]
+            .into(),
+            error_messages: vec!["".to_string()].into(),
+            ..Default::default()
+        };
+        test_ctx.deqs_server.set_submit_quotes_response(Ok(resp));
+
+        let orig_listed_tx_outs = test_ctx.task.listed_tx_outs.clone();
+        test_ctx
+            .task
+            .resubmit_listed_tx_outs(Duration::from_secs(10))
+            .await
+            .unwrap();
+
+        // Initially the list will be different, since we expect last_submitted_at to
+        // have changed.
+        assert_ne!(test_ctx.task.listed_tx_outs, orig_listed_tx_outs);
+
+        // However, if we revert back to the old one, the lists should be identical.
+        test_ctx.task.listed_tx_outs[0].last_submitted_at =
+            orig_listed_tx_outs[0].last_submitted_at;
+
+        assert_eq!(test_ctx.task.listed_tx_outs, orig_listed_tx_outs);
+
+        // Try again but this time return a different quote. This should result
+        // in the listed_tx_out quote getting updated in addition to the
+        // last_submitted_at value.
+        let mtxo = test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB));
+        let ptxo = test_ctx.task.create_pending_tx_out(mtxo).unwrap();
+        let quote = Quote::new(ptxo.sci, None).unwrap();
+
+        let resp = SubmitQuotesResponse {
+            status_codes: vec![QuoteStatusCode::QUOTE_ALREADY_EXISTS].into(),
+            quotes: vec![grpc_api::Quote::from(&quote)].into(),
+            error_messages: vec!["".to_string()].into(),
+            ..Default::default()
+        };
+        test_ctx.deqs_server.set_submit_quotes_response(Ok(resp));
+
+        let now = Instant::now();
+        test_ctx
+            .task
+            .resubmit_listed_tx_outs(Duration::from_secs(10))
+            .await
+            .unwrap();
+
+        assert_eq!(test_ctx.task.listed_tx_outs.len(), 1);
+        assert!(test_ctx.task.listed_tx_outs[0].last_submitted_at >= now);
+        assert_eq!(test_ctx.task.listed_tx_outs[0].quote, quote);
+
+        // Test that a CREATED response behaves correctly
+        let resp = SubmitQuotesResponse {
+            status_codes: vec![QuoteStatusCode::CREATED].into(),
+            quotes: vec![grpc_api::Quote::from(
+                &test_ctx.task.listed_tx_outs[0].quote,
+            )]
+            .into(),
+            error_messages: vec!["".to_string()].into(),
+            ..Default::default()
+        };
+        test_ctx.deqs_server.set_submit_quotes_response(Ok(resp));
+
+        test_ctx.task.listed_tx_outs[0].last_submitted_at -= Duration::from_secs(20);
+        let now = Instant::now();
+        test_ctx
+            .task
+            .resubmit_listed_tx_outs(Duration::from_secs(10))
+            .await
+            .unwrap();
+
+        assert_eq!(test_ctx.task.listed_tx_outs.len(), 1);
+        assert!(test_ctx.task.listed_tx_outs[0].last_submitted_at >= now);
+        assert_eq!(test_ctx.task.listed_tx_outs[0].quote, quote);
+
+        // When a quote is stale, we remove it from the list.
+        let resp = SubmitQuotesResponse {
+            status_codes: vec![QuoteStatusCode::QUOTE_IS_STALE].into(),
+            quotes: vec![grpc_api::Quote::default()].into(),
+            error_messages: vec!["".to_string()].into(),
+            ..Default::default()
+        };
+        test_ctx.deqs_server.set_submit_quotes_response(Ok(resp));
+
+        test_ctx.task.listed_tx_outs[0].last_submitted_at -= Duration::from_secs(20);
+        test_ctx
+            .task
+            .resubmit_listed_tx_outs(Duration::from_secs(10))
+            .await
+            .unwrap();
+
+        assert_eq!(test_ctx.task.listed_tx_outs.len(), 0);
     }
 }
