@@ -10,6 +10,7 @@ impl From<&Error> for api::QuoteStatusCode {
             Error::UnsupportedSci(_) => Self::UNSUPPORTED_SCI,
             Error::QuoteAlreadyExists { .. } => Self::QUOTE_ALREADY_EXISTS,
             Error::QuoteIsStale => Self::QUOTE_IS_STALE,
+            Error::InvalidRing(_) => Self::INVALID_SCI,
             _ => Self::OTHER,
         }
     }
