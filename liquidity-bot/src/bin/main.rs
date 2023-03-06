@@ -88,7 +88,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    // TODO nicely ask the liquidity bot to stop
-
     Ok(())
 }

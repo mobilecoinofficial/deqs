@@ -15,7 +15,6 @@
 //   processed block. If it sees a key image for one of its SCIs, it can look
 //   and see if the public key of its required output appears in the same block.
 //
-// - Unit tests
 // - Prometheus metrics
 // - Fog support (grep for "FogResolver::default")
 // - RTH support (grep for "EmptyMemoBuilder::default")
@@ -54,6 +53,13 @@ use std::{
     time::{Duration, Instant},
 };
 use tokio::{sync::mpsc, time::interval};
+
+// Minimum time to wait between attempts to submit SCIs to the DEQS.
+const RESUBMIT_POLL_INTERVAL: Duration = Duration::from_secs(30);
+
+// Minimum time to wait before re-submitting quotes to the DEQS.
+// Note that quotes needing refreshed are checked every RESUBMIT_POLL_INTERVAL.
+const QUOTE_REFRESH_INTERVAL: Duration = Duration::from_secs(600);
 
 /// A TxOut we want to submit to the DEQS
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -117,8 +123,7 @@ impl LiquidityBotTask {
     pub async fn run(mut self) {
         let shutdown_ack_tx = self.shutdown_ack_tx.take();
 
-        // TODO
-        let mut resubmit_tx_outs_interval = interval(Duration::from_secs(1));
+        let mut resubmit_tx_outs_interval = interval(RESUBMIT_POLL_INTERVAL);
         resubmit_tx_outs_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
         loop {
@@ -158,8 +163,7 @@ impl LiquidityBotTask {
                         log::info!(self.logger, "Error submitting pending TxOuts: {}", err);
                     }
 
-                    // TODO: make this time configurable
-                    if let Err(err) = self.resubmit_listed_tx_outs(Duration::from_secs(60)).await {
+                    if let Err(err) = self.resubmit_listed_tx_outs(QUOTE_REFRESH_INTERVAL).await {
                         log::info!(self.logger, "Error resubmitting TxOuts: {}", err);
                     }
                 }
@@ -309,7 +313,6 @@ impl LiquidityBotTask {
         );
 
         // TODO should batch in case we have too many to resubmit
-
         let scis = to_resubmit
             .iter()
             .map(|tracked_tx_out| tracked_tx_out.quote.sci().into())
