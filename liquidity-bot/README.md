@@ -10,6 +10,7 @@ The current implementation does its own view-key scanning and stores state insid
 ## Usage
 
 If we want to have the bot offer MOB in exchange for eUSD at the rate of 2 eUSD per MOB, we could start the bot like this:
+
 ```
     cargo run --bin deqs-liquidity-bot -- \
         --deqs insecure-deqs://localhost \
