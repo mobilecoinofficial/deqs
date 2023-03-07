@@ -5,5 +5,7 @@
 mod config;
 mod error;
 
+pub mod mini_wallet;
+
 pub use config::Config;
 pub use error::Error;
