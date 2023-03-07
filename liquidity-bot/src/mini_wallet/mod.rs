@@ -129,7 +129,7 @@ mod tests {
         thread,
         time::Duration,
     };
-    use tempdir::TempDir;
+    use tempfile::tempdir;
 
     #[test_with_logger]
     fn mini_wallet_properly_identifies_spendable_and_spent_txos(logger: Logger) {
@@ -149,9 +149,9 @@ mod tests {
         let events = Arc::new(Mutex::new(Vec::new()));
         let events2 = events.clone();
 
-        let temp_dir = TempDir::new("wallet").unwrap();
+        let temp_dir = tempdir().unwrap();
         let _mini_wallet = MiniWallet::new(
-            temp_dir.path().join("state"),
+            temp_dir.path().join("wallet-state"),
             ledger_db.clone(),
             account_key.clone(),
             0,
