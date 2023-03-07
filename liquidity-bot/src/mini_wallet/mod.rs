@@ -146,7 +146,7 @@ mod tests {
             &mut rng,
         );
 
-        let mut events = Arc::new(Mutex::new(Vec::new()));
+        let events = Arc::new(Mutex::new(Vec::new()));
         let events2 = events.clone();
 
         let temp_dir = TempDir::new("wallet").unwrap();

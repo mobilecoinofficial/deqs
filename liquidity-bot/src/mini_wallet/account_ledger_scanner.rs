@@ -201,14 +201,14 @@ impl AccountLedgerScannerWorker {
                         state
                             .matched_tx_outs
                             .remove(key_image)
-                            .and_then(|matched_tx_out| {
+                            .map(|matched_tx_out| {
                                 log::info!(
                                     self.logger,
                                     "Recognized keyimage {} belonging to our account at block {}",
                                     matched_tx_out.key_image,
                                     result.block_index
                                 );
-                                Some(matched_tx_out)
+                                matched_tx_out
                             })
                     })
                     .collect::<Vec<_>>();
