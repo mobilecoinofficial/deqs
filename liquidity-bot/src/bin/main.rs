@@ -1,11 +1,12 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use clap::Parser;
-use deqs_liquidity_bot::Config;
+use deqs_liquidity_bot::{mini_wallet::MiniWallet, Config};
 use mc_common::logger::o;
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
 use std::sync::Arc;
+use tokio::sync::mpsc;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -24,7 +25,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Read keyfile
     let account_key =
         mc_util_keyfile::read_keyfile(&config.account_key).expect("Could not read keyfile");
-    drop(account_key); // We will use it in a followup PR
 
     // Start admin server
     let config_json = serde_json::to_string(&config).expect("failed to serialize config to JSON");
@@ -40,6 +40,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .expect("Failed starting admin server")
     });
+
+    // Start our mini wallet scanner thingie.
+    let (wallet_tx, wallet_rx) = mpsc::unbounded_channel();
+    let _wallet = MiniWallet::new(
+        &config.wallet_db,
+        ledger_db,
+        account_key,
+        config.first_block_index,
+        Arc::new(move |event| {
+            wallet_tx
+                .send(event)
+                .expect("Could not send event to wallet");
+        }),
+        logger,
+    )
+    .expect("Could not create MiniWallet");
+
+    drop(wallet_rx); // This gets used in a followup PR
 
     todo!("bot implementation is in a followup pr");
 }
