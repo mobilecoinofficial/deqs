@@ -1,4 +1,4 @@
-cargo-features = ["named-profiles"]
+cargo-features = ["named-profiles", "workspace-inheritance"]
 
 [workspace]
 members = [
