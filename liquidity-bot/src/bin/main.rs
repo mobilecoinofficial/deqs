@@ -1,7 +1,11 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use clap::Parser;
-use deqs_liquidity_bot::{mini_wallet::MiniWallet, Config, LiquidityBot};
+use deqs_liquidity_bot::{
+    mini_wallet::{MiniWallet, WalletEvent},
+    Config, LiquidityBot,
+};
+use itertools::Itertools;
 use mc_common::logger::{log, o};
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
@@ -43,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Start our mini wallet scanner thingie.
     let (wallet_tx, mut wallet_rx) = mpsc::unbounded_channel();
-    let _wallet = MiniWallet::new(
+    let wallet = MiniWallet::new(
         &config.wallet_db,
         ledger_db.clone(),
         account_key.clone(),
@@ -64,6 +68,31 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )]);
     let liquidity_bot =
         LiquidityBot::new(account_key, ledger_db, pairs, &config.deqs, logger.clone());
+
+    // Since the LiquidityBot itself does not maintain state, feed it any unspent
+    // TxOuts we are currently aware of. It will attempt to submit SCIs for all
+    // of them, and if existing ones are already present on the DEQS for the
+    // same TxOuts (identified by their KeyImage), it will use those instead for
+    // future resubmits. It is safe to not include spent tx outs here since the
+    // TxOuts held inside the wallet's state, at the moment they are grabbed,
+    // are guaranteed to be unspent. If they are spent after the state is grabbed,
+    // the wallet will notify the bot of the spend using the wallet_tx/rx channel.
+    let existing_tx_outs = wallet.matched_tx_outs();
+    log::info!(
+        logger,
+        "Feeding {} existing TxOuts to liquidity bot",
+        existing_tx_outs.len()
+    );
+    for (block_index, received_tx_outs) in &existing_tx_outs
+        .into_iter()
+        .group_by(|mtxo| mtxo.block_index)
+    {
+        liquidity_bot.notify_wallet_event(WalletEvent::BlockProcessed {
+            block_index,
+            received_tx_outs: received_tx_outs.collect(),
+            spent_tx_outs: vec![],
+        });
+    }
 
     loop {
         tokio::select! {
