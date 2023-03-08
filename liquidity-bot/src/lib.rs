@@ -43,12 +43,16 @@ use mc_util_grpc::ConnectionUriGrpcioChannel;
 use mini_wallet::{MatchedTxOut, WalletEvent};
 use rand::Rng;
 use rust_decimal::{prelude::ToPrimitive, Decimal};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::{sync::mpsc, time::interval};
+use tokio::{
+    sync::{mpsc, oneshot},
+    time::interval,
+};
 
 // Minimum time to wait between attempts to submit SCIs to the DEQS.
 const RESUBMIT_POLL_INTERVAL: Duration = Duration::from_secs(30);
@@ -80,10 +84,61 @@ pub struct ListedTxOut {
     last_submitted_at: Instant,
 }
 
+/// Statistics about the liquidity bot's current state.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Stats {
+    /// Number of pending TxOuts grouped by the TxOut's token id.
+    num_pending_tx_outs_by_token_id: HashMap<TokenId, usize>,
+
+    /// Total value of pending TxOuts grouped by the TxOut's token id.
+    total_pending_tx_outs_value_by_token_id: HashMap<TokenId, u64>,
+
+    /// Number of listed TxOuts grouped by the TxOut's token id.
+    num_listed_tx_outs_by_token_id: HashMap<TokenId, usize>,
+
+    /// Total value of listed TxOuts grouped by the TxOut's token id.
+    total_listed_tx_outs_value_by_token_id: HashMap<TokenId, u64>,
+}
+impl From<&LiquidityBotTask> for Stats {
+    fn from(task: &LiquidityBotTask) -> Self {
+        let mut num_pending_tx_outs_by_token_id = HashMap::new();
+        let mut total_pending_tx_outs_value_by_token_id = HashMap::new();
+
+        for pending_tx_out in &task.pending_tx_outs {
+            let token_id = pending_tx_out.matched_tx_out.amount.token_id;
+            *num_pending_tx_outs_by_token_id.entry(token_id).or_default() += 1;
+            *total_pending_tx_outs_value_by_token_id
+                .entry(token_id)
+                .or_default() += pending_tx_out.matched_tx_out.amount.value;
+        }
+
+        let mut num_listed_tx_outs_by_token_id = HashMap::new();
+        let mut total_listed_tx_outs_value_by_token_id = HashMap::new();
+        for listed_tx_out in &task.listed_tx_outs {
+            let token_id = listed_tx_out.matched_tx_out.amount.token_id;
+            *num_listed_tx_outs_by_token_id.entry(token_id).or_default() += 1;
+            *total_listed_tx_outs_value_by_token_id
+                .entry(token_id)
+                .or_default() += listed_tx_out.matched_tx_out.amount.value;
+        }
+
+        Self {
+            num_pending_tx_outs_by_token_id,
+            total_pending_tx_outs_value_by_token_id,
+            num_listed_tx_outs_by_token_id,
+            total_listed_tx_outs_value_by_token_id,
+        }
+    }
+}
+
 /// Commands used for interfacing with the LiquidityBotTask.
+#[derive(Debug)]
 enum Command {
     /// Incoming wallet event.
     WalletEvent(WalletEvent),
+
+    /// Get stats
+    GetStats(oneshot::Sender<Stats>),
 }
 
 struct LiquidityBotTask {
@@ -154,7 +209,12 @@ impl LiquidityBotTask {
                                 }
                             }
                         }
-                       None => {
+
+                        Some(Command::GetStats(tx)) => {
+                            tx.send(Stats::from(&self)).expect("channel should be open");
+                        }
+
+                        None => {
                             log::error!(self.logger, "Wallet event receiver closed");
                             break;
                         }
@@ -580,10 +640,18 @@ impl LiquidityBot {
     pub fn notify_wallet_event(&self, event: WalletEvent) {
         self.command_tx
             .send(Command::WalletEvent(event))
-            .map_err(|_| ()) // Command cannot implement Debug
             .expect("command tx failed"); // We assume the channel stays
                                           // open for as long as the bot is
                                           // running.
+    }
+
+    /// Get statistics.
+    pub async fn stats(&self) -> Stats {
+        let (tx, rx) = oneshot::channel();
+        self.command_tx
+            .send(Command::GetStats(tx))
+            .expect("command tx failed");
+        rx.await.expect("command rx failed")
     }
 
     /// Request the event loop task to shut down.
