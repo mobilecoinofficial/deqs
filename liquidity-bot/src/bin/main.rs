@@ -120,7 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             _ = metrics_interval.tick() => {
-                update_periodic_metrics(&wallet).await;
+                update_periodic_metrics(&wallet, &liquidity_bot).await;
             }
         }
     }

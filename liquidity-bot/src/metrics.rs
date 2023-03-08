@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{mini_wallet::MiniWallet, Error};
+use crate::{mini_wallet::MiniWallet, Error, LiquidityBot};
 use mc_util_metrics::{IntGauge, IntGaugeVec, OpMetrics, Opts};
 use std::time::Duration;
 
@@ -26,8 +26,11 @@ lazy_static::lazy_static! {
 }
 
 /// Update periodic metrics.
-pub async fn update_periodic_metrics(wallet: &MiniWallet) {
+pub async fn update_periodic_metrics(wallet: &MiniWallet, liquidity_bot: &LiquidityBot) {
     NEXT_BLOCK_INDEX.set(wallet.next_block_index() as i64);
+    PER_TOKEN_METRICS
+        .update_metrics_from_liquidity_bot(liquidity_bot)
+        .await;
 }
 
 pub struct PerTokenMetrics {
@@ -50,7 +53,7 @@ impl PerTokenMetrics {
                 "deqs_liquidity_bot_pending_tx_outs",
                 "Number of pending tx outs",
             ),
-            &["exchange", "token"],
+            &["token_id"],
         )?;
 
         prometheus::register(Box::new(pending_tx_outs_gauge.clone()))?;
@@ -58,5 +61,15 @@ impl PerTokenMetrics {
         Ok(Self {
             pending_tx_outs_gauge,
         })
+    }
+
+    pub async fn update_metrics_from_liquidity_bot(&self, liquidity_bot: &LiquidityBot) {
+        let stats = liquidity_bot.stats().await;
+
+        for (token_id, value) in stats.num_pending_tx_outs_by_token_id.iter() {
+            self.pending_tx_outs_gauge
+                .with_label_values(&[&token_id.to_string()])
+                .set(*value as i64);
+        }
     }
 }
