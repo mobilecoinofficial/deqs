@@ -882,6 +882,71 @@ mod tests {
     }
 
     #[async_test_with_logger]
+    async fn update_pending_tx_outs_from_received_tx_outs_ignores_duplicates(logger: Logger) {
+        let mut test_ctx = TestContext::new(&default_pairs(), &logger);
+
+        // Note that while they have the same value, they are different TxOuts so not
+        // considered duplicates.
+        let matched_tx_outs = vec![
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB)),
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB)),
+        ];
+
+        assert!(test_ctx
+            .task
+            .update_pending_tx_outs_from_received_tx_outs(&matched_tx_outs)
+            .unwrap());
+
+        assert_eq!(test_ctx.task.pending_tx_outs.len(), 2);
+
+        // Trying to add again should return false and nothing should change.
+        let orig_pending_tx_outs = test_ctx.task.pending_tx_outs.clone();
+        assert!(!test_ctx
+            .task
+            .update_pending_tx_outs_from_received_tx_outs(&matched_tx_outs)
+            .unwrap());
+        assert_eq!(orig_pending_tx_outs, test_ctx.task.pending_tx_outs);
+
+        // Adding a new ones should work.
+        let matched_tx_outs = vec![
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB)),
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB)),
+        ];
+        assert!(test_ctx
+            .task
+            .update_pending_tx_outs_from_received_tx_outs(&matched_tx_outs)
+            .unwrap());
+
+        assert_eq!(test_ctx.task.pending_tx_outs.len(), 4);
+
+        // We also ignore duplicates in the listed_tx_outs list.
+        let matched_tx_outs = vec![
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB)),
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB)),
+        ];
+
+        test_ctx.task.listed_tx_outs = matched_tx_outs
+            .iter()
+            .map(|mtxo| {
+                let ptxo = test_ctx.task.create_pending_tx_out(mtxo.clone()).unwrap();
+                let quote = Quote::new(ptxo.sci.clone(), None).unwrap();
+                ListedTxOut {
+                    matched_tx_out: mtxo.clone(),
+                    quote,
+                    last_submitted_at: Instant::now(),
+                }
+            })
+            .collect();
+
+        let orig_pending_tx_outs = test_ctx.task.pending_tx_outs.clone();
+        assert!(!test_ctx
+            .task
+            .update_pending_tx_outs_from_received_tx_outs(&matched_tx_outs)
+            .unwrap());
+        assert_eq!(orig_pending_tx_outs, test_ctx.task.pending_tx_outs);
+    }
+
+    #[async_test_with_logger]
     async fn resubmit_listed_tx_outs_behaves_correctly(logger: Logger) {
         let mut test_ctx = TestContext::new(&default_pairs(), &logger);
 
