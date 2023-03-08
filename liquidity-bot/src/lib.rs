@@ -189,11 +189,38 @@ impl LiquidityBotTask {
         let mut added = false;
 
         for matched_tx_out in matched_tx_outs.iter().cloned() {
-            if self.pairs.contains_key(&matched_tx_out.amount.token_id) {
-                let tracked_tx_out = self.create_pending_tx_out(matched_tx_out)?;
-                self.pending_tx_outs.push(tracked_tx_out);
-                added = true;
+            // Check if this is a TxOut for a token we are capable of calculating a swap
+            // rate for.
+            if !self.pairs.contains_key(&matched_tx_out.amount.token_id) {
+                continue;
             }
+
+            // See if we already have this TxOut in our lists. We want to do this
+            // check since its possible we will encounter the same TxOut twice
+            // when the bot starts up due to a race between when the ledger
+            // scanner starts scanning the blockchain and when we grab the list of currently
+            // matched TxOuts in the ledger.
+            // We compare by key image since its faster than comparing the whole
+            // MatchedTxOut and it uniquely identifies a TxOut.
+            if self
+                .pending_tx_outs
+                .iter()
+                .any(|ptxo| ptxo.matched_tx_out.key_image == matched_tx_out.key_image)
+            {
+                continue;
+            }
+
+            if self
+                .listed_tx_outs
+                .iter()
+                .any(|ltxo| ltxo.matched_tx_out.key_image == matched_tx_out.key_image)
+            {
+                continue;
+            }
+
+            let tracked_tx_out = self.create_pending_tx_out(matched_tx_out)?;
+            self.pending_tx_outs.push(tracked_tx_out);
+            added = true;
         }
 
         Ok(added)
