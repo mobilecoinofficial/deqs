@@ -119,7 +119,7 @@ impl LiquidityBotTask {
         let shutdown_ack_tx = self.shutdown_ack_tx.take();
 
         let mut resubmit_tx_outs_interval = interval(RESUBMIT_POLL_INTERVAL);
-        resubmit_tx_outs_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        resubmit_tx_outs_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         loop {
             tokio::select! {
