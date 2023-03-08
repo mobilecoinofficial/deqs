@@ -80,6 +80,12 @@ pub struct ListedTxOut {
     last_submitted_at: Instant,
 }
 
+/// Commands used for interfacing with the LiquidityBotTask.
+enum Command {
+    /// Incoming wallet event.
+    WalletEvent(WalletEvent),
+}
+
 struct LiquidityBotTask {
     /// Account key
     account_key: AccountKey,
@@ -102,8 +108,8 @@ struct LiquidityBotTask {
     /// Logger.
     logger: Logger,
 
-    /// Wallet event receiver.
-    wallet_event_rx: mpsc::UnboundedReceiver<WalletEvent>,
+    /// Command receiver.
+    command_rx: mpsc::UnboundedReceiver<Command>,
 
     /// Shutdown receiver, used to signal the event loop to shutdown.
     shutdown_rx: mpsc::UnboundedReceiver<()>,
@@ -125,9 +131,9 @@ impl LiquidityBotTask {
 
         loop {
             tokio::select! {
-                event = self.wallet_event_rx.recv() => {
+                event = self.command_rx.recv() => {
                     match event {
-                        Some(WalletEvent::BlockProcessed { received_tx_outs, .. }) => {
+                        Some(Command::WalletEvent(WalletEvent::BlockProcessed { received_tx_outs, .. })) => {
                             // TODO look at spent TxOuts and see if they match any SCIs we submitted
 
                             // Try and add any new TxOuts to the pending list.
@@ -524,8 +530,8 @@ impl LiquidityBotTask {
 }
 
 pub struct LiquidityBot {
-    /// Wallet event tx
-    wallet_event_tx: mpsc::UnboundedSender<WalletEvent>,
+    /// Command tx, used to send commands to the event loop.
+    command_tx: mpsc::UnboundedSender<Command>,
 
     /// Shutdown sender, used to signal the event loop to shutdown.
     shutdown_tx: mpsc::UnboundedSender<()>,
@@ -542,7 +548,7 @@ impl LiquidityBot {
         deqs_uri: &DeqsClientUri,
         logger: Logger,
     ) -> Self {
-        let (wallet_event_tx, wallet_event_rx) = mpsc::unbounded_channel();
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (shutdown_tx, shutdown_rx) = mpsc::unbounded_channel();
         let (shutdown_ack_tx, shutdown_ack_rx) = mpsc::unbounded_channel();
 
@@ -556,7 +562,7 @@ impl LiquidityBot {
             pairs,
             pending_tx_outs: Vec::new(),
             listed_tx_outs: Vec::new(),
-            wallet_event_rx,
+            command_rx,
             deqs_client,
             shutdown_rx,
             shutdown_ack_tx: Some(shutdown_ack_tx),
@@ -564,7 +570,7 @@ impl LiquidityBot {
         };
         tokio::spawn(task.run());
         Self {
-            wallet_event_tx,
+            command_tx,
             shutdown_tx,
             shutdown_ack_rx,
         }
@@ -572,11 +578,12 @@ impl LiquidityBot {
 
     /// Bridge in a wallet event.
     pub fn notify_wallet_event(&self, event: WalletEvent) {
-        self.wallet_event_tx
-            .send(event)
-            .expect("wallet event tx failed"); // We assume the channel stays
-                                               // open for as long as the bot is
-                                               // running.
+        self.command_tx
+            .send(Command::WalletEvent(event))
+            .map_err(|_| ()) // Command cannot implement Debug
+            .expect("command tx failed"); // We assume the channel stays
+                                          // open for as long as the bot is
+                                          // running.
     }
 
     /// Request the event loop task to shut down.
@@ -656,7 +663,7 @@ mod tests {
             let deqs_server = DeqsTestServer::start(logger.clone());
             let deqs_client = deqs_server.client();
 
-            let (_wallet_event_tx, wallet_event_rx) = mpsc::unbounded_channel();
+            let (_command_tx, command_rx) = mpsc::unbounded_channel();
             let (_shutdown_tx, shutdown_rx) = mpsc::unbounded_channel();
             let (shutdown_ack_tx, _shutdown_ack_rx) = mpsc::unbounded_channel();
 
@@ -671,7 +678,7 @@ mod tests {
                 pairs,
                 pending_tx_outs: Vec::new(),
                 listed_tx_outs: Vec::new(),
-                wallet_event_rx,
+                command_rx,
                 deqs_client,
                 shutdown_rx,
                 shutdown_ack_tx: Some(shutdown_ack_tx),
