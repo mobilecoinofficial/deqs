@@ -121,6 +121,19 @@ impl MiniWallet {
     pub fn next_block_index(&self) -> BlockIndex {
         self.state.lock().unwrap().next_block_index
     }
+
+    pub fn matched_tx_outs(&self) -> Vec<MatchedTxOut> {
+        let mut matched_tx_outs = self
+            .state
+            .lock()
+            .unwrap()
+            .matched_tx_outs
+            .values()
+            .cloned()
+            .collect::<Vec<_>>();
+        matched_tx_outs.sort_by_key(|matched_tx_out| matched_tx_out.block_index);
+        matched_tx_outs
+    }
 }
 
 #[cfg(test)]
