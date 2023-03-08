@@ -15,10 +15,12 @@
 
 mod config;
 mod error;
+mod metrics;
 pub mod mini_wallet;
 
 pub use config::Config;
 pub use error::Error;
+pub use metrics::{update_periodic_metrics, METRICS_POLL_INTERVAL};
 
 use deqs_api::{
     deqs::{QuoteStatusCode, SubmitQuotesRequest, SubmitQuotesResponse},

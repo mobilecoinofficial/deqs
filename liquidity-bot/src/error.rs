@@ -56,6 +56,9 @@ pub enum Error {
 
     /// Serialize: {0}
     Serialize(SerializeError),
+
+    /// Prometheus: {0}
+    Prometheus(prometheus::Error),
 }
 impl From<LedgerDbError> for Error {
     fn from(src: LedgerDbError) -> Self {
@@ -115,5 +118,10 @@ impl From<DeserializeError> for Error {
 impl From<SerializeError> for Error {
     fn from(src: SerializeError) -> Self {
         Self::Serialize(src)
+    }
+}
+impl From<prometheus::Error> for Error {
+    fn from(src: prometheus::Error) -> Self {
+        Self::Prometheus(src)
     }
 }
