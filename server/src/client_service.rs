@@ -92,18 +92,15 @@ impl<OB: QuoteBook> ClientService<OB> {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|err| rpc_invalid_arg_error("quotes", err, logger))?;
 
-        // Check whether the scis have valid quantities
-        let filtered_scis = scis
-            .iter()
-            .map(|sci| (self.sci_validator)(sci))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|err| rpc_invalid_arg_error("quotes", err, logger))?;
+        log::debug!(logger, "Request to submit {} quotes", scis.len());
 
-        log::debug!(logger, "Request to submit {} quotes", filtered_scis.len());
-
-        let results = filtered_scis
+        let results = scis
             .into_par_iter()
-            .map(|sci| self.quote_book.add_sci(sci, Some(timestamp)))
+            .map(|sci| {
+                // Validate sci before trying to add it to the quote book.
+                let result = (self.sci_validator)(&sci)?;
+                self.quote_book.add_sci(result, Some(timestamp))
+            })
             .collect::<Vec<_>>();
 
         let mut status_codes = vec![];
@@ -318,7 +315,15 @@ mod tests {
     ) -> (DeqsClientApiClient, Server, Sender<Msg>, Receiver<Msg>) {
         let server_env = Arc::new(EnvBuilder::new().build());
         let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(1000);
-        let sci_validator: SciValidator = Arc::new(|sci| Ok(sci.clone()));
+        let sci_validator: SciValidator = Arc::new(|sci| {
+            let base_value = sci.pseudo_output_amount.value;
+            if base_value < 3 {
+                return Err(QuoteBookError::UnsupportedSci(
+                    "Quote is too small for deqs".to_owned(),
+                ));
+            }
+            Ok(sci.clone())
+        });
 
         let client_service = ClientService::new(
             msg_bus_tx.clone(),
@@ -448,6 +453,47 @@ mod tests {
         quotes2.sort();
 
         assert_eq!(quotes2, quotes);
+    }
+
+    #[test_with_logger]
+    fn submit_quotes_refuses_dust(logger: Logger) {
+        let pair = Pair {
+            base_token_id: TokenId::from(1),
+            counter_token_id: TokenId::from(2),
+        };
+        let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+        let quote_book = InMemoryQuoteBook::default();
+        let (client_api, _server, _msg_bus_tx, _msg_bus_rx) =
+            create_test_client_and_server(&quote_book, &logger);
+
+        let scis = (0..10)
+            .map(|_| {
+                create_sci(
+                    pair.base_token_id,
+                    pair.counter_token_id,
+                    1,
+                    20,
+                    &mut rng,
+                    None,
+                )
+            })
+            .map(|sci| mc_api::external::SignedContingentInput::from(&sci))
+            .collect::<Vec<_>>();
+
+        let req = SubmitQuotesRequest {
+            quotes: scis.clone().into(),
+            ..Default::default()
+        };
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+
+        assert_eq!(
+            resp.get_status_codes(),
+            vec![QuoteStatusCode::UNSUPPORTED_SCI; scis.len()]
+        );
+        assert_eq!(
+            resp.get_error_messages(),
+            vec!["Unsupported SCI: Quote is too small for deqs"; scis.len()]
+        );
     }
 
     #[test_with_logger]
