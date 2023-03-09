@@ -51,8 +51,12 @@ pub struct ClientService<OB: QuoteBook> {
 
 impl<OB: QuoteBook> ClientService<OB> {
     /// Create a new ClientService
-    pub fn new(msg_bus_tx: Sender<Msg>, quote_book: OB, logger: Logger) -> Self {
-        let sci_validator: SciValidator = Arc::new(|sci| Ok(sci.clone()));
+    pub fn new(
+        msg_bus_tx: Sender<Msg>,
+        quote_book: OB,
+        sci_validator: SciValidator,
+        logger: Logger,
+    ) -> Self {
         Self {
             msg_bus_tx,
             quote_book,
@@ -314,10 +318,15 @@ mod tests {
     ) -> (DeqsClientApiClient, Server, Sender<Msg>, Receiver<Msg>) {
         let server_env = Arc::new(EnvBuilder::new().build());
         let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(1000);
+        let sci_validator: SciValidator = Arc::new(|sci| Ok(sci.clone()));
 
-        let client_service =
-            ClientService::new(msg_bus_tx.clone(), quote_book.clone(), logger.clone())
-                .into_service();
+        let client_service = ClientService::new(
+            msg_bus_tx.clone(),
+            quote_book.clone(),
+            sci_validator.clone(),
+            logger.clone(),
+        )
+        .into_service();
         let mut server = ServerBuilder::new(server_env)
             .register_service(client_service)
             .build()

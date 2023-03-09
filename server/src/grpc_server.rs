@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{ClientService, Error, Msg};
+use crate::{client_service::SciValidator, ClientService, Error, Msg};
 use deqs_api::DeqsClientUri;
 use deqs_quote_book_api::QuoteBook;
 use futures::executor::block_on;
@@ -76,10 +76,12 @@ impl<OB: QuoteBook> GrpcServer<OB> {
 
         let health_service =
             mc_util_grpc::HealthService::new(None, self.logger.clone()).into_service();
+        let sci_validator: SciValidator = Arc::new(|sci| Ok(sci.clone()));
 
         let client_service = ClientService::new(
             self.msg_bus_tx.clone(),
             self.quote_book.clone(),
+            sci_validator.clone(),
             self.logger.clone(),
         )
         .into_service();
