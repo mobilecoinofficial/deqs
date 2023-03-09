@@ -315,7 +315,7 @@ impl LiquidityBotTask {
         let mut req = SubmitQuotesRequest::default();
         req.set_quotes(scis);
 
-        let resp = self.deqs_client.submit_quotes_async(&req)?.await?;
+        let resp = self.submit_quotes(&req).await?;
         sanity_check_submit_quotes_response(&resp, req.quotes.len())?;
 
         for (pending_tx_out, status_code, error_msg, quote) in itertools::izip!(
@@ -425,17 +425,11 @@ impl LiquidityBotTask {
 
         // Try and submit the quotes to the DEQS, if it fails we need to put them back
         // and assume they are still listed. We will try again later.
-        let resp = match self.deqs_client.submit_quotes_async(&req) {
-            Ok(async_resp) => match async_resp.await {
-                Ok(resp) => resp,
-                Err(err) => {
-                    self.listed_tx_outs.extend(to_resubmit);
-                    return Err(err.into());
-                }
-            },
+        let resp = match self.submit_quotes(&req).await {
+            Ok(resp) => resp,
             Err(err) => {
                 self.listed_tx_outs.extend(to_resubmit);
-                return Err(err.into());
+                return Err(err);
             }
         };
         sanity_check_submit_quotes_response(&resp, req.quotes.len())?;
@@ -599,6 +593,30 @@ impl LiquidityBotTask {
             matched_tx_out,
             sci,
         })
+    }
+
+    async fn submit_quotes(
+        &self,
+        req: &SubmitQuotesRequest,
+    ) -> Result<SubmitQuotesResponse, Error> {
+        let start = Instant::now();
+
+        let resp = self
+            .deqs_client
+            .submit_quotes_async(req)
+            .map_err(|err| {
+                metrics::SUBMIT_QUOTES_GRPC_FAIL.observe(start.elapsed().as_secs_f64());
+                err
+            })?
+            .await
+            .map_err(|err| {
+                metrics::SUBMIT_QUOTES_GRPC_FAIL.observe(start.elapsed().as_secs_f64());
+                err
+            })?;
+
+        metrics::SUBMIT_QUOTES_GRPC_SUCCESS.observe(start.elapsed().as_secs_f64());
+
+        Ok(resp)
     }
 }
 
