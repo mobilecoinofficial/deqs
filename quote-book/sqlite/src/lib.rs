@@ -303,7 +303,7 @@ mod tests {
     use deqs_quote_book_in_memory::InMemoryQuoteBook;
     use deqs_quote_book_test_suite as test_suite;
     use mc_common::logger::{test_with_logger, Logger};
-    use tempdir::TempDir;
+    use tempfile::TempDir;
 
     fn create_quote_book(dir: &TempDir, logger: Logger) -> SqliteQuoteBook<InMemoryQuoteBook> {
         let file_path = dir.path().join("quotes.db");
@@ -313,42 +313,42 @@ mod tests {
 
     #[test_with_logger]
     fn basic_happy_flow(logger: Logger) {
-        let dir = TempDir::new("quote_book_test").unwrap();
+        let dir = TempDir::new().unwrap();
         let quote_book = create_quote_book(&dir, logger);
         test_suite::basic_happy_flow(&quote_book);
     }
 
     #[test_with_logger]
     fn cannot_add_duplicate_sci(logger: Logger) {
-        let dir = TempDir::new("quote_book_test").unwrap();
+        let dir = TempDir::new().unwrap();
         let quote_book = create_quote_book(&dir, logger);
         test_suite::cannot_add_duplicate_sci(&quote_book);
     }
 
     #[test_with_logger]
     fn cannot_add_invalid_sci(logger: Logger) {
-        let dir = TempDir::new("quote_book_test").unwrap();
+        let dir = TempDir::new().unwrap();
         let quote_book = create_quote_book(&dir, logger);
         test_suite::cannot_add_invalid_sci(&quote_book);
     }
 
     #[test_with_logger]
     fn get_quotes_filtering_works(logger: Logger) {
-        let dir = TempDir::new("quote_book_test").unwrap();
+        let dir = TempDir::new().unwrap();
         let quote_book = create_quote_book(&dir, logger);
         test_suite::get_quotes_filtering_works(&quote_book);
     }
 
     #[test_with_logger]
     fn get_quote_ids_works(logger: Logger) {
-        let dir = TempDir::new("quote_book_test").unwrap();
+        let dir = TempDir::new().unwrap();
         let quote_book = create_quote_book(&dir, logger);
         test_suite::get_quote_ids_works(&quote_book);
     }
 
     #[test_with_logger]
     fn get_quote_by_id_works(logger: Logger) {
-        let dir = TempDir::new("quote_book_test").unwrap();
+        let dir = TempDir::new().unwrap();
         let quote_book = create_quote_book(&dir, logger);
         test_suite::get_quote_by_id_works(&quote_book);
     }
