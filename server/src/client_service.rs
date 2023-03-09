@@ -20,7 +20,18 @@ use postage::{
     sink::Sink,
 };
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+/// A function for validating that scis should be accepted by the server. It
+/// returns the sci if it is valid, and otherwise returns an error. It receives
+/// 1 argument:
+/// - A Sci to be validated
+pub type SciValidator = Arc<
+    dyn Fn(&SignedContingentInput) -> Result<SignedContingentInput, QuoteBookError> + Sync + Send,
+>;
 
 /// GRPC Client service
 #[derive(Clone)]
@@ -31,6 +42,9 @@ pub struct ClientService<OB: QuoteBook> {
     /// Quote book.
     quote_book: OB,
 
+    /// Validates Scis for specific server config before passing to quotebook
+    sci_validator: SciValidator,
+
     /// Logger.
     logger: Logger,
 }
@@ -38,9 +52,11 @@ pub struct ClientService<OB: QuoteBook> {
 impl<OB: QuoteBook> ClientService<OB> {
     /// Create a new ClientService
     pub fn new(msg_bus_tx: Sender<Msg>, quote_book: OB, logger: Logger) -> Self {
+        let sci_validator: SciValidator = Arc::new(|sci| Ok(sci.clone()));
         Self {
             msg_bus_tx,
             quote_book,
+            sci_validator,
             logger,
         }
     }
@@ -72,9 +88,16 @@ impl<OB: QuoteBook> ClientService<OB> {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|err| rpc_invalid_arg_error("quotes", err, logger))?;
 
-        log::debug!(logger, "Request to submit {} quotes", scis.len());
+        // Check whether the scis have valid quantities
+        let filtered_scis = scis
+            .iter()
+            .map(|sci| (self.sci_validator)(sci))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|err| rpc_invalid_arg_error("quotes", err, logger))?;
 
-        let results = scis
+        log::debug!(logger, "Request to submit {} quotes", filtered_scis.len());
+
+        let results = filtered_scis
             .into_par_iter()
             .map(|sci| self.quote_book.add_sci(sci, Some(timestamp)))
             .collect::<Vec<_>>();
