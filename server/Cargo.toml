@@ -24,6 +24,7 @@ mc-api = { path = "../mobilecoin/api" }
 mc-common = { path = "../mobilecoin/common", features = ["loggers"] }
 mc-ledger-db = { path = "../mobilecoin/ledger/db" }
 mc-transaction-extra = { path = "../mobilecoin/transaction/extra" }
+mc-transaction-types = { path = "../mobilecoin/transaction/types" }
 mc-util-grpc = { path = "../mobilecoin/util/grpc" }
 mc-util-metrics  = { path = "../mobilecoin/util/metrics" }
 mc-util-serial = { path = "../mobilecoin/util/serial" }
@@ -48,7 +49,6 @@ mc-account-keys = { path = "../mobilecoin/account-keys" }
 mc-fog-report-validation-test-utils = { path = "../mobilecoin/fog/report/validation/test-utils" }
 mc-ledger-db = { path = "../mobilecoin/ledger/db", features = ["test_utils"] }
 mc-transaction-builder = { path = "../mobilecoin/transaction/builder", features = ["test-only"] }
-mc-transaction-types = { path = "../mobilecoin/transaction/types" }
 
 rand = "0.8"
 tokio-retry = "0.3"

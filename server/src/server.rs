@@ -5,6 +5,7 @@ use deqs_api::DeqsClientUri;
 use deqs_p2p::libp2p::{identity::Keypair, Multiaddr};
 use deqs_quote_book_api::{Quote, QuoteBook};
 use mc_common::logger::{log, Logger};
+use mc_transaction_types::TokenId;
 use postage::{
     broadcast::{Receiver, Sender},
     prelude::{Sink, Stream},
@@ -39,6 +40,7 @@ impl<QB: QuoteBook> Server<QB> {
         p2p_keypair: Option<Keypair>,
         msg_bus_tx: Sender<Msg>,
         mut msg_bus_rx: Receiver<Msg>,
+        quote_minimum_map: Vec<(TokenId, u64)>,
         logger: Logger,
     ) -> Result<Self, Error> {
         let (shutdown_tx, mut shutdown_rx) = mpsc::unbounded_channel();
@@ -63,6 +65,7 @@ impl<QB: QuoteBook> Server<QB> {
             msg_bus_tx,
             quote_book.clone(),
             grpc_listen_address,
+            quote_minimum_map,
             logger.clone(),
         );
         grpc_server
