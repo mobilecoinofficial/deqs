@@ -32,4 +32,4 @@ mc-fog-report-validation-test-utils = { path = "../../mobilecoin/fog/report/vali
 mc-transaction-builder = { path = "../../mobilecoin/transaction/builder", features = ["test-only"] }
 mc-transaction-core = { path = "../../mobilecoin/transaction/core" }
 
-tempdir = "0.3"
+tempfile = "3.4"
