@@ -92,16 +92,9 @@ impl<OB: QuoteBook> ClientService<OB> {
             .collect::<Result<Vec<_>, _>>()
             .map_err(|err| rpc_invalid_arg_error("quotes", err, logger))?;
 
-        // Check whether the scis have valid quantities
-        let filtered_scis = scis
-            .iter()
-            .map(|sci| (self.sci_validator)(sci))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|err| rpc_invalid_arg_error("quotes", err, logger))?;
+        log::debug!(logger, "Request to submit {} quotes", scis.len());
 
-        log::debug!(logger, "Request to submit {} quotes", filtered_scis.len());
-
-        let results = filtered_scis
+        let results = scis
             .into_par_iter()
             .map(|sci| {
                 // Validate sci before trying to add it to the quote book.
