@@ -1,7 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use crate::{mini_wallet::MiniWallet, Error, LiquidityBot};
-use mc_util_metrics::{IntGauge, IntGaugeVec, OpMetrics, Opts};
+use mc_util_metrics::{Histogram, IntGauge, IntGaugeVec, OpMetrics, Opts};
 use std::time::Duration;
 
 /// Frequency at which we update metrics.
@@ -23,6 +23,11 @@ lazy_static::lazy_static! {
    /// Next block index to scan
    pub static ref NEXT_BLOCK_INDEX: IntGauge = OP_COUNTERS.gauge("next_block_index");
 
+   /// Successful SubmitQuotes GRPC calls histogram
+   pub static ref SUBMIT_QUOTES_GRPC_SUCCESS: Histogram = OP_COUNTERS.histogram("submit_quotes_grpc_success");
+
+   /// Failed SubmitQuotes GRPC calls histogram
+   pub static ref SUBMIT_QUOTES_GRPC_FAIL: Histogram = OP_COUNTERS.histogram("submit_quotes_grpc_fail");
 }
 
 /// Update periodic metrics.
