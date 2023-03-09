@@ -35,31 +35,62 @@ pub async fn update_periodic_metrics(wallet: &MiniWallet, liquidity_bot: &Liquid
 
 pub struct PerTokenMetrics {
     /// Number of pending tx outs
-    pending_tx_outs_gauge: IntGaugeVec,
-    // /// Total value of pending tx outs
-    // pending_tx_outs_value_gauge: IntGaugeVec,
+    num_pending_tx_outs_gauge: IntGaugeVec,
 
-    // /// Number of listed tx outs
-    // listed_tx_outs_gauge: IntGaugeVec,
+    /// Total value of pending tx outs
+    pending_tx_outs_value_gauge: IntGaugeVec,
 
-    // /// Total value of listed tx outs
-    // listed_tx_outs_value_gauge: IntGaugeVec,
+    /// Number of listed tx outs
+    num_listed_tx_outs_gauge: IntGaugeVec,
+
+    /// Total value of listed tx outs
+    listed_tx_outs_value_gauge: IntGaugeVec,
 }
 
 impl PerTokenMetrics {
     pub fn new() -> Result<Self, Error> {
-        let pending_tx_outs_gauge = IntGaugeVec::new(
+        let num_pending_tx_outs_gauge = IntGaugeVec::new(
             Opts::new(
-                "deqs_liquidity_bot_pending_tx_outs",
+                "deqs_liquidity_bot_num_pending_tx_outs",
                 "Number of pending tx outs",
             ),
             &["token_id"],
         )?;
 
-        prometheus::register(Box::new(pending_tx_outs_gauge.clone()))?;
+        let pending_tx_outs_value_gauge = IntGaugeVec::new(
+            Opts::new(
+                "deqs_liquidity_bot_pending_tx_outs_value",
+                "Total value of pending tx outs",
+            ),
+            &["token_id"],
+        )?;
+
+        let num_listed_tx_outs_gauge = IntGaugeVec::new(
+            Opts::new(
+                "deqs_liquidity_bot_num_listed_tx_outs",
+                "Number of listed tx outs",
+            ),
+            &["token_id"],
+        )?;
+
+        let listed_tx_outs_value_gauge = IntGaugeVec::new(
+            Opts::new(
+                "deqs_liquidity_bot_listed_tx_outs_value",
+                "Total value of listed tx outs",
+            ),
+            &["token_id"],
+        )?;
+
+        prometheus::register(Box::new(num_pending_tx_outs_gauge.clone()))?;
+        prometheus::register(Box::new(pending_tx_outs_value_gauge.clone()))?;
+        prometheus::register(Box::new(num_listed_tx_outs_gauge.clone()))?;
+        prometheus::register(Box::new(listed_tx_outs_value_gauge.clone()))?;
 
         Ok(Self {
-            pending_tx_outs_gauge,
+            num_pending_tx_outs_gauge,
+            pending_tx_outs_value_gauge,
+            num_listed_tx_outs_gauge,
+            listed_tx_outs_value_gauge,
         })
     }
 
@@ -67,7 +98,25 @@ impl PerTokenMetrics {
         let stats = liquidity_bot.stats().await;
 
         for (token_id, value) in stats.num_pending_tx_outs_by_token_id.iter() {
-            self.pending_tx_outs_gauge
+            self.num_pending_tx_outs_gauge
+                .with_label_values(&[&token_id.to_string()])
+                .set(*value as i64);
+        }
+
+        for (token_id, value) in stats.total_pending_tx_outs_value_by_token_id.iter() {
+            self.pending_tx_outs_value_gauge
+                .with_label_values(&[&token_id.to_string()])
+                .set(*value as i64);
+        }
+
+        for (token_id, value) in stats.num_listed_tx_outs_by_token_id.iter() {
+            self.num_listed_tx_outs_gauge
+                .with_label_values(&[&token_id.to_string()])
+                .set(*value as i64);
+        }
+
+        for (token_id, value) in stats.total_listed_tx_outs_value_by_token_id.iter() {
+            self.listed_tx_outs_value_gauge
                 .with_label_values(&[&token_id.to_string()])
                 .set(*value as i64);
         }

@@ -122,6 +122,19 @@ impl From<&LiquidityBotTask> for Stats {
                 .or_default() += listed_tx_out.matched_tx_out.amount.value;
         }
 
+        // Ensure there's a zero value for each token id we know about but haven't
+        // encountered.
+        for token_id in task.pairs.keys().copied() {
+            num_pending_tx_outs_by_token_id.entry(token_id).or_default();
+            total_pending_tx_outs_value_by_token_id
+                .entry(token_id)
+                .or_default();
+            num_listed_tx_outs_by_token_id.entry(token_id).or_default();
+            total_listed_tx_outs_value_by_token_id
+                .entry(token_id)
+                .or_default();
+        }
+
         Self {
             num_pending_tx_outs_by_token_id,
             total_pending_tx_outs_value_by_token_id,
