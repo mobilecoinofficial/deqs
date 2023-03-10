@@ -1,7 +1,9 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{mini_wallet::MiniWallet, Error, LiquidityBot};
-use mc_util_metrics::{Histogram, IntGauge, IntGaugeVec, OpMetrics, Opts};
+use crate::{mini_wallet::MiniWallet, Error, FulfilledSci, LiquidityBot, ListedTxOut};
+use mc_util_metrics::{
+    Histogram, HistogramOpts, HistogramVec, IntGauge, IntGaugeVec, OpMetrics, Opts,
+};
 use std::time::Duration;
 
 /// Frequency at which we update metrics.
@@ -50,6 +52,9 @@ pub struct PerTokenMetrics {
 
     /// Total value of listed tx outs
     listed_tx_outs_value_gauge: IntGaugeVec,
+
+    /// Histogram of fullfilled SCI percentages,
+    fulfilled_sci_percentages: HistogramVec,
 }
 
 impl PerTokenMetrics {
@@ -86,16 +91,28 @@ impl PerTokenMetrics {
             &["token_id"],
         )?;
 
+        let fulfilled_sci_percentages = HistogramVec::new(
+            HistogramOpts::new(
+                format!("deqs_liquidity_bot_fulfilled_sci_percentages"),
+                format!("Histogram of fullfilled SCI percentages"),
+            )
+            .buckets(vec![0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.8, 0.9]),
+            &["token_id"],
+        )?;
+
+
         prometheus::register(Box::new(num_pending_tx_outs_gauge.clone()))?;
         prometheus::register(Box::new(pending_tx_outs_value_gauge.clone()))?;
         prometheus::register(Box::new(num_listed_tx_outs_gauge.clone()))?;
         prometheus::register(Box::new(listed_tx_outs_value_gauge.clone()))?;
+        prometheus::register(Box::new(fulfilled_sci_percentages.clone()))?;
 
         Ok(Self {
             num_pending_tx_outs_gauge,
             pending_tx_outs_value_gauge,
             num_listed_tx_outs_gauge,
             listed_tx_outs_value_gauge,
+            fulfilled_sci_percentages,
         })
     }
 
@@ -126,4 +143,15 @@ impl PerTokenMetrics {
                 .set(*value as i64);
         }
     }
+
+    pub fn update_metrics_from_fulfilled_sci(&self, fulfilled_sci: &FulfilledSci) {
+        let base_token_id = fulfilled_sci.listed_tx_out.quote.pair().base_token_id;
+
+        if let Ok(fill_percents) = fulfilled_sci.fill_percents() {
+            self.fulfilled_sci_percentages
+                .with_label_values(&[&base_token_id.to_string()])
+                .observe(fill_percents);
+        }
+    }
+
 }
