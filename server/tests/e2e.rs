@@ -184,7 +184,8 @@ async fn e2e_two_nodes_quote_propagation(logger: Logger) {
     assert_eq!(quote.sci(), &sci);
 }
 
-/// Test that two nodes don't propagate dust quotes to eachother.
+/// Test that nodes don't accept dust quotes directly, but will propagate dust
+/// quotes to each other.
 #[async_test_with_logger(flavor = "multi_thread")]
 async fn e2e_two_nodes_dust_propagation(logger: Logger) {
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
