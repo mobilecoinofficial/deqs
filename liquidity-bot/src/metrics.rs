@@ -100,7 +100,6 @@ impl PerTokenMetrics {
             &["token_id"],
         )?;
 
-
         prometheus::register(Box::new(num_pending_tx_outs_gauge.clone()))?;
         prometheus::register(Box::new(pending_tx_outs_value_gauge.clone()))?;
         prometheus::register(Box::new(num_listed_tx_outs_gauge.clone()))?;
@@ -153,5 +152,4 @@ impl PerTokenMetrics {
                 .observe(fill_percents);
         }
     }
-
 }

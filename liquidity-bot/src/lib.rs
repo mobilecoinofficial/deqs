@@ -286,8 +286,9 @@ impl LiquidityBotTask {
         drop(shutdown_ack_tx);
     }
 
-    /// Go over the list of spent TxOuts and see if any of them match any of the listed ones,
-    /// If so, use the received TxOuts to see if the SCI was consumed or cancelled.
+    /// Go over the list of spent TxOuts and see if any of them match any of the
+    /// listed ones, If so, use the received TxOuts to see if the SCI was
+    /// consumed or cancelled.
     fn look_for_fulfilled_scis(
         &mut self,
         spent_tx_outs: &[MatchedTxOut],
