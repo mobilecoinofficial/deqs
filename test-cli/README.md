@@ -10,7 +10,7 @@ A test cli for the decentralized quoting service.
 
 2. Submit SCIs using:
 
-    MC_LOG=trace IAS_MODE=DEV SGX_MODE=SW cargo run --bin deqs-test-cli -- --ledger-db {ledgerdb_path} --rng-seed 1 submit-quotes --num-quotes 3 --deqs-uri insecure-deqs://127.0.0.1/
+    MC_LOG=trace IAS_MODE=DEV SGX_MODE=SW cargo run --bin deqs-test-cli -- --rng-seed 1 submit-quotes --num-quotes 3 --deqs-uri insecure-deqs://127.0.0.1/ --ledger-db-path {ledgerdb_path}
 
 3. Test liveupdates via grpcurl:
 

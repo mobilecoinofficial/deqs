@@ -47,6 +47,11 @@ pub enum Command {
         /// Allow partial fills
         #[clap(long)]
         allow_partial_fills: bool,
+
+        /// Path to ledgerdb used by the server
+        #[clap(long, env = "MC_LEDGER_DB")]
+        ledger_db_path: PathBuf,
+
     },
 
     /// Generate a p2p keypair and write it to a file
@@ -67,10 +72,6 @@ pub struct Config {
 
     #[clap(subcommand)]
     pub command: Command,
-
-    /// Path to ledgerdb used by the server
-    #[clap(long, env = "MC_LEDGER_DB")]
-    pub ledger_db: PathBuf,
 }
 
 fn main() {
@@ -86,9 +87,6 @@ fn main() {
     };
     let mut rng: StdRng = SeedableRng::from_seed(seed_bytes);
 
-    // Open the ledger db
-    let ledger_db = LedgerDB::open(&config.ledger_db).expect("Could not open ledger db");
-
     match config.command {
         Command::SubmitQuotes {
             deqs_uri,
@@ -98,10 +96,14 @@ fn main() {
             base_amount,
             counter_amount,
             allow_partial_fills,
+            ledger_db_path
         } => {
             let ch =
                 ChannelBuilder::default_channel_builder(env).connect_to_uri(&deqs_uri, &logger);
             let client_api = DeqsClientApiClient::new(ch);
+
+            // Open the ledger db
+            let ledger_db = LedgerDB::open(&ledger_db_path).expect("Could not open ledger db");
 
             log::info!(&logger, "Generating {} SCIs...", num_quotes);
 
