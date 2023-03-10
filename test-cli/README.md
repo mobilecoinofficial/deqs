@@ -6,7 +6,7 @@ A test cli for the decentralized quoting service.
 
 1. Start the server with:
 
-    MC_LOG=trace IAS_MODE=DEV SGX_MODE=SW cargo run --bin deqs-server -- --client-listen-uri insecure-deqs://127.0.0.1/ --db-path {sqllite_path} --ledger-db {ledgerdb_path}
+    MC_LOG=trace IAS_MODE=DEV SGX_MODE=SW cargo run --bin deqs-server -- --client-listen-uri insecure-deqs://127.0.0.1/ --db-path {sqllite_path} --ledger-db {ledgerdb_path} --quote-minimum-map 0=1000,1=200
 
 2. Submit SCIs using:
 
