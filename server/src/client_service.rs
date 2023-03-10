@@ -29,9 +29,8 @@ use std::{
 /// returns the sci if it is valid, and otherwise returns an error. It receives
 /// 1 argument:
 /// - A Sci to be validated
-pub type SciValidator = Arc<
-    dyn Fn(&SignedContingentInput) -> Result<SignedContingentInput, QuoteBookError> + Sync + Send,
->;
+pub type SciValidator =
+    Arc<dyn Fn(&SignedContingentInput) -> Result<(), QuoteBookError> + Sync + Send>;
 
 /// GRPC Client service
 #[derive(Clone)]
@@ -98,8 +97,8 @@ impl<OB: QuoteBook> ClientService<OB> {
             .into_par_iter()
             .map(|sci| {
                 // Validate sci before trying to add it to the quote book.
-                let result = (self.sci_validator)(&sci)?;
-                self.quote_book.add_sci(result, Some(timestamp))
+                (self.sci_validator)(&sci)?;
+                self.quote_book.add_sci(sci, Some(timestamp))
             })
             .collect::<Vec<_>>();
 
@@ -322,7 +321,7 @@ mod tests {
                     "Quote is too small for deqs".to_owned(),
                 ));
             }
-            Ok(sci.clone())
+            Ok(())
         });
 
         let client_service = ClientService::new(

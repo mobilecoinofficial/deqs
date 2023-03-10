@@ -96,7 +96,7 @@ impl<OB: QuoteBook> GrpcServer<OB> {
                     "Quote is too small for deqs".to_owned(),
                 ));
             }
-            Ok(sci.clone())
+            Ok(())
         });
 
         let client_service = ClientService::new(
