@@ -45,10 +45,9 @@ impl<OB: QuoteBook> GrpcServer<OB> {
         msg_bus_tx: Sender<Msg>,
         quote_book: OB,
         client_listen_uri: DeqsClientUri,
-        quote_minimum_tuples: Vec<(TokenId, u64)>,
+        quote_minimum_map: HashMap<TokenId, u64>,
         logger: Logger,
     ) -> Self {
-        let quote_minimum_map: HashMap<TokenId, u64> = quote_minimum_tuples.into_iter().collect();
         Self {
             msg_bus_tx,
             quote_book,

@@ -4,7 +4,10 @@ use crate::{update_periodic_metrics, Error, GrpcServer, Msg, METRICS_POLL_INTERV
 use deqs_api::DeqsClientUri;
 use deqs_p2p::libp2p::{identity::Keypair, Multiaddr};
 use deqs_quote_book_api::{Quote, QuoteBook};
-use mc_common::logger::{log, Logger};
+use mc_common::{
+    logger::{log, Logger},
+    HashMap,
+};
 use mc_transaction_types::TokenId;
 use postage::{
     broadcast::{Receiver, Sender},
@@ -40,7 +43,7 @@ impl<QB: QuoteBook> Server<QB> {
         p2p_keypair: Option<Keypair>,
         msg_bus_tx: Sender<Msg>,
         mut msg_bus_rx: Receiver<Msg>,
-        quote_minimum_map: Vec<(TokenId, u64)>,
+        quote_minimum_tuples: Vec<(TokenId, u64)>,
         logger: Logger,
     ) -> Result<Self, Error> {
         let (shutdown_tx, mut shutdown_rx) = mpsc::unbounded_channel();
@@ -59,6 +62,8 @@ impl<QB: QuoteBook> Server<QB> {
 
         // Get p2p listening addresses
         let p2p_listen_addrs = p2p.listen_addrs().await?;
+
+        let quote_minimum_map: HashMap<TokenId, u64> = quote_minimum_tuples.into_iter().collect();
 
         // Start GRPC server
         let mut grpc_server = GrpcServer::new(
