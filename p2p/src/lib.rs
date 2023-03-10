@@ -1,7 +1,7 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 //! Peer to peer networking.
-//! This is based on https://github.com/libp2p/rust-libp2p/pull/3150/files
+//! This is based on <https://github.com/libp2p/rust-libp2p/pull/3150/files>
 
 mod behaviour;
 mod client;
