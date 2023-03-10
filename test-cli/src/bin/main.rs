@@ -51,7 +51,6 @@ pub enum Command {
         /// Path to ledgerdb used by the server
         #[clap(long, env = "MC_LEDGER_DB")]
         ledger_db_path: PathBuf,
-
     },
 
     /// Generate a p2p keypair and write it to a file
@@ -96,7 +95,7 @@ fn main() {
             base_amount,
             counter_amount,
             allow_partial_fills,
-            ledger_db_path
+            ledger_db_path,
         } => {
             let ch =
                 ChannelBuilder::default_channel_builder(env).connect_to_uri(&deqs_uri, &logger);
