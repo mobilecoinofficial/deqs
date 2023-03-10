@@ -246,7 +246,7 @@ impl AccountLedgerScannerWorker {
         let mut matched_tx_outs = Vec::new();
 
         for tx_out in block_contents.outputs {
-           if let Some(matched_tx_out) = MatchedTxOut::view_key_scan(
+            if let Some(matched_tx_out) = MatchedTxOut::view_key_scan(
                 block_index,
                 &tx_out,
                 &self.account_key,
