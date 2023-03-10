@@ -3,14 +3,17 @@
 //! A minimalistic "wallet" - a ledger scanner that tracks spendable TxOuts.
 
 mod account_ledger_scanner;
+mod matched_tx_out;
+
+pub use account_ledger_scanner::AccountLedgerScanner;
+pub use matched_tx_out::MatchedTxOut;
 
 use crate::Error;
-use account_ledger_scanner::AccountLedgerScanner;
 use mc_account_keys::AccountKey;
 use mc_blockchain_types::BlockIndex;
 use mc_common::logger::Logger;
 use mc_ledger_db::LedgerDB;
-use mc_transaction_core::{ring_signature::KeyImage, tx::TxOut, Amount};
+use mc_transaction_core::ring_signature::KeyImage;
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -36,15 +39,6 @@ pub enum WalletEvent {
 
 /// Callback for notifying the caller of wallet events.
 pub type WalletEventCallback = Arc<dyn Fn(WalletEvent) + Send + Sync>;
-
-/// A TxOut that was matched by the wallet.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
-pub struct MatchedTxOut {
-    pub tx_out: TxOut,
-    pub amount: Amount,
-    pub subaddress_index: u64,
-    pub key_image: KeyImage,
-}
 
 /// Internal state of the wallet.
 #[derive(Clone, Debug, Default, Deserialize, Serialize)]
@@ -121,7 +115,7 @@ mod tests {
     use mc_blockchain_types::BlockVersion;
     use mc_common::logger::test_with_logger;
     use mc_ledger_db::test_utils::{create_ledger, initialize_ledger, INITIALIZE_LEDGER_AMOUNT};
-    use mc_transaction_core::{constants::RING_SIZE, Token, TokenId};
+    use mc_transaction_core::{constants::RING_SIZE, Amount, Token, TokenId};
     use mc_transaction_core_test_utils::Mob;
     use rand::{rngs::StdRng, SeedableRng};
     use std::{
