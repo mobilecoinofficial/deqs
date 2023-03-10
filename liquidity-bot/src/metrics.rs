@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{mini_wallet::MiniWallet, Error, FulfilledSci, LiquidityBot, ListedTxOut};
+use crate::{mini_wallet::MiniWallet, Error, FulfilledSci, LiquidityBot};
 use mc_util_metrics::{
     Histogram, HistogramOpts, HistogramVec, IntGauge, IntGaugeVec, OpMetrics, Opts,
 };
@@ -93,8 +93,8 @@ impl PerTokenMetrics {
 
         let fulfilled_sci_percentages = HistogramVec::new(
             HistogramOpts::new(
-                format!("deqs_liquidity_bot_fulfilled_sci_percentages"),
-                format!("Histogram of fullfilled SCI percentages"),
+                "deqs_liquidity_bot_fulfilled_sci_percentages",
+                "Histogram of fullfilled SCI percentages",
             )
             .buckets(vec![0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.8, 0.9]),
             &["token_id"],
