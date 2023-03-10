@@ -383,7 +383,7 @@ mod tests {
         let test_context = setup(logger.clone());
         test_suite::basic_happy_flow(
             &test_context.synchronized_quote_book,
-            Some(test_context.ledger.clone()),
+            Some(&test_context.ledger),
         );
         {
             let removed_quotes = test_context
@@ -399,28 +399,31 @@ mod tests {
     fn cannot_add_invalid_sci(logger: Logger) {
         let test_context = setup(logger.clone());
         let synchronized_quote_book = test_context.synchronized_quote_book;
-        test_suite::cannot_add_invalid_sci(&synchronized_quote_book, Some(test_context.ledger));
+        test_suite::cannot_add_invalid_sci(&synchronized_quote_book, Some(&test_context.ledger));
     }
 
     #[test_with_logger]
     fn get_quotes_filtering_works(logger: Logger) {
         let test_context = setup(logger.clone());
         let synchronized_quote_book = test_context.synchronized_quote_book;
-        test_suite::get_quotes_filtering_works(&synchronized_quote_book, Some(test_context.ledger));
+        test_suite::get_quotes_filtering_works(
+            &synchronized_quote_book,
+            Some(&test_context.ledger),
+        );
     }
 
     #[test_with_logger]
     fn get_quote_ids_works(logger: Logger) {
         let test_context = setup(logger.clone());
         let synchronized_quote_book = test_context.synchronized_quote_book;
-        test_suite::get_quote_ids_works(&synchronized_quote_book, Some(test_context.ledger));
+        test_suite::get_quote_ids_works(&synchronized_quote_book, Some(&test_context.ledger));
     }
 
     #[test_with_logger]
     fn get_quote_by_id_works(logger: Logger) {
         let test_context = setup(logger.clone());
         let synchronized_quote_book = test_context.synchronized_quote_book;
-        test_suite::get_quote_by_id_works(&synchronized_quote_book, Some(test_context.ledger));
+        test_suite::get_quote_by_id_works(&synchronized_quote_book, Some(&test_context.ledger));
     }
 
     #[test_with_logger]
@@ -432,13 +435,8 @@ mod tests {
         let pair = test_suite::pair();
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
-        let sci_builder = test_suite::create_sci_builder(
-            &pair,
-            10,
-            20,
-            &mut rng,
-            Some(test_context.ledger.clone()),
-        );
+        let sci_builder =
+            test_suite::create_sci_builder(&pair, 10, 20, &mut rng, Some(&test_context.ledger));
         let sci = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
 
         let block_version = BlockVersion::MAX;
@@ -473,7 +471,7 @@ mod tests {
         );
 
         // Adding a quote that isn't already in the ledger should work
-        let sci = test_suite::create_sci(&pair, 10, 20, &mut rng, Some(test_context.ledger));
+        let sci = test_suite::create_sci(&pair, 10, 20, &mut rng, Some(&test_context.ledger));
         let quote = synchronized_quote_book.add_sci(sci, None).unwrap();
 
         let quotes = synchronized_quote_book.get_quotes(&pair, .., 0).unwrap();
@@ -489,13 +487,8 @@ mod tests {
         let pair = test_suite::pair();
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
-        let sci_builder = test_suite::create_sci_builder(
-            &pair,
-            10,
-            20,
-            &mut rng,
-            Some(test_context.ledger.clone()),
-        );
+        let sci_builder =
+            test_suite::create_sci_builder(&pair, 10, 20, &mut rng, Some(&test_context.ledger));
         let sci = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
         let key_image = sci.key_image();
         // Adding a quote that isn't already in the ledger should work
@@ -557,13 +550,8 @@ mod tests {
 
         // Because the tombstone block is lower than the number blocks already in the
         // ledger, adding this sci should fail
-        let mut sci_builder = test_suite::create_sci_builder(
-            &pair,
-            10,
-            20,
-            &mut rng,
-            Some(test_context.ledger.clone()),
-        );
+        let mut sci_builder =
+            test_suite::create_sci_builder(&pair, 10, 20, &mut rng, Some(&test_context.ledger));
         sci_builder.set_tombstone_block(ledger.num_blocks().unwrap() - 2);
         let sci = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
 
@@ -573,13 +561,8 @@ mod tests {
         );
 
         // Because the tombstone block is 0, adding this sci should pass
-        let mut sci_builder2 = test_suite::create_sci_builder(
-            &pair,
-            10,
-            20,
-            &mut rng,
-            Some(test_context.ledger.clone()),
-        );
+        let mut sci_builder2 =
+            test_suite::create_sci_builder(&pair, 10, 20, &mut rng, Some(&test_context.ledger));
         sci_builder2.set_tombstone_block(0);
         let sci2 = sci_builder2.build(&NoKeysRingSigner {}, &mut rng).unwrap();
 
@@ -590,13 +573,8 @@ mod tests {
 
         // Because the tombstone block is higher than the block index of the highest
         // block already in the ledger, adding this sci should pass
-        let mut sci_builder3 = test_suite::create_sci_builder(
-            &pair,
-            10,
-            20,
-            &mut rng,
-            Some(test_context.ledger.clone()),
-        );
+        let mut sci_builder3 =
+            test_suite::create_sci_builder(&pair, 10, 20, &mut rng, Some(&test_context.ledger));
         sci_builder3.set_tombstone_block(ledger.num_blocks().unwrap());
         let sci3 = sci_builder3.build(&NoKeysRingSigner {}, &mut rng).unwrap();
 
@@ -608,7 +586,7 @@ mod tests {
         // Because the tombstone block is equal to the current block index, adding this
         // sci should fail
         let mut sci_builder4 =
-            test_suite::create_sci_builder(&pair, 10, 20, &mut rng, Some(test_context.ledger));
+            test_suite::create_sci_builder(&pair, 10, 20, &mut rng, Some(&test_context.ledger));
         sci_builder4.set_tombstone_block(ledger.num_blocks().unwrap() - 1);
         let sci4 = sci_builder4.build(&NoKeysRingSigner {}, &mut rng).unwrap();
 
@@ -629,13 +607,8 @@ mod tests {
 
         // Because the tombstone block is higher than the number of blocks already in
         // the ledger, adding this sci should succeed
-        let mut sci_builder = test_suite::create_sci_builder(
-            &pair,
-            10,
-            20,
-            &mut rng,
-            Some(test_context.ledger.clone()),
-        );
+        let mut sci_builder =
+            test_suite::create_sci_builder(&pair, 10, 20, &mut rng, Some(&test_context.ledger));
         // Number of blocks has advanced because the TXOs being used by this SCI were
         // added to the ledger.
         assert_eq!(ledger.num_blocks().unwrap(), starting_blocks + 1);
@@ -716,7 +689,7 @@ mod tests {
         // Adding an SCI with txos in the ledger should succeed. The sci_builder adds
         // the txos used by the SCI into the ledger.
         let sci_builder2 =
-            test_suite::create_sci_builder(&pair, 10, 20, &mut rng, Some(test_context.ledger));
+            test_suite::create_sci_builder(&pair, 10, 20, &mut rng, Some(&test_context.ledger));
         // Number of blocks has advanced because the TXOs being used by this SCI were
         // added to the ledger.
         assert_eq!(ledger.num_blocks().unwrap(), starting_blocks + 1);

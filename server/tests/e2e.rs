@@ -150,7 +150,7 @@ async fn e2e_two_nodes_quote_propagation(logger: Logger) {
         10000,
         20000,
         &mut rng,
-        Some(ledger_db.clone()),
+        Some(&ledger_db),
     );
 
     let req = SubmitQuotesRequest {
@@ -197,7 +197,7 @@ async fn e2e_two_nodes_quote_propagation_and_removal(logger: Logger) {
         10000,
         20000,
         &mut rng,
-        Some(ledger_db.clone()),
+        Some(&ledger_db),
     );
 
     let req = SubmitQuotesRequest {
@@ -302,7 +302,7 @@ async fn e2e_two_nodes_initial_sync(logger: Logger) {
                 10000 * i,
                 20000,
                 &mut rng,
-                Some(ledger_db.clone()),
+                Some(&ledger_db),
             )
         })
         .collect::<Vec<_>>();
@@ -315,7 +315,7 @@ async fn e2e_two_nodes_initial_sync(logger: Logger) {
                 10000,
                 20000 * i,
                 &mut rng,
-                Some(ledger_db.clone()),
+                Some(&ledger_db),
             )
         })
         .collect::<Vec<_>>();
@@ -370,7 +370,7 @@ async fn e2e_multiple_nodes_play_nicely(logger: Logger) {
                     10000 * i,
                     20000,
                     &mut rng,
-                    Some(ledger_db.clone()),
+                    Some(&ledger_db),
                 )
             })
             .collect::<Vec<_>>();
@@ -410,7 +410,7 @@ async fn e2e_multiple_nodes_play_nicely(logger: Logger) {
         1234,
         20000,
         &mut rng,
-        Some(ledger_db.clone()),
+        Some(&ledger_db),
     );
 
     let req = SubmitQuotesRequest {

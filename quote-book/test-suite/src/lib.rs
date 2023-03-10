@@ -31,7 +31,7 @@ pub fn create_sci_builder(
     base_amount: u64,
     counter_amount: u64,
     rng: &mut (impl RngCore + CryptoRng),
-    ledger_db: Option<LedgerDB>,
+    ledger_db: Option<&LedgerDB>,
 ) -> SignedContingentInputBuilder<MockFogResolver> {
     deqs_mc_test_utils::create_sci_builder(
         pair.base_token_id,
@@ -51,7 +51,7 @@ pub fn create_sci(
     base_amount: u64,
     counter_amount: u64,
     rng: &mut (impl RngCore + CryptoRng),
-    ledger_db: Option<LedgerDB>,
+    ledger_db: Option<&LedgerDB>,
 ) -> SignedContingentInput {
     deqs_mc_test_utils::create_sci(
         pair.base_token_id,
@@ -73,7 +73,7 @@ pub fn create_partial_sci(
     required_base_change_amount: u64,
     counter_amount: u64,
     rng: &mut (impl RngCore + CryptoRng),
-    ledger_db: Option<LedgerDB>,
+    ledger_db: Option<&LedgerDB>,
 ) -> SignedContingentInput {
     deqs_mc_test_utils::create_partial_sci(
         pair.base_token_id,
@@ -88,19 +88,19 @@ pub fn create_partial_sci(
 }
 
 /// Test quote book basic happy flow
-pub fn basic_happy_flow(quote_book: &impl QuoteBook, ledger_db: Option<LedgerDB>) {
+pub fn basic_happy_flow(quote_book: &impl QuoteBook, ledger_db: Option<&LedgerDB>) {
     let pair = pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
     // Adding an quote should work
-    let sci = create_sci(&pair, 10, 20, &mut rng, ledger_db.clone());
+    let sci = create_sci(&pair, 10, 20, &mut rng, ledger_db);
     let quote = quote_book.add_sci(sci, None).unwrap();
 
     let quotes = quote_book.get_quotes(&pair, .., 0).unwrap();
     assert_eq!(quotes, vec![quote.clone()]);
 
     // Adding a second quote should work
-    let sci = create_sci(&pair, 10, 200, &mut rng, ledger_db.clone());
+    let sci = create_sci(&pair, 10, 200, &mut rng, ledger_db);
     let quote2 = quote_book.add_sci(sci, None).unwrap();
 
     let quotes = quote_book.get_quotes(&pair, .., 0).unwrap();
@@ -136,7 +136,7 @@ pub fn basic_happy_flow(quote_book: &impl QuoteBook, ledger_db: Option<LedgerDB>
 
     // Removing quotes by tombstone block should work. Quotes with a zero tombstone
     // should survive.
-    let sci = create_sci(&pair, 10, 20, &mut rng, ledger_db.clone());
+    let sci = create_sci(&pair, 10, 20, &mut rng, ledger_db);
     let quote1 = quote_book.add_sci(sci, None).unwrap();
     let quote1_tombstone = quote
         .sci()
@@ -146,7 +146,7 @@ pub fn basic_happy_flow(quote_book: &impl QuoteBook, ledger_db: Option<LedgerDB>
         .unwrap()
         .max_tombstone_block;
 
-    let mut sci_builder = create_sci_builder(&pair, 10, 20, &mut rng, ledger_db.clone());
+    let mut sci_builder = create_sci_builder(&pair, 10, 20, &mut rng, ledger_db);
     sci_builder.set_tombstone_block(quote1_tombstone - 1);
     let sci2 = sci_builder.build(&NoKeysRingSigner {}, &mut rng).unwrap();
     let quote2 = quote_book.add_sci(sci2, None).unwrap();
@@ -188,12 +188,12 @@ pub fn basic_happy_flow(quote_book: &impl QuoteBook, ledger_db: Option<LedgerDB>
 }
 
 /// Test some invalid SCI scenarios
-pub fn cannot_add_invalid_sci(quote_book: &impl QuoteBook, ledger_db: Option<LedgerDB>) {
+pub fn cannot_add_invalid_sci(quote_book: &impl QuoteBook, ledger_db: Option<&LedgerDB>) {
     let pair = pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
     // Make an SCI invalid by adding some random required output
-    let mut sci_builder = create_sci_builder(&pair, 10, 20, &mut rng, ledger_db.clone());
+    let mut sci_builder = create_sci_builder(&pair, 10, 20, &mut rng, ledger_db);
     let recipient = AccountKey::random(&mut rng);
     sci_builder
         .add_required_output(
@@ -222,7 +222,7 @@ pub fn cannot_add_invalid_sci(quote_book: &impl QuoteBook, ledger_db: Option<Led
     );
 }
 
-pub fn cannot_add_duplicate_sci(quote_book: &impl QuoteBook, ledger_db: Option<LedgerDB>) {
+pub fn cannot_add_duplicate_sci(quote_book: &impl QuoteBook, ledger_db: Option<&LedgerDB>) {
     let pair = pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
@@ -254,7 +254,7 @@ pub fn cannot_add_duplicate_sci(quote_book: &impl QuoteBook, ledger_db: Option<L
 }
 
 /// Test that get_quotes filter correctly.
-pub fn get_quotes_filtering_works(quote_book: &impl QuoteBook, ledger_db: Option<LedgerDB>) {
+pub fn get_quotes_filtering_works(quote_book: &impl QuoteBook, ledger_db: Option<&LedgerDB>) {
     let pair1 = pair();
     let pair2 = Pair {
         base_token_id: TokenId::from(10),
@@ -263,22 +263,22 @@ pub fn get_quotes_filtering_works(quote_book: &impl QuoteBook, ledger_db: Option
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
     // Offer for trading 100 pair1.base tokens into 1000 pair1.counter tokens
-    let sci = create_sci(&pair1, 100, 1000, &mut rng, ledger_db.clone());
+    let sci = create_sci(&pair1, 100, 1000, &mut rng, ledger_db);
     let p1_100_for_1000 = quote_book.add_sci(sci, None).unwrap();
 
     // Offer for partially trading up to 100 pair2.base tokens into 1000
     // pair2.counter tokens
-    let sci = create_partial_sci(&pair2, 100, 1, 0, 1000, &mut rng, ledger_db.clone());
+    let sci = create_partial_sci(&pair2, 100, 1, 0, 1000, &mut rng, ledger_db);
     let p2_100_for_1000 = quote_book.add_sci(sci, None).unwrap();
 
     // Offer for partially trading 5 pair2.base tokens into 50 pair2.counter
     // tokens
-    let sci = create_partial_sci(&pair2, 5, 1, 0, 50, &mut rng, ledger_db.clone());
+    let sci = create_partial_sci(&pair2, 5, 1, 0, 50, &mut rng, ledger_db);
     let p2_5_for_50 = quote_book.add_sci(sci, None).unwrap();
 
     // Offer for partially trading 50 pair2.base tokens into 5 pair2.counter
     // tokens
-    let sci = create_partial_sci(&pair2, 50, 1, 0, 5, &mut rng, ledger_db.clone());
+    let sci = create_partial_sci(&pair2, 50, 1, 0, 5, &mut rng, ledger_db);
     let p2_50_for_5 = quote_book.add_sci(sci, None).unwrap();
 
     // Offer for exactly trading 50 pair2.base tokens into 3 pair2.counter
@@ -346,7 +346,7 @@ pub fn get_quotes_filtering_works(quote_book: &impl QuoteBook, ledger_db: Option
 }
 
 /// Test that get_quote_ids works.
-pub fn get_quote_ids_works(quote_book: &impl QuoteBook, ledger_db: Option<LedgerDB>) {
+pub fn get_quote_ids_works(quote_book: &impl QuoteBook, ledger_db: Option<&LedgerDB>) {
     let pair1 = pair();
     let pair2 = Pair {
         base_token_id: TokenId::from(10),
@@ -358,10 +358,10 @@ pub fn get_quote_ids_works(quote_book: &impl QuoteBook, ledger_db: Option<Ledger
     };
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
-    let pair1_sci1 = create_sci(&pair1, 100, 1000, &mut rng, ledger_db.clone());
+    let pair1_sci1 = create_sci(&pair1, 100, 1000, &mut rng, ledger_db);
     let quote1 = quote_book.add_sci(pair1_sci1, None).unwrap();
 
-    let pair1_sci2 = create_sci(&pair1, 100, 1000, &mut rng, ledger_db.clone());
+    let pair1_sci2 = create_sci(&pair1, 100, 1000, &mut rng, ledger_db);
     let quote2 = quote_book.add_sci(pair1_sci2, None).unwrap();
 
     let pair2_sci3 = create_sci(&pair2, 100, 1000, &mut rng, ledger_db);
@@ -392,11 +392,11 @@ pub fn get_quote_ids_works(quote_book: &impl QuoteBook, ledger_db: Option<Ledger
 }
 
 /// Test that get_quote_by_id works
-pub fn get_quote_by_id_works(quote_book: &impl QuoteBook, ledger_db: Option<LedgerDB>) {
+pub fn get_quote_by_id_works(quote_book: &impl QuoteBook, ledger_db: Option<&LedgerDB>) {
     let pair1 = pair();
     let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
 
-    let sci1 = create_sci(&pair1, 100, 1000, &mut rng, ledger_db.clone());
+    let sci1 = create_sci(&pair1, 100, 1000, &mut rng, ledger_db);
     let quote1 = quote_book.add_sci(sci1, None).unwrap();
 
     let sci2 = create_sci(&pair1, 100, 1000, &mut rng, ledger_db);

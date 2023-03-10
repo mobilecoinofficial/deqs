@@ -23,7 +23,7 @@ pub fn create_sci_builder(
     base_amount: u64,
     counter_amount: u64,
     rng: &mut (impl RngCore + CryptoRng),
-    ledger_db: Option<LedgerDB>,
+    ledger_db: Option<&LedgerDB>,
 ) -> SignedContingentInputBuilder<MockFogResolver> {
     let block_version = BlockVersion::MAX;
     let fog_resolver = MockFogResolver::default();
@@ -37,7 +37,8 @@ pub fn create_sci_builder(
         &fog_resolver,
         rng,
     );
-    if let Some(mut ledger) = ledger_db {
+    if let Some(ledger) = ledger_db {
+        let mut ledger = ledger.clone();
         let num_txos = ledger.num_txos().unwrap();
         offered_input_credentials
             .membership_proofs
@@ -83,7 +84,7 @@ pub fn create_sci(
     base_amount: u64,
     counter_amount: u64,
     rng: &mut (impl RngCore + CryptoRng),
-    ledger_db: Option<LedgerDB>,
+    ledger_db: Option<&LedgerDB>,
 ) -> SignedContingentInput {
     let builder = create_sci_builder(
         base_token_id,
@@ -113,7 +114,7 @@ pub fn create_partial_sci(
     required_base_change_amount: u64,
     counter_amount: u64,
     rng: &mut (impl RngCore + CryptoRng),
-    ledger_db: Option<LedgerDB>,
+    ledger_db: Option<&LedgerDB>,
 ) -> SignedContingentInput {
     let block_version = BlockVersion::MAX;
     let fog_resolver = MockFogResolver::default();
@@ -128,7 +129,8 @@ pub fn create_partial_sci(
         rng,
     );
 
-    if let Some(mut ledger) = ledger_db {
+    if let Some(ledger) = ledger_db {
+        let mut ledger = ledger.clone();
         let num_txos = ledger.num_txos().unwrap();
         offered_input_credentials
             .membership_proofs

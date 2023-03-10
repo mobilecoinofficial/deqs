@@ -117,7 +117,7 @@ fn main() {
                             0,
                             counter_amount,
                             &mut rng,
-                            Some(ledger_db.clone()),
+                            Some(&ledger_db),
                         )
                     } else {
                         create_sci(
@@ -126,7 +126,7 @@ fn main() {
                             base_amount,
                             counter_amount,
                             &mut rng,
-                            Some(ledger_db.clone()),
+                            Some(&ledger_db),
                         )
                     }
                 })

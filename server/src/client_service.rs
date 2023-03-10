@@ -688,7 +688,7 @@ mod tests {
             10,
             20,
             &mut rng,
-            Some(ledger.clone()),
+            Some(&ledger),
         );
         let key_image = sci.key_image();
         let req = SubmitQuotesRequest {
