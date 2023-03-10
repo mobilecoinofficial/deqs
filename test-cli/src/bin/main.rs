@@ -108,11 +108,6 @@ fn main() {
 
             let scis = (0..num_quotes)
                 .map(|_| {
-                    // generate a unique seed for each SCI we will be generating.
-                    let mut rng_seed = [0; 32];
-                    rng.fill_bytes(&mut rng_seed);
-                    let mut reseeded_rng: StdRng = SeedableRng::from_seed(rng_seed);
-
                     if allow_partial_fills {
                         create_partial_sci(
                             base_token_id,
@@ -121,7 +116,7 @@ fn main() {
                             0,
                             0,
                             counter_amount,
-                            &mut reseeded_rng,
+                            &mut rng,
                             Some(ledger_db.clone()),
                         )
                     } else {
@@ -130,7 +125,7 @@ fn main() {
                             counter_token_id,
                             base_amount,
                             counter_amount,
-                            &mut reseeded_rng,
+                            &mut rng,
                             Some(ledger_db.clone()),
                         )
                     }
