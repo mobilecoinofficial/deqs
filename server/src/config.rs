@@ -47,16 +47,18 @@ pub struct ServerConfig {
     /// The p2p keypair file. A random one will be generated if not provided.
     #[clap(long = "p2p-keypair", env = "MC_P2P_KEYPAIR")]
     pub p2p_keypair_path: Option<PathBuf>,
+
     /// This is a vector corresponding to a map from token ids to the minimum
-    /// amount required for that token for a quote to be accepted by the deqs.
-    /// An example value would be: --quote-minimum-map 0=1000,1=200.
-    /// This would correspond to a minimum amount of 1000 for TokenId 0 and a
-    /// minimum amount of 200 for TokenId 1
+    /// amount required for that token in order for a quote to be accepted by
+    /// the deqs. 
+    /// An example value would be: --quote-minimum-map
+    /// 0=1000,1=200. This would correspond to a minimum amount of 1000 for
+    /// TokenId 0 and a minimum amount of 200 for TokenId 1
     #[clap(long = "quote-minimum-map", use_value_delimiter = true, value_parser = parse_key_val::<TokenId, u64>)]
     pub quote_minimum_map: Vec<(TokenId, u64)>,
 }
 
-// // / Parse a single key-value pair
+/// Parse a single key-value pair
 fn parse_key_val<T, U>(s: &str) -> Result<(T, U), Box<dyn Error + Send + Sync + 'static>>
 where
     T: std::str::FromStr,
