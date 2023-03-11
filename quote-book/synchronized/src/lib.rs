@@ -56,7 +56,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
                         remove_quote_callback,
                         thread_highest_processed_block_index,
                         thread_stop_requested,
-                        logger.clone(),
+                        logger,
                     )
                 })
                 .expect("Could not spawn thread"),
