@@ -26,7 +26,7 @@ use std::{
 };
 
 /// A function for validating that scis should be accepted by the server. It
-/// returns the sci if it is valid, and otherwise returns an error. It receives
+/// returns Ok if it is valid, and otherwise returns an error. It receives
 /// 1 argument:
 /// - A Sci to be validated
 pub type SciValidator =
@@ -41,7 +41,7 @@ pub struct ClientService<OB: QuoteBook> {
     /// Quote book.
     quote_book: OB,
 
-    /// Validates Scis for specific server config before passing to quotebook
+    /// Validates Scis for specific server config before passing it to the quotebook
     sci_validator: SciValidator,
 
     /// Logger.
