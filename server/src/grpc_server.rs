@@ -93,8 +93,8 @@ impl<OB: QuoteBook> GrpcServer<OB> {
             let minimum_for_token_id = *quote_minimum_map.get(&base_token_id).unwrap_or(&0);
             if base_amount < minimum_for_token_id {
                 return Err(QuoteBookError::UnsupportedSci(
-                    "Quote is too small for deqs".to_owned(),
-                ));
+                    format!("Quote is too small for deqs. Quotes with base_token: {} require a minimum of: {}", base_token_id, minimum_for_token_id
+                )));
             }
             Ok(())
         });
