@@ -50,7 +50,7 @@ pub struct ServerConfig {
 
     /// This is a vector corresponding to a map from token ids to the minimum
     /// amount required for that token in order for a quote to be accepted by
-    /// the deqs. 
+    /// the deqs.
     /// An example value would be: --quote-minimum-map
     /// 0=1000,1=200. This would correspond to a minimum amount of 1000 for
     /// TokenId 0 and a minimum amount of 200 for TokenId 1
