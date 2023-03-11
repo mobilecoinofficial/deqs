@@ -224,6 +224,7 @@ async fn e2e_two_nodes_dust_propagation(logger: Logger) {
         quotes: vec![(&dust_sci).into()].into(),
         ..Default::default()
     };
+
     // Submitting to the first server should fail because it's smaller than its dust
     // level.
     let resp = client1.submit_quotes(&req).expect("submit quote failed");
