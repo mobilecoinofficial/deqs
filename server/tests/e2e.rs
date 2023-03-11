@@ -217,7 +217,7 @@ async fn e2e_two_nodes_dust_propagation(logger: Logger) {
         500,
         20000,
         &mut rng,
-        Some(ledger_db.clone()),
+        Some(&ledger_db),
     );
 
     let req = SubmitQuotesRequest {
