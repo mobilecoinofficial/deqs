@@ -77,6 +77,7 @@ async fn test_basic_submission(logger: Logger) {
         .cloned()
         .enumerate()
         .map(|(idx, tx_out)| MatchedTxOut {
+            block_index: block_data.block().index,
             tx_out,
             amount: recipient_and_amount[idx].1,
             subaddress_index: 0,
