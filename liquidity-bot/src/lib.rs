@@ -678,6 +678,7 @@ mod tests {
             .unwrap();
 
             MatchedTxOut {
+                block_index: block_data.block().index,
                 tx_out: block_data.contents().outputs[0].clone(),
                 amount,
                 subaddress_index: 0,
