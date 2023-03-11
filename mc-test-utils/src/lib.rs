@@ -37,7 +37,7 @@ pub fn create_sci_builder(
         &fog_resolver,
         rng,
     );
-    
+
     if let Some(ledger) = ledger_db {
         let mut ledger = ledger.clone();
         let num_txos = ledger.num_txos().unwrap();
