@@ -41,7 +41,8 @@ pub struct ClientService<OB: QuoteBook> {
     /// Quote book.
     quote_book: OB,
 
-    /// Validates Scis for specific server config before passing it to the quotebook
+    /// Validates Scis for specific server config before passing it to the
+    /// quotebook
     sci_validator: SciValidator,
 
     /// Logger.
