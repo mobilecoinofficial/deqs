@@ -373,7 +373,16 @@ mod tests {
             create_test_client_and_server(&quote_book, &logger);
 
         let scis = (0..10)
-            .map(|_| create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng))
+            .map(|_| {
+                create_sci(
+                    pair.base_token_id,
+                    pair.counter_token_id,
+                    10,
+                    20,
+                    &mut rng,
+                    None,
+                )
+            })
             .map(|sci| mc_api::external::SignedContingentInput::from(&sci))
             .collect::<Vec<_>>();
 
@@ -420,7 +429,14 @@ mod tests {
         let (client_api, _server, _msg_bus_tx, _msg_bus_rx) =
             create_test_client_and_server(&quote_book, &logger);
 
-        let sci = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
+        let sci = create_sci(
+            pair.base_token_id,
+            pair.counter_token_id,
+            10,
+            20,
+            &mut rng,
+            None,
+        );
         let req = SubmitQuotesRequest {
             quotes: vec![(&sci).into()].into(),
             ..Default::default()
@@ -450,9 +466,30 @@ mod tests {
         let (client_api, _server, _msg_bus_tx, _msg_bus_rx) =
             create_test_client_and_server(&quote_book, &logger);
 
-        let sci1 = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
-        let sci2 = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
-        let sci3 = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
+        let sci1 = create_sci(
+            pair.base_token_id,
+            pair.counter_token_id,
+            10,
+            20,
+            &mut rng,
+            None,
+        );
+        let sci2 = create_sci(
+            pair.base_token_id,
+            pair.counter_token_id,
+            10,
+            20,
+            &mut rng,
+            None,
+        );
+        let sci3 = create_sci(
+            pair.base_token_id,
+            pair.counter_token_id,
+            10,
+            20,
+            &mut rng,
+            None,
+        );
         let req = SubmitQuotesRequest {
             quotes: vec![(&sci1).into(), (&sci2).into()].into(),
             ..Default::default()
@@ -490,10 +527,10 @@ mod tests {
         let (client_api, _server, _msg_bus_tx, _msg_bus_rx) =
             create_test_client_and_server(&quote_book, &logger);
 
-        let sci1 = create_sci(TokenId::from(1), TokenId::from(2), 10, 20, &mut rng);
-        let sci2 = create_sci(TokenId::from(1), TokenId::from(2), 10, 50, &mut rng);
-        let sci3 = create_sci(TokenId::from(3), TokenId::from(4), 10, 20, &mut rng);
-        let sci4 = create_sci(TokenId::from(3), TokenId::from(4), 12, 50, &mut rng);
+        let sci1 = create_sci(TokenId::from(1), TokenId::from(2), 10, 20, &mut rng, None);
+        let sci2 = create_sci(TokenId::from(1), TokenId::from(2), 10, 50, &mut rng, None);
+        let sci3 = create_sci(TokenId::from(3), TokenId::from(4), 10, 20, &mut rng, None);
+        let sci4 = create_sci(TokenId::from(3), TokenId::from(4), 12, 50, &mut rng, None);
 
         let scis = [&sci1, &sci2, &sci3, &sci4]
             .into_iter()
@@ -582,7 +619,14 @@ mod tests {
         // Initially, the receiver should be empty.
         assert!(live_updates_rx.try_recv().is_err());
 
-        let sci = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
+        let sci = create_sci(
+            pair.base_token_id,
+            pair.counter_token_id,
+            10,
+            20,
+            &mut rng,
+            None,
+        );
         let req = SubmitQuotesRequest {
             quotes: vec![(&sci).into()].into(),
             ..Default::default()
@@ -638,12 +682,22 @@ mod tests {
             create_test_client_and_server(&quote_book, &logger);
 
         // Make and submit an sci
-        let sci = create_sci(pair.base_token_id, pair.counter_token_id, 10, 20, &mut rng);
+        let sci = create_sci(
+            pair.base_token_id,
+            pair.counter_token_id,
+            10,
+            20,
+            &mut rng,
+            Some(&ledger),
+        );
         let key_image = sci.key_image();
         let req = SubmitQuotesRequest {
             quotes: vec![(&sci).into()].into(),
             ..Default::default()
         };
+        // Number of blocks has gone up because the Txos being spent by the sci were
+        // added to the ledger
+        assert_eq!(ledger.num_blocks().unwrap(), starting_blocks + 1);
         let resp = client_api.submit_quotes(&req).expect("submit quote failed");
         assert_eq!(resp.status_codes, vec![QuoteStatusCode::CREATED]);
 
@@ -684,7 +738,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(ledger.num_blocks().unwrap(), starting_blocks + 1);
+        assert_eq!(ledger.num_blocks().unwrap(), starting_blocks + 2);
 
         // Block until we have processed this block
         let mut tries = 500usize;
@@ -796,6 +850,7 @@ mod tests {
             10,
             20,
             &mut rng,
+            None,
         );
         let pair1_sci2 = create_sci(
             pair1.base_token_id,
@@ -803,6 +858,7 @@ mod tests {
             10,
             20,
             &mut rng,
+            None,
         );
         let pair2_sci1 = create_sci(
             pair2.base_token_id,
@@ -810,6 +866,7 @@ mod tests {
             10,
             20,
             &mut rng,
+            None,
         );
         let pair2_sci2 = create_sci(
             pair2.base_token_id,
@@ -817,6 +874,7 @@ mod tests {
             10,
             20,
             &mut rng,
+            None,
         );
         let req = SubmitQuotesRequest {
             quotes: vec![

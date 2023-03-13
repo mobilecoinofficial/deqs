@@ -10,10 +10,10 @@ use deqs_mc_test_utils::{create_partial_sci, create_sci};
 use deqs_quote_book_api::Quote;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_common::logger::{log, o};
+use mc_ledger_db::LedgerDB;
 use mc_transaction_types::TokenId;
 use mc_util_grpc::ConnectionUriGrpcioChannel;
 use rand::{rngs::StdRng, thread_rng, RngCore, SeedableRng};
-use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use std::{path::PathBuf, sync::Arc};
 
 #[derive(Subcommand)]
@@ -47,6 +47,10 @@ pub enum Command {
         /// Allow partial fills
         #[clap(long)]
         allow_partial_fills: bool,
+
+        /// Path to ledgerdb used by the server
+        #[clap(long, env = "MC_LEDGER_DB")]
+        ledger_db: PathBuf,
     },
 
     /// Generate a p2p keypair and write it to a file
@@ -91,29 +95,19 @@ fn main() {
             base_amount,
             counter_amount,
             allow_partial_fills,
+            ledger_db,
         } => {
             let ch =
                 ChannelBuilder::default_channel_builder(env).connect_to_uri(&deqs_uri, &logger);
             let client_api = DeqsClientApiClient::new(ch);
 
+            // Open the ledger db
+            let ledger_db = LedgerDB::open(&ledger_db).expect("Could not open ledger db");
+
             log::info!(&logger, "Generating {} SCIs...", num_quotes);
 
-            // We can't share our rng with the Rayon threads, but we still want a
-            // deterministic way to generate SCIs. This little hack allows us to
-            // do that by generating a unique seed for each SCI we will be generating.
-            let rng_seeds = (0..num_quotes)
+            let scis = (0..num_quotes)
                 .map(|_| {
-                    let mut seed_bytes = [0; 32];
-                    rng.fill_bytes(&mut seed_bytes);
-                    seed_bytes
-                })
-                .collect::<Vec<_>>();
-
-            let scis = rng_seeds
-                .into_par_iter()
-                .map(|rng_seed| {
-                    let mut rng: StdRng = SeedableRng::from_seed(rng_seed);
-
                     if allow_partial_fills {
                         create_partial_sci(
                             base_token_id,
@@ -123,6 +117,7 @@ fn main() {
                             0,
                             counter_amount,
                             &mut rng,
+                            Some(&ledger_db),
                         )
                     } else {
                         create_sci(
@@ -131,6 +126,7 @@ fn main() {
                             base_amount,
                             counter_amount,
                             &mut rng,
+                            Some(&ledger_db),
                         )
                     }
                 })

@@ -5,6 +5,7 @@
 use mc_account_keys::AccountKey;
 use mc_crypto_ring_signature_signer::NoKeysRingSigner;
 use mc_fog_report_validation_test_utils::MockFogResolver;
+use mc_ledger_db::{test_utils::add_txos_to_ledger, Ledger, LedgerDB};
 use mc_transaction_builder::{
     test_utils::get_input_credentials, EmptyMemoBuilder, ReservedSubaddresses,
     SignedContingentInputBuilder,
@@ -22,19 +23,37 @@ pub fn create_sci_builder(
     base_amount: u64,
     counter_amount: u64,
     rng: &mut (impl RngCore + CryptoRng),
+    ledger_db: Option<&LedgerDB>,
 ) -> SignedContingentInputBuilder<MockFogResolver> {
     let block_version = BlockVersion::MAX;
     let fog_resolver = MockFogResolver::default();
 
     let offerer_account = AccountKey::random(rng);
 
-    let offered_input_credentials = get_input_credentials(
+    let mut offered_input_credentials = get_input_credentials(
         block_version,
         Amount::new(base_amount, base_token_id),
         &offerer_account,
         &fog_resolver,
         rng,
     );
+
+    if let Some(ledger) = ledger_db {
+        let mut ledger = ledger.clone();
+        let num_txos = ledger.num_txos().unwrap();
+        offered_input_credentials
+            .membership_proofs
+            .iter_mut()
+            .enumerate()
+            .for_each(|(index, proof)| proof.index = num_txos + index as u64);
+        add_txos_to_ledger(
+            &mut ledger,
+            BlockVersion::MAX,
+            &offered_input_credentials.ring,
+            rng,
+        )
+        .unwrap();
+    }
 
     let mut builder = SignedContingentInputBuilder::new(
         block_version,
@@ -66,6 +85,7 @@ pub fn create_sci(
     base_amount: u64,
     counter_amount: u64,
     rng: &mut (impl RngCore + CryptoRng),
+    ledger_db: Option<&LedgerDB>,
 ) -> SignedContingentInput {
     let builder = create_sci_builder(
         base_token_id,
@@ -73,6 +93,7 @@ pub fn create_sci(
         base_amount,
         counter_amount,
         rng,
+        ledger_db,
     );
 
     let sci = builder.build(&NoKeysRingSigner {}, rng).unwrap();
@@ -94,19 +115,37 @@ pub fn create_partial_sci(
     required_base_change_amount: u64,
     counter_amount: u64,
     rng: &mut (impl RngCore + CryptoRng),
+    ledger_db: Option<&LedgerDB>,
 ) -> SignedContingentInput {
     let block_version = BlockVersion::MAX;
     let fog_resolver = MockFogResolver::default();
 
     let offerer_account = AccountKey::random(rng);
 
-    let offered_input_credentials = get_input_credentials(
+    let mut offered_input_credentials = get_input_credentials(
         block_version,
         Amount::new(base_amount_offered, base_token_id),
         &offerer_account,
         &fog_resolver,
         rng,
     );
+
+    if let Some(ledger) = ledger_db {
+        let mut ledger = ledger.clone();
+        let num_txos = ledger.num_txos().unwrap();
+        offered_input_credentials
+            .membership_proofs
+            .iter_mut()
+            .enumerate()
+            .for_each(|(index, proof)| proof.index = num_txos + index as u64);
+        add_txos_to_ledger(
+            &mut ledger,
+            BlockVersion::MAX,
+            &offered_input_credentials.ring,
+            rng,
+        )
+        .unwrap();
+    }
 
     let mut builder = SignedContingentInputBuilder::new(
         block_version,
