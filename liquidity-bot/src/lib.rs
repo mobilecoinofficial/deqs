@@ -160,14 +160,14 @@ impl LiquidityBotTask {
                 }
 
                 _ = resubmit_tx_outs_interval.tick() => {
-                    if let Err(err) = self.submit_pending_tx_outs().await {
-                        log::info!(self.logger, "Error submitting pending TxOuts: {}", err);
-                    }
-
                     if let Err(err) = self.resubmit_listed_tx_outs(QUOTE_REFRESH_INTERVAL).await {
                         log::info!(self.logger, "Error resubmitting TxOuts: {}", err);
                     }
-                }
+
+                    if let Err(err) = self.submit_pending_tx_outs().await {
+                        log::info!(self.logger, "Error submitting pending TxOuts: {}", err);
+                    }
+               }
 
                 _ = self.shutdown_rx.recv() => {
                     log::info!(&self.logger, "shutdown requested");
