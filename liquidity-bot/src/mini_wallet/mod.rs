@@ -74,6 +74,18 @@ pub struct MiniWallet {
 }
 
 impl MiniWallet {
+    /// Create a new MiniWallet.
+    ///
+    /// # Arguments
+    /// * `state_file` - Path to a file where the wallet state will be stored.
+    ///   If the file exists, the wallet will resume from the last known state.
+    /// * `ledger_db` - LedgerDB instance.
+    /// * `account_key` - AccountKey for the account to track.
+    /// * `default_first_block_index` - The first block index to scan, used when
+    ///   the state file does not exist.
+    /// * `wallet_event_callback` - Callback for notifying the caller of wallet
+    ///   events.
+    /// * `logger` - Logger.
     pub fn new(
         state_file: impl AsRef<Path>,
         ledger_db: LedgerDB,
