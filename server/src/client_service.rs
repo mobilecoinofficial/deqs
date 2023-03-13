@@ -255,31 +255,34 @@ impl<OB: QuoteBook> DeqsClientApi for ClientService<OB> {
     ) {
         let _timer = SVC_COUNTERS.req(&ctx);
         scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
-            let result: Result<SubmitQuotesResponse, RpcStatus> = if req.quotes.len()
-                >= PENDING_LIMIT
-            {
-                Err(rpc_invalid_arg_error(
-                    "Too many quotes",
-                    QuoteBookError::ImplementationSpecific(
-                        "Too many quotes in one request".to_owned(),
-                    ),
-                    logger,
-                ))
-            } else if self.pending_quotes.load(Ordering::SeqCst) + req.quotes.len() >= PENDING_LIMIT
-            {
-                // This node is over capacity, and is not accepting proposed quotes.
-                Err(rpc_unavailable_error(
-                    "Server over capacity",
-                    QuoteBookError::ImplementationSpecific("Server is over capacity".to_owned()),
-                    logger,
-                ))
-            } else {
-                let num_quotes = req.quotes.len();
-                self.pending_quotes.fetch_add(num_quotes, Ordering::SeqCst);
-                let result = self.submit_quotes_impl(req, logger);
-                self.pending_quotes.fetch_sub(num_quotes, Ordering::SeqCst);
-                result
-            };
+            let result: Result<SubmitQuotesResponse, RpcStatus> =
+                if req.quotes.len() >= PENDING_LIMIT {
+                    Err(rpc_invalid_arg_error(
+                        "Too many quotes",
+                        QuoteBookError::ImplementationSpecific(
+                            "Too many quotes in one request".to_owned(),
+                        ),
+                        logger,
+                    ))
+                } else {
+                    let num_quotes = req.quotes.len();
+                    self.pending_quotes.fetch_add(num_quotes, Ordering::SeqCst);
+                    if (self.pending_quotes.load(Ordering::SeqCst)) >= PENDING_LIMIT {
+                        // This node is over capacity, and is not accepting proposed quotes.
+                        self.pending_quotes.fetch_sub(num_quotes, Ordering::SeqCst);
+                        Err(rpc_unavailable_error(
+                            "Server over capacity",
+                            QuoteBookError::ImplementationSpecific(
+                                "Server is over capacity".to_owned(),
+                            ),
+                            logger,
+                        ))
+                    } else {
+                        let result = self.submit_quotes_impl(req, logger);
+                        self.pending_quotes.fetch_sub(num_quotes, Ordering::SeqCst);
+                        result
+                    }
+                };
             send_result(ctx, sink, result, logger)
         })
     }
