@@ -1,10 +1,14 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{ClientService, Error, Msg};
+use crate::{client_service::SciValidator, ClientService, Error, Msg};
 use deqs_api::DeqsClientUri;
-use deqs_quote_book_api::QuoteBook;
+use deqs_quote_book_api::{Error as QuoteBookError, QuoteBook};
 use futures::executor::block_on;
-use mc_common::logger::{log, Logger};
+use mc_common::{
+    logger::{log, Logger},
+    HashMap,
+};
+use mc_transaction_types::TokenId;
 use mc_util_grpc::ConnectionUriGrpcioServer;
 use mc_util_uri::ConnectionUri;
 use postage::broadcast::Sender;
@@ -27,6 +31,9 @@ pub struct GrpcServer<OB: QuoteBook> {
     /// Client GRPC server.
     server: Option<grpcio::Server>,
 
+    /// Map of token id to minimum quote size
+    quote_minimum_map: HashMap<TokenId, u64>,
+
     /// The address we are listening on, once the server is started.
     /// This might differ from the client_listen_uri if the client_listen_uri
     /// port is 0 and we are choosing an available port when we start.
@@ -38,6 +45,7 @@ impl<OB: QuoteBook> GrpcServer<OB> {
         msg_bus_tx: Sender<Msg>,
         quote_book: OB,
         client_listen_uri: DeqsClientUri,
+        quote_minimum_map: HashMap<TokenId, u64>,
         logger: Logger,
     ) -> Self {
         Self {
@@ -46,6 +54,7 @@ impl<OB: QuoteBook> GrpcServer<OB> {
             client_listen_uri,
             logger,
             server: None,
+            quote_minimum_map,
             actual_listen_uri: None,
         }
     }
@@ -76,10 +85,24 @@ impl<OB: QuoteBook> GrpcServer<OB> {
 
         let health_service =
             mc_util_grpc::HealthService::new(None, self.logger.clone()).into_service();
+        let quote_minimum_map = self.quote_minimum_map.clone();
+
+        let sci_validator: SciValidator = Arc::new(move |sci| {
+            let base_token_id = TokenId::from(sci.pseudo_output_amount.token_id);
+            let base_amount = sci.pseudo_output_amount.value;
+            let minimum_for_token_id = *quote_minimum_map.get(&base_token_id).unwrap_or(&0);
+            if base_amount < minimum_for_token_id {
+                return Err(QuoteBookError::UnsupportedSci(
+                    format!("Quote volume is too small for deqs. Quotes with base_token: {} require a minimum of: {}", base_token_id, minimum_for_token_id
+                )));
+            }
+            Ok(())
+        });
 
         let client_service = ClientService::new(
             self.msg_bus_tx.clone(),
             self.quote_book.clone(),
+            sci_validator.clone(),
             self.logger.clone(),
         )
         .into_service();

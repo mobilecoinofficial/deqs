@@ -20,7 +20,17 @@ use postage::{
     sink::Sink,
 };
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::{
+    sync::Arc,
+    time::{SystemTime, UNIX_EPOCH},
+};
+
+/// A function for validating that scis should be accepted by the server. It
+/// returns Ok if it is valid, and otherwise returns an error. It receives
+/// 1 argument:
+/// - A Sci to be validated
+pub type SciValidator =
+    Arc<dyn Fn(&SignedContingentInput) -> Result<(), QuoteBookError> + Sync + Send>;
 
 /// GRPC Client service
 #[derive(Clone)]
@@ -31,16 +41,26 @@ pub struct ClientService<OB: QuoteBook> {
     /// Quote book.
     quote_book: OB,
 
+    /// Validates Scis for specific server config before passing it to the
+    /// quotebook
+    sci_validator: SciValidator,
+
     /// Logger.
     logger: Logger,
 }
 
 impl<OB: QuoteBook> ClientService<OB> {
     /// Create a new ClientService
-    pub fn new(msg_bus_tx: Sender<Msg>, quote_book: OB, logger: Logger) -> Self {
+    pub fn new(
+        msg_bus_tx: Sender<Msg>,
+        quote_book: OB,
+        sci_validator: SciValidator,
+        logger: Logger,
+    ) -> Self {
         Self {
             msg_bus_tx,
             quote_book,
+            sci_validator,
             logger,
         }
     }
@@ -76,7 +96,11 @@ impl<OB: QuoteBook> ClientService<OB> {
 
         let results = scis
             .into_par_iter()
-            .map(|sci| self.quote_book.add_sci(sci, Some(timestamp)))
+            .map(|sci| {
+                // Validate sci before trying to add it to the quote book.
+                (self.sci_validator)(&sci)?;
+                self.quote_book.add_sci(sci, Some(timestamp))
+            })
             .collect::<Vec<_>>();
 
         let mut status_codes = vec![];
@@ -291,10 +315,23 @@ mod tests {
     ) -> (DeqsClientApiClient, Server, Sender<Msg>, Receiver<Msg>) {
         let server_env = Arc::new(EnvBuilder::new().build());
         let (msg_bus_tx, msg_bus_rx) = broadcast::channel::<Msg>(1000);
+        let sci_validator: SciValidator = Arc::new(|sci| {
+            let base_value = sci.pseudo_output_amount.value;
+            if base_value < 3 {
+                return Err(QuoteBookError::UnsupportedSci(
+                    "Quote is too small for deqs".to_owned(),
+                ));
+            }
+            Ok(())
+        });
 
-        let client_service =
-            ClientService::new(msg_bus_tx.clone(), quote_book.clone(), logger.clone())
-                .into_service();
+        let client_service = ClientService::new(
+            msg_bus_tx.clone(),
+            quote_book.clone(),
+            sci_validator.clone(),
+            logger.clone(),
+        )
+        .into_service();
         let mut server = ServerBuilder::new(server_env)
             .register_service(client_service)
             .build()
@@ -416,6 +453,75 @@ mod tests {
         quotes2.sort();
 
         assert_eq!(quotes2, quotes);
+    }
+
+    #[test_with_logger]
+    fn submit_quotes_refuses_dust(logger: Logger) {
+        let pair = Pair {
+            base_token_id: TokenId::from(1),
+            counter_token_id: TokenId::from(2),
+        };
+        let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+        let quote_book = InMemoryQuoteBook::default();
+        let (client_api, _server, _msg_bus_tx, _msg_bus_rx) =
+            create_test_client_and_server(&quote_book, &logger);
+
+        // Dust sized quotes should be rejected
+        let scis = (0..10)
+            .map(|_| {
+                create_sci(
+                    pair.base_token_id,
+                    pair.counter_token_id,
+                    1,
+                    20,
+                    &mut rng,
+                    None,
+                )
+            })
+            .map(|sci| mc_api::external::SignedContingentInput::from(&sci))
+            .collect::<Vec<_>>();
+
+        let req = SubmitQuotesRequest {
+            quotes: scis.clone().into(),
+            ..Default::default()
+        };
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+
+        assert_eq!(
+            resp.get_status_codes(),
+            vec![QuoteStatusCode::UNSUPPORTED_SCI; scis.len()]
+        );
+        assert_eq!(
+            resp.get_error_messages(),
+            vec!["Unsupported SCI: Quote is too small for deqs"; scis.len()]
+        );
+
+        // Larger than dust quotes should be accepted
+        let scis = (0..10)
+            .map(|_| {
+                create_sci(
+                    pair.base_token_id,
+                    pair.counter_token_id,
+                    10,
+                    20,
+                    &mut rng,
+                    None,
+                )
+            })
+            .map(|sci| mc_api::external::SignedContingentInput::from(&sci))
+            .collect::<Vec<_>>();
+
+        let req = SubmitQuotesRequest {
+            quotes: scis.clone().into(),
+            ..Default::default()
+        };
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+
+        assert_eq!(
+            resp.get_status_codes(),
+            vec![QuoteStatusCode::CREATED; scis.len()]
+        );
+        assert_eq!(resp.get_error_messages(), vec![""; scis.len()]);
     }
 
     #[test_with_logger]

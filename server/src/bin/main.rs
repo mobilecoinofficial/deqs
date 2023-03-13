@@ -87,6 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         keypair,
         msg_bus_tx,
         msg_bus_rx,
+        config.quote_minimum_map,
         logger.clone(),
     )
     .await?;
