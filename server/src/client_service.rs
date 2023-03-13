@@ -13,7 +13,9 @@ use futures::{FutureExt, SinkExt};
 use grpcio::{RpcContext, RpcStatus, ServerStreamingSink, Service, UnarySink, WriteFlags};
 use mc_common::logger::{log, scoped_global_logger, Logger};
 use mc_transaction_extra::SignedContingentInput;
-use mc_util_grpc::{rpc_internal_error, rpc_invalid_arg_error, rpc_logger, send_result};
+use mc_util_grpc::{
+    rpc_internal_error, rpc_invalid_arg_error, rpc_logger, rpc_unavailable_error, send_result,
+};
 use postage::{
     broadcast::{Receiver, Sender},
     prelude::Stream,
@@ -21,9 +23,16 @@ use postage::{
 };
 use rayon::prelude::{IntoParallelIterator, ParallelIterator};
 use std::{
-    sync::Arc,
+    sync::{
+        atomic::{AtomicUsize, Ordering},
+        Arc,
+    },
     time::{SystemTime, UNIX_EPOCH},
 };
+
+/// Maximum number of pending quotes for deqs before rejecting
+/// submit quote requests.
+const PENDING_LIMIT: usize = 30;
 
 /// A function for validating that scis should be accepted by the server. It
 /// returns Ok if it is valid, and otherwise returns an error. It receives
@@ -45,6 +54,9 @@ pub struct ClientService<OB: QuoteBook> {
     /// quotebook
     sci_validator: SciValidator,
 
+    /// The number of quotes that are still in progress
+    pending_quotes: Arc<AtomicUsize>,
+
     /// Logger.
     logger: Logger,
 }
@@ -61,6 +73,7 @@ impl<OB: QuoteBook> ClientService<OB> {
             msg_bus_tx,
             quote_book,
             sci_validator,
+            pending_quotes: Arc::new(AtomicUsize::new(0)),
             logger,
         }
     }
@@ -242,7 +255,32 @@ impl<OB: QuoteBook> DeqsClientApi for ClientService<OB> {
     ) {
         let _timer = SVC_COUNTERS.req(&ctx);
         scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
-            send_result(ctx, sink, self.submit_quotes_impl(req, logger), logger)
+            let result: Result<SubmitQuotesResponse, RpcStatus> = if req.quotes.len()
+                >= PENDING_LIMIT
+            {
+                Err(rpc_invalid_arg_error(
+                    "Too many quotes",
+                    QuoteBookError::ImplementationSpecific(
+                        "Too many quotes in one request".to_owned(),
+                    ),
+                    logger,
+                ))
+            } else if self.pending_quotes.load(Ordering::SeqCst) + req.quotes.len() >= PENDING_LIMIT
+            {
+                // This node is over capacity, and is not accepting proposed quotes.
+                Err(rpc_unavailable_error(
+                    "Server over capacity",
+                    QuoteBookError::ImplementationSpecific("Server is over capacity".to_owned()),
+                    logger,
+                ))
+            } else {
+                let num_quotes = req.quotes.len();
+                self.pending_quotes.fetch_add(num_quotes, Ordering::SeqCst);
+                let result = self.submit_quotes_impl(req, logger);
+                self.pending_quotes.fetch_sub(num_quotes, Ordering::SeqCst);
+                result
+            };
+            send_result(ctx, sink, result, logger)
         })
     }
 
@@ -291,7 +329,7 @@ mod tests {
     use futures::{executor::block_on, StreamExt};
     use grpcio::{ChannelBuilder, EnvBuilder, Server, ServerBuilder, ServerCredentials};
     use mc_account_keys::AccountKey;
-    use mc_common::logger::test_with_logger;
+    use mc_common::logger::{async_test_with_logger, test_with_logger};
     use mc_fog_report_validation_test_utils::MockFogResolver;
     use mc_ledger_db::{
         test_utils::{add_txos_and_key_images_to_ledger, create_ledger, initialize_ledger},
@@ -301,6 +339,7 @@ mod tests {
     use mc_transaction_types::{BlockVersion, TokenId};
     use mc_util_grpc::ConnectionUriGrpcioChannel;
     use postage::broadcast;
+    use prometheus::core::{Atomic, AtomicU64};
     use rand::{rngs::StdRng, SeedableRng};
     use std::{
         str::FromStr,
@@ -453,6 +492,126 @@ mod tests {
         quotes2.sort();
 
         assert_eq!(quotes2, quotes);
+    }
+
+    #[async_test_with_logger(flavor = "multi_thread")]
+    async fn submit_quotes_rejects_quotes_above_the_pending_limit(logger: Logger) {
+        let pair = Pair {
+            base_token_id: TokenId::from(1),
+            counter_token_id: TokenId::from(2),
+        };
+        let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+        let quote_book = InMemoryQuoteBook::default();
+        let (client_api, _server, _msg_bus_tx, _msg_bus_rx) =
+            create_test_client_and_server(&quote_book, &logger);
+
+        // Submitting SCIs under the pending limit should be successful
+        let scis = (0..10)
+            .map(|_| {
+                create_sci(
+                    pair.base_token_id,
+                    pair.counter_token_id,
+                    10,
+                    20,
+                    &mut rng,
+                    None,
+                )
+            })
+            .map(|sci| mc_api::external::SignedContingentInput::from(&sci))
+            .collect::<Vec<_>>();
+
+        let req = SubmitQuotesRequest {
+            quotes: scis.clone().into(),
+            ..Default::default()
+        };
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+
+        assert_eq!(
+            resp.get_status_codes(),
+            vec![QuoteStatusCode::CREATED; scis.len()]
+        );
+
+        assert_eq!(resp.get_error_messages(), vec![""; scis.len()]);
+        let mut quotes = resp
+            .get_quotes()
+            .iter()
+            .map(|o| Quote::try_from(o).unwrap())
+            .collect::<Vec<_>>();
+
+        let mut quotes2 = quote_book
+            .get_quotes(&pair, .., 0)
+            .unwrap()
+            .into_iter()
+            .rev() // Quotes returned in newest to oldest quote
+            .collect::<Vec<_>>();
+
+        // Since quotes are added in parallel, the exact quote at which they get added
+        // is not determinstic.
+        quotes.sort();
+        quotes2.sort();
+
+        assert_eq!(quotes2, quotes);
+
+        // Submitting SCIs above the pending limit should fail
+        let too_many_scis_at_once = (0..PENDING_LIMIT)
+            .map(|_| {
+                create_sci(
+                    pair.base_token_id,
+                    pair.counter_token_id,
+                    10,
+                    20,
+                    &mut rng,
+                    None,
+                )
+            })
+            .map(|sci| mc_api::external::SignedContingentInput::from(&sci))
+            .collect::<Vec<_>>();
+
+        let too_many_scis_at_once_req = SubmitQuotesRequest {
+            quotes: too_many_scis_at_once.clone().into(),
+            ..Default::default()
+        };
+        client_api
+            .submit_quotes(&too_many_scis_at_once_req)
+            .expect_err("Submitting too many requests should fail");
+        let (left, right) = too_many_scis_at_once.split_at(PENDING_LIMIT / 2);
+
+        let left_req = SubmitQuotesRequest {
+            quotes: left.clone().into(),
+            ..Default::default()
+        };
+        let right_req = SubmitQuotesRequest {
+            quotes: right.clone().into(),
+            ..Default::default()
+        };
+        let left_client = client_api.clone();
+        let right_client = client_api.clone();
+        let successes = Arc::new(AtomicU64::new(0));
+        let failures = Arc::new(AtomicU64::new(0));
+        let left_successes = successes.clone();
+        let left_failures = failures.clone();
+        let right_successes = successes.clone();
+        let right_failures = failures.clone();
+        let mut handles = vec![];
+        handles.push(tokio::spawn(async move {
+            let result = left_client.submit_quotes(&left_req);
+            if result.is_ok() {
+                left_successes.inc_by(1);
+            } else {
+                left_failures.inc_by(1);
+            }
+        }));
+        handles.push(tokio::spawn(async move {
+            let result = right_client.submit_quotes(&right_req);
+            if result.is_ok() {
+                right_successes.inc_by(1);
+            } else {
+                right_failures.inc_by(1);
+            }
+        }));
+        futures::future::join_all(handles).await;
+        assert_eq!(successes.get(), 1);
+        assert_eq!(failures.get(), 1);
     }
 
     #[test_with_logger]
