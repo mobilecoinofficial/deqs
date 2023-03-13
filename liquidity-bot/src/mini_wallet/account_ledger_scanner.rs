@@ -40,6 +40,7 @@ pub struct AccountLedgerScanner {
     stop_requested: Arc<AtomicBool>,
     join_handle: Option<JoinHandle<()>>,
 }
+
 impl AccountLedgerScanner {
     pub fn new(
         ledger_db: LedgerDB,
@@ -125,6 +126,7 @@ struct AccountLedgerScannerWorker {
     wallet_event_callback: WalletEventCallback,
     stop_requested: Arc<AtomicBool>,
 }
+
 impl AccountLedgerScannerWorker {
     pub fn run(mut self) {
         while !self.stop_requested.load(Ordering::SeqCst) {

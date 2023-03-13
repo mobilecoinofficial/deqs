@@ -46,6 +46,7 @@ pub struct State {
     next_block_index: BlockIndex,
     matched_tx_outs: HashMap<KeyImage, MatchedTxOut>,
 }
+
 impl State {
     pub fn load(
         state_file: &PathBuf,
@@ -61,6 +62,7 @@ impl State {
             })
         }
     }
+
     pub fn save(&self, path: &PathBuf) -> Result<(), Error> {
         let bytes = mc_util_serial::serialize(&self)?;
         std::fs::write(&path, bytes)?;

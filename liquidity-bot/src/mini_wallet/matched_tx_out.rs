@@ -24,6 +24,7 @@ pub struct MatchedTxOut {
     pub subaddress_index: u64,
     pub key_image: KeyImage,
 }
+
 impl MatchedTxOut {
     pub fn view_key_scan(
         block_index: BlockIndex,
