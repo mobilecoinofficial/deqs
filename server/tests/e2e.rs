@@ -242,7 +242,8 @@ async fn e2e_two_nodes_dust_propagation(logger: Logger) {
     let resp = client2.submit_quotes(&req).expect("submit quote failed");
     let quote_id = QuoteId::try_from(resp.get_quotes()[0].get_id()).unwrap();
 
-    // After a few moments the first server should have the SCI in its quote book
+    // After a few moments the first server should have the SCI in its quote book since peer to peer
+    // quotes are exempt from the dust check.
     let retry_strategy = FixedInterval::new(Duration::from_secs(1)).take(10); // limit to 10 retries
     let quote = Retry::spawn(retry_strategy, || async {
         let quote = quote_book1.get_quote_by_id(&quote_id);
