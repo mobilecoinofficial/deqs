@@ -6,7 +6,7 @@
 //
 // - The bot loses all state when it dies, and the wallet will not re-feed it
 //   TxOuts (because the wallet does keep track of which block it last scanned).
-//   Even if it did re-feed it, we wouldn't know which ones where already
+//   Even if it did re-feed it, we wouldn't know which ones were already
 //   previously submitted to the DEQS. As such, we will need to persist the
 //   bot's state
 //
@@ -119,6 +119,7 @@ struct LiquidityBotTask {
     /// DEQS client.
     deqs_client: DeqsClientApiClient,
 }
+
 impl LiquidityBotTask {
     pub async fn run(mut self) {
         let shutdown_ack_tx = self.shutdown_ack_tx.take();
@@ -347,7 +348,7 @@ impl LiquidityBotTask {
                 QuoteStatusCode::CREATED => {
                     let quote = Quote::try_from(quote)?;
 
-                    // Sanity tha the DEQS is behaving as expected.
+                    // Sanity check that the DEQS is behaving as expected.
                     assert_eq!(quote.sci(), listed_tx_out.quote.sci());
 
                     log::info!(
