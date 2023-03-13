@@ -466,6 +466,7 @@ mod tests {
         let (client_api, _server, _msg_bus_tx, _msg_bus_rx) =
             create_test_client_and_server(&quote_book, &logger);
 
+        // Dust sized quotes should be rejected
         let scis = (0..10)
             .map(|_| {
                 create_sci(
@@ -494,6 +495,33 @@ mod tests {
             resp.get_error_messages(),
             vec!["Unsupported SCI: Quote is too small for deqs"; scis.len()]
         );
+
+        // Larger than dust quotes should be accepted
+        let scis = (0..10)
+            .map(|_| {
+                create_sci(
+                    pair.base_token_id,
+                    pair.counter_token_id,
+                    10,
+                    20,
+                    &mut rng,
+                    None,
+                )
+            })
+            .map(|sci| mc_api::external::SignedContingentInput::from(&sci))
+            .collect::<Vec<_>>();
+
+        let req = SubmitQuotesRequest {
+            quotes: scis.clone().into(),
+            ..Default::default()
+        };
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+
+        assert_eq!(
+            resp.get_status_codes(),
+            vec![QuoteStatusCode::CREATED; scis.len()]
+        );
+        assert_eq!(resp.get_error_messages(), vec![""; scis.len()]);
     }
 
     #[test_with_logger]
