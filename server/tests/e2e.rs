@@ -234,7 +234,7 @@ async fn e2e_two_nodes_dust_propagation(logger: Logger) {
     );
     assert_eq!(
         resp.get_error_messages(),
-        vec!["Unsupported SCI: Quote is too small for deqs. Quotes with base_token: 1 require a minimum of: 1000"]
+        vec!["Unsupported SCI: Quote volume is too small for deqs. Quotes with base_token: 1 require a minimum of: 1000"]
     );
 
     // Submitting to the second server should succeed because it's bigger than its
