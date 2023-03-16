@@ -72,6 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             "DEQS".into(),
             id,
             Some(get_config_json),
+            vec![],
             logger.clone(),
         )
         .expect("Failed starting admin server")
