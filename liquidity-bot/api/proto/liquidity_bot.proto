@@ -1,0 +1,35 @@
+// Copyright (c) 2018-2023 The MobileCoin Foundation
+
+// API for the liquidity bot
+
+syntax = "proto3";
+
+package deqs;
+option java_package = "com.mobilecoin.api";
+option go_package = "mobilecoin/api";
+
+import "external.proto";
+
+service DeqsLiquidityBotAdminAPI {
+    rpc GetPendingTxOuts (GetPendingTxOutsRequest) returns (GetPendingTxOutsResponse) {}
+}
+
+
+message MatchedTxOut {
+    uint64 block_index = 1;
+    external.TxOut tx_out = 2;
+    external.Amount amount = 3;
+    uint64 subaddress_index = 4;
+    external.KeyImage key_image = 5;
+}
+
+message PendingTxOut {
+    MatchedTxOut matched_tx_out = 1;
+    external.SignedContingentInput sci = 2;
+}
+
+message GetPendingTxOutsRequest {}
+
+message GetPendingTxOutsResponse {
+    repeated PendingTxOut pending_tx_outs = 1;
+}
