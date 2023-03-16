@@ -7,11 +7,14 @@
 // - Fog support (grep for "FogResolver::default")
 // - RTH support (grep for "EmptyMemoBuilder::default")
 
+mod admin_service;
 mod config;
+mod convert;
 mod error;
 mod metrics;
 pub mod mini_wallet;
 
+pub use admin_service::AdminService;
 pub use config::Config;
 pub use error::Error;
 pub use metrics::{update_periodic_metrics, METRICS_POLL_INTERVAL};
@@ -172,6 +175,9 @@ enum Command {
 
     /// Get stats
     GetStats(oneshot::Sender<Stats>),
+
+    /// Get pending TxOuts
+    GetPendingTxOuts(oneshot::Sender<Vec<PendingTxOut>>),
 }
 
 struct LiquidityBotTask {
@@ -256,6 +262,10 @@ impl LiquidityBotTask {
 
                         Some(Command::GetStats(tx)) => {
                             tx.send(Stats::from(&self)).expect("channel should be open");
+                        }
+
+                        Some(Command::GetPendingTxOuts(tx)) => {
+                            tx.send(self.pending_tx_outs.clone()).expect("channel should be open");
                         }
 
                         None => {
@@ -746,9 +756,45 @@ impl LiquidityBotTask {
     }
 }
 
-pub struct LiquidityBot {
+/// Interface for interacting with the liquidity bot
+#[derive(Clone)]
+pub struct LiquidityBotInterface {
     /// Command tx, used to send commands to the event loop.
     command_tx: mpsc::UnboundedSender<Command>,
+}
+
+impl LiquidityBotInterface {
+    /// Bridge in a wallet event.
+    pub fn notify_wallet_event(&self, event: WalletEvent) {
+        self.command_tx
+            .send(Command::WalletEvent(event))
+            .expect("command tx failed"); // We assume the channel stays
+                                          // open for as long as the bot is
+                                          // running.
+    }
+
+    /// Get statistics.
+    pub async fn stats(&self) -> Stats {
+        let (tx, rx) = oneshot::channel();
+        self.command_tx
+            .send(Command::GetStats(tx))
+            .expect("command tx failed");
+        rx.await.expect("command rx failed")
+    }
+
+    /// Get pending tx outs.
+    pub async fn pending_tx_outs(&self) -> Vec<PendingTxOut> {
+        let (tx, rx) = oneshot::channel();
+        self.command_tx
+            .send(Command::GetPendingTxOuts(tx))
+            .expect("command tx failed");
+        rx.await.expect("command rx failed")
+    }
+}
+
+pub struct LiquidityBot {
+    /// Interface for interacting with the liquidity bot.
+    interface: LiquidityBotInterface,
 
     /// Shutdown sender, used to signal the event loop to shutdown.
     shutdown_tx: mpsc::UnboundedSender<()>,
@@ -787,28 +833,14 @@ impl LiquidityBot {
         };
         tokio::spawn(task.run());
         Self {
-            command_tx,
+            interface: LiquidityBotInterface { command_tx },
             shutdown_tx,
             shutdown_ack_rx,
         }
     }
 
-    /// Bridge in a wallet event.
-    pub fn notify_wallet_event(&self, event: WalletEvent) {
-        self.command_tx
-            .send(Command::WalletEvent(event))
-            .expect("command tx failed"); // We assume the channel stays
-                                          // open for as long as the bot is
-                                          // running.
-    }
-
-    /// Get statistics.
-    pub async fn stats(&self) -> Stats {
-        let (tx, rx) = oneshot::channel();
-        self.command_tx
-            .send(Command::GetStats(tx))
-            .expect("command tx failed");
-        rx.await.expect("command rx failed")
+    pub fn interface(&self) -> &LiquidityBotInterface {
+        &self.interface
     }
 
     /// Request the event loop task to shut down.

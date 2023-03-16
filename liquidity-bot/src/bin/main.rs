@@ -3,7 +3,7 @@
 use clap::Parser;
 use deqs_liquidity_bot::{
     mini_wallet::{MiniWallet, WalletEvent},
-    update_periodic_metrics, Config, LiquidityBot, METRICS_POLL_INTERVAL,
+    update_periodic_metrics, AdminService, Config, LiquidityBot, METRICS_POLL_INTERVAL,
 };
 use itertools::Itertools;
 use mc_common::logger::{log, o};
@@ -30,21 +30,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let account_key =
         mc_util_keyfile::read_keyfile(&config.account_key).expect("Could not read keyfile");
 
-    // Start admin server
-    let config_json = serde_json::to_string(&config).expect("failed to serialize config to JSON");
-    let get_config_json = Arc::new(move || Ok(config_json.clone()));
-    let _admin_server = config.admin_listen_uri.as_ref().map(|admin_listen_uri| {
-        AdminServer::start(
-            None,
-            admin_listen_uri,
-            "DEQS-Liquidity-Bot".into(),
-            "".into(),
-            Some(get_config_json),
-            logger.clone(),
-        )
-        .expect("Failed starting admin server")
-    });
-
     // Start our mini wallet scanner thingie.
     let (wallet_tx, mut wallet_rx) = mpsc::unbounded_channel();
     let wallet = MiniWallet::new(
@@ -69,6 +54,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let liquidity_bot =
         LiquidityBot::new(account_key, ledger_db, pairs, &config.deqs, logger.clone());
 
+    // Start admin server
+    let config_json = serde_json::to_string(&config).expect("failed to serialize config to JSON");
+    let get_config_json = Arc::new(move || Ok(config_json.clone()));
+    let bot_admin_service =
+        AdminService::new(liquidity_bot.interface().clone(), logger.clone()).into_service();
+    let _admin_server = config.admin_listen_uri.as_ref().map(|admin_listen_uri| {
+        AdminServer::start(
+            None,
+            admin_listen_uri,
+            "DEQS-Liquidity-Bot".into(),
+            "".into(),
+            Some(get_config_json),
+            vec![bot_admin_service],
+            logger.clone(),
+        )
+        .expect("Failed starting admin server")
+    });
+
     // Since the LiquidityBot itself does not maintain state, feed it any unspent
     // TxOuts we are currently aware of. It will attempt to submit SCIs for all
     // of them, and if existing ones are already present on the DEQS for the
@@ -87,11 +90,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into_iter()
         .group_by(|mtxo| mtxo.block_index)
     {
-        liquidity_bot.notify_wallet_event(WalletEvent::BlockProcessed {
-            block_index,
-            received_tx_outs: received_tx_outs.collect(),
-            spent_tx_outs: vec![],
-        });
+        liquidity_bot
+            .interface()
+            .notify_wallet_event(WalletEvent::BlockProcessed {
+                block_index,
+                received_tx_outs: received_tx_outs.collect(),
+                spent_tx_outs: vec![],
+            });
     }
 
     // Event loop.
@@ -109,7 +114,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match event {
                     Some(event) => {
                         log::trace!(logger, "Wallet event: {:?}", event);
-                        liquidity_bot.notify_wallet_event(event);
+                        liquidity_bot.interface().notify_wallet_event(event);
                     }
                    None => {
                         log::info!(logger, "Wallet event channel closed");
@@ -119,7 +124,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
 
             _ = metrics_interval.tick() => {
-                update_periodic_metrics(&wallet, &liquidity_bot).await;
+                update_periodic_metrics(&wallet, liquidity_bot.interface()).await;
             }
         }
     }

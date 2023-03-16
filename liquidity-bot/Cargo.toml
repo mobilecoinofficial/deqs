@@ -15,6 +15,7 @@ path = "src/bin/main.rs"
 [dependencies]
 deqs-api = { path = "../api" }
 deqs-quote-book-api = { path = "../quote-book/api" }
+deqs-liquidity-bot-api = { path = "api" }
 
 mc-account-keys = { path = "../mobilecoin/account-keys" }
 mc-blockchain-types = { path = "../mobilecoin/blockchain/types" }
@@ -53,6 +54,7 @@ deqs-test-server = { path = "../test-server" }
 
 mc-ledger-db = { path = "../mobilecoin/ledger/db", features = ["test_utils"] }
 mc-transaction-core-test-utils = { path = "../mobilecoin/transaction/core/test-utils" }
+mc-util-from-random = { path = "../mobilecoin/util/from-random" }
 
 rust_decimal_macros = "1.28"
 tempfile = "3.3"

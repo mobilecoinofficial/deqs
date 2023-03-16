@@ -1,6 +1,6 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
-use crate::{mini_wallet::MiniWallet, Error, FulfilledSci, LiquidityBot};
+use crate::{mini_wallet::MiniWallet, Error, FulfilledSci, LiquidityBotInterface};
 use mc_util_metrics::{
     Histogram, HistogramOpts, HistogramVec, IntGauge, IntGaugeVec, OpMetrics, Opts,
 };
@@ -33,7 +33,7 @@ lazy_static::lazy_static! {
 }
 
 /// Update periodic metrics.
-pub async fn update_periodic_metrics(wallet: &MiniWallet, liquidity_bot: &LiquidityBot) {
+pub async fn update_periodic_metrics(wallet: &MiniWallet, liquidity_bot: &LiquidityBotInterface) {
     NEXT_BLOCK_INDEX.set(wallet.next_block_index() as i64);
     PER_TOKEN_METRICS
         .update_metrics_from_liquidity_bot(liquidity_bot)
@@ -115,7 +115,7 @@ impl PerTokenMetrics {
         })
     }
 
-    pub async fn update_metrics_from_liquidity_bot(&self, liquidity_bot: &LiquidityBot) {
+    pub async fn update_metrics_from_liquidity_bot(&self, liquidity_bot: &LiquidityBotInterface) {
         let stats = liquidity_bot.stats().await;
 
         for (token_id, value) in stats.num_pending_tx_outs_by_token_id.iter() {
