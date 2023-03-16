@@ -24,6 +24,7 @@ pub struct Quote {
 }
 
 impl Quote {
+    #[allow(clippy::result_large_err)]
     pub fn id(&self) -> Result<QuoteId, Error> {
         if self.id.len() != 32 {
             return Err(Error::ImplementationSpecific(format!(
@@ -35,9 +36,10 @@ impl Quote {
         id.copy_from_slice(&self.id);
         Ok(QuoteId(id))
     }
+    #[allow(clippy::result_large_err)]
     pub fn decode_sci(&self) -> Result<SignedContingentInput, Error> {
         decode(&self.sci_protobuf).map_err(|e| {
-            Error::ImplementationSpecific(format!("failed decoding SCI protobuf: {}", e))
+            Error::ImplementationSpecific(format!("failed decoding SCI protobuf: {e}"))
         })
     }
     pub fn base_token_id(&self) -> TokenId {
@@ -64,6 +66,7 @@ impl Quote {
         self.timestamp as u64
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn get_by_id(conn: &mut SqliteConnection, id: &QuoteId) -> Result<Option<Self>, Error> {
         let id = id.0.to_vec();
         Ok(schema::quotes::table

@@ -477,7 +477,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
             match peer_addr.pop() {
                 Some(Protocol::P2p(peer_id)) => {
                     let peer_id = PeerId::from_multihash(peer_id)
-                        .map_err(|err| Error::Multihash(format!("{:?}", err)))?;
+                        .map_err(|err| Error::Multihash(format!("{err:?}")))?;
 
                     self.swarm
                         .behaviour_mut()
@@ -487,7 +487,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
                 other => {
                     return Err(Error::InvalidPeerAddress(
                         orig_peer_addr.clone(),
-                        format!("{:?}", other),
+                        format!("{other:?}"),
                     ));
                 }
             }

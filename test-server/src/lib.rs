@@ -46,7 +46,7 @@ impl DeqsTestServer {
         Self {
             server: Some(server),
             client_service,
-            client_uri: DeqsClientUri::from_str(&format!("insecure-deqs://127.0.0.1:{}", port))
+            client_uri: DeqsClientUri::from_str(&format!("insecure-deqs://127.0.0.1:{port}"))
                 .unwrap(),
             logger,
         }

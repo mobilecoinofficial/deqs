@@ -67,6 +67,7 @@ impl<QB: QuoteBook> SqliteQuoteBook<QB> {
     /// Instantiate a new SqliteQuoteBook from a path pointing to a SQLite
     /// database. Upon instantiation, all existing quotes in the database
     /// will be loaded into the underlying quote book.
+    #[allow(clippy::result_large_err)]
     pub fn new(
         pool: Pool<ConnectionManager<SqliteConnection>>,
         quote_book: QB,
@@ -74,7 +75,7 @@ impl<QB: QuoteBook> SqliteQuoteBook<QB> {
     ) -> Result<Self, QuoteBookError> {
         let mut conn = pool.get().map_err(Error::from)?;
         conn.run_pending_migrations(MIGRATIONS).map_err(|err| {
-            QuoteBookError::ImplementationSpecific(format!("run pending migrations: {}", err))
+            QuoteBookError::ImplementationSpecific(format!("run pending migrations: {err}"))
         })?;
 
         let num_quotes = schema::quotes::table
@@ -120,6 +121,7 @@ impl<QB: QuoteBook> SqliteQuoteBook<QB> {
         Ok(Self { pool, quote_book })
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn new_from_file_path(
         file_path: &impl AsRef<Path>,
         db_connections: u32,
@@ -143,6 +145,7 @@ impl<QB: QuoteBook> SqliteQuoteBook<QB> {
         Self::new(pool, quote_book, logger)
     }
 
+    #[allow(clippy::result_large_err)]
     pub fn get_conn(&self) -> Result<Conn, Error> {
         self.pool.get().map_err(Error::from)
     }
