@@ -60,7 +60,6 @@ impl<OB: QuoteBook> GrpcServer<OB> {
     }
 
     /// Start all the grpc services and threads in the server
-    #[allow(clippy::result_large_err)]
     pub fn start(&mut self) -> Result<(), Error> {
         let ret = self.start_helper();
         if let Err(ref err) = ret {
@@ -71,14 +70,12 @@ impl<OB: QuoteBook> GrpcServer<OB> {
     }
 
     /// Helper which gathers errors when starting server
-    #[allow(clippy::result_large_err)]
     fn start_helper(&mut self) -> Result<(), Error> {
         self.start_client_rpc_server()?;
         Ok(())
     }
 
     /// Start the client RPC server
-    #[allow(clippy::result_large_err)]
     fn start_client_rpc_server(&mut self) -> Result<(), Error> {
         log::info!(
             self.logger,

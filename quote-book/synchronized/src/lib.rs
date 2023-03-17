@@ -77,7 +77,6 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
         self.highest_processed_block_index.load(Ordering::SeqCst)
     }
 
-    #[allow(clippy::result_large_err)]
     fn validate_quote_ring_members(&self, quote: &Quote) -> Result<(), Error> {
         let indices = &quote.sci().tx_out_global_indices;
         let ring = &quote.sci().tx_in.ring;
