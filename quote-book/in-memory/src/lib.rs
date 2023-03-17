@@ -44,7 +44,7 @@ impl QuoteBook for InMemoryQuoteBook {
             .find(|entry| entry.sci().key_image() == quote.sci().key_image())
         {
             return Err(QuoteBookError::QuoteAlreadyExists {
-                existing_quote: existing_quote.clone(),
+                existing_quote: Box::new(existing_quote.clone()),
             });
         }
 

@@ -178,7 +178,7 @@ impl<QB: QuoteBook> QuoteBook for SqliteQuoteBook<QB> {
                                 .and_then(|quote| Quote::try_from(&quote))
                                 {
                             Ok(existing_quote) => {
-                                QuoteBookError::QuoteAlreadyExists { existing_quote }.into()
+                                QuoteBookError::QuoteAlreadyExists { existing_quote: Box::new(existing_quote) }.into()
                             }
                             Err(err) => QuoteBookError::ImplementationSpecific(format!(
                                 "Getting quote by id {} failed, but we expected it to succeed: {}",

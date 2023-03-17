@@ -141,7 +141,7 @@ impl<OB: QuoteBook> ClientService<OB> {
                 Err(ref err @ QuoteBookError::QuoteAlreadyExists { ref existing_quote }) => {
                     error_messages.push(err.to_string());
                     status_codes.push(err.into());
-                    quotes.push(existing_quote.into());
+                    quotes.push((&**existing_quote).into());
                 }
                 Err(err) => {
                     error_messages.push(err.to_string());
