@@ -14,6 +14,7 @@ pub trait QuoteBook: Clone + Send + Sync + 'static {
     /// * `sci` - The SCI to add.
     /// * `timestamp` - The timestamp of the block containing the SCI. If not
     ///   provided, the current system time is used.
+    #[allow(clippy::result_large_err)]
     fn add_sci(&self, sci: SignedContingentInput, timestamp: Option<u64>) -> Result<Quote, Error> {
         // Convert SCI into an quote. This also validates it.
         let quote = Quote::new(sci, timestamp)?;
@@ -22,21 +23,25 @@ pub trait QuoteBook: Clone + Send + Sync + 'static {
     }
 
     /// Add a pre-existing quote to the quote book.
+    #[allow(clippy::result_large_err)]
     fn add_quote(&self, quote: &Quote) -> Result<(), Error>;
 
     /// Remove a single quote from the book, identified by its id.
     /// Returns the removed quote if it was found
+    #[allow(clippy::result_large_err)]
     fn remove_quote_by_id(&self, id: &QuoteId) -> Result<Quote, Error>;
 
     /// Remove all quotes matching a given key image, returns the list of quotes
     /// removed. This does not return error QuoteNotFound when no matching
     /// quotes are found. Instead it returns an empty list.
+    #[allow(clippy::result_large_err)]
     fn remove_quotes_by_key_image(&self, key_image: &KeyImage) -> Result<Vec<Quote>, Error>;
 
     /// Remove all quotes whose tombstone block is >= current block index,
     /// returns the list of quotes removed. This does not return error
     /// QuoteNotFound when no matching quotes are found. Instead it returns an
     /// empty list.
+    #[allow(clippy::result_large_err)]
     fn remove_quotes_by_tombstone_block(
         &self,
         current_block_index: BlockIndex,
@@ -52,6 +57,7 @@ pub trait QuoteBook: Clone + Send + Sync + 'static {
     /// a given amount of counter tokens are returned first). For the exact
     /// sorting details, see documentation in the `Ord` implementation of
     /// `Quote`.
+    #[allow(clippy::result_large_err)]
     fn get_quotes(
         &self,
         pair: &Pair,
@@ -60,11 +66,14 @@ pub trait QuoteBook: Clone + Send + Sync + 'static {
     ) -> Result<Vec<Quote>, Error>;
 
     /// Return all known quote ids, optionally filtering for a specific pair.
+    #[allow(clippy::result_large_err)]
     fn get_quote_ids(&self, pair: Option<&Pair>) -> Result<Vec<QuoteId>, Error>;
 
     /// Get a quote by its id
+    #[allow(clippy::result_large_err)]
     fn get_quote_by_id(&self, id: &QuoteId) -> Result<Option<Quote>, Error>;
 
     /// Get the total number of SCIs in the quote book
+    #[allow(clippy::result_large_err)]
     fn num_scis(&self) -> Result<u64, Error>;
 }

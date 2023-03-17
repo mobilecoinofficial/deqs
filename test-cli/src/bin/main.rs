@@ -140,7 +140,7 @@ fn main() {
                 ..Default::default()
             };
             let resp = client_api.submit_quotes(&req).expect("submit quote failed");
-            println!("{:#?}", resp);
+            println!("{resp:#?}");
             println!();
             for (i, (status_code, quote)) in
                 resp.status_codes.iter().zip(resp.quotes.iter()).enumerate()
@@ -148,10 +148,10 @@ fn main() {
                 match status_code {
                     QuoteStatusCode::CREATED => {
                         let quote = Quote::try_from(quote).expect("invalid quote");
-                        println!("{}. {}", i, hex::encode(**quote.id()));
+                        println!("{i}. {}", hex::encode(**quote.id()));
                     }
                     err => {
-                        println!("{}. {:?}", i, err);
+                        println!("{i}. {err:?}");
                     }
                 }
             }

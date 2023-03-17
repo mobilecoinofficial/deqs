@@ -60,6 +60,7 @@ impl<OB: QuoteBook> GrpcServer<OB> {
     }
 
     /// Start all the grpc services and threads in the server
+    #[allow(clippy::result_large_err)]
     pub fn start(&mut self) -> Result<(), Error> {
         let ret = self.start_helper();
         if let Err(ref err) = ret {
@@ -70,12 +71,14 @@ impl<OB: QuoteBook> GrpcServer<OB> {
     }
 
     /// Helper which gathers errors when starting server
+    #[allow(clippy::result_large_err)]
     fn start_helper(&mut self) -> Result<(), Error> {
         self.start_client_rpc_server()?;
         Ok(())
     }
 
     /// Start the client RPC server
+    #[allow(clippy::result_large_err)]
     fn start_client_rpc_server(&mut self) -> Result<(), Error> {
         log::info!(
             self.logger,
@@ -93,7 +96,7 @@ impl<OB: QuoteBook> GrpcServer<OB> {
             let minimum_for_token_id = *quote_minimum_map.get(&base_token_id).unwrap_or(&0);
             if base_amount < minimum_for_token_id {
                 return Err(QuoteBookError::UnsupportedSci(
-                    format!("Quote volume is too small for deqs. Quotes with base_token: {} require a minimum of: {}", base_token_id, minimum_for_token_id
+                    format!("Quote volume is too small for deqs. Quotes with base_token: {base_token_id} require a minimum of: {minimum_for_token_id}"
                 )));
             }
             Ok(())
@@ -102,7 +105,7 @@ impl<OB: QuoteBook> GrpcServer<OB> {
         let client_service = ClientService::new(
             self.msg_bus_tx.clone(),
             self.quote_book.clone(),
-            sci_validator.clone(),
+            sci_validator,
             self.logger.clone(),
         )
         .into_service();

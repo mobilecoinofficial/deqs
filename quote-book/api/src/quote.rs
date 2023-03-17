@@ -43,6 +43,7 @@ impl Quote {
     /// * `sci` - The SCI to add.
     /// * `timestamp` - The timestamp of the block containing the SCI. If not
     ///   provided, the system time is used.
+    #[allow(clippy::result_large_err)]
     pub fn new(sci: SignedContingentInput, timestamp: Option<u64>) -> Result<Self, Error> {
         let timestamp = if let Some(timestamp) = timestamp {
             timestamp
@@ -203,6 +204,7 @@ impl Quote {
 
     // Get the number of counter tokens we will need to provide in quote to consume
     // this SCI and receive a total of base_tokens back.
+    #[allow(clippy::result_large_err)]
     pub fn counter_tokens_cost(&self, base_tokens: u64) -> Result<u64, Error> {
         if !self.base_range.contains(&base_tokens) {
             return Err(Error::InsufficientBaseTokens(base_tokens));

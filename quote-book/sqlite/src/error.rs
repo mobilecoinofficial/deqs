@@ -33,9 +33,9 @@ impl From<r2d2::Error> for Error {
 impl From<Error> for QuoteBookError {
     fn from(e: Error) -> Self {
         match e {
-            Error::Diesel(e) => Self::ImplementationSpecific(format!("diesel error: {}", e)),
+            Error::Diesel(e) => Self::ImplementationSpecific(format!("diesel error: {e}")),
             Error::QuoteBook(e) => e,
-            Error::R2d2(e) => Self::ImplementationSpecific(format!("r2d2 error: {}", e)),
+            Error::R2d2(e) => Self::ImplementationSpecific(format!("r2d2 error: {e}")),
         }
     }
 }

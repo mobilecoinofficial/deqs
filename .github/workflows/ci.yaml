@@ -19,7 +19,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - nightly-2022-04-29
+          - nightly-2023-01-04
     steps:
       - uses: actions/checkout@v3
         with:
@@ -100,7 +100,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - nightly-2022-04-29
+          - nightly-2023-01-04
     steps:
       - uses: actions/checkout@v3
         with:
@@ -126,7 +126,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - nightly-2022-04-29
+          - nightly-2023-01-04
     steps:
       - uses: actions/checkout@v3
         with:
@@ -150,7 +150,7 @@ jobs:
     strategy:
       matrix:
         rust:
-          - nightly-2022-04-29
+          - nightly-2023-01-04
     steps:
       - uses: actions/checkout@v3
         with:
@@ -179,7 +179,7 @@ jobs:
         with:
           profile: minimal
           # FIXME: replace with stable ASAP
-          toolchain: nightly-2022-04-29
+          toolchain: nightly-2023-01-04
           override: true
       - uses: r7kamura/rust-problem-matchers@v1
       - uses: actions-rs/cargo@v1
@@ -200,7 +200,7 @@ jobs:
   #       with:
   #         profile: minimal
   #         # FIXME: replace with stable ASAP
-  #         toolchain: nightly-2022-04-29
+  #         toolchain: nightly-2023-01-04
   #         override: true
   #         components: llvm-tools-preview
   #     - uses: taiki-e/install-action@cargo-llvm-cov

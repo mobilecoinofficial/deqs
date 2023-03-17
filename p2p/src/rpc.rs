@@ -91,7 +91,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> RequestResponseCodec for RpcCodec<REQ, 
         let data = mc_util_serial::serialize(&req).map_err(|err| {
             io::Error::new(
                 io::ErrorKind::Other,
-                format!("Failed to serialize request: {}", err),
+                format!("Failed to serialize request: {err}"),
             )
         })?;
         write_length_prefixed(io, data).await?;
@@ -107,7 +107,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> RequestResponseCodec for RpcCodec<REQ, 
         let data = mc_util_serial::serialize(&resp).map_err(|err| {
             io::Error::new(
                 io::ErrorKind::Other,
-                format!("Failed to serialize response: {}", err),
+                format!("Failed to serialize response: {err}"),
             )
         })?;
 

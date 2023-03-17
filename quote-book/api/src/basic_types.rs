@@ -45,6 +45,6 @@ impl Deref for QuoteId {
 
 impl fmt::Display for QuoteId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", hex::encode(&self.0))
+        write!(f, "{}", hex::encode(self.0))
     }
 }
