@@ -921,7 +921,7 @@ mod tests {
             .iter()
             .map(|mtxo| {
                 let ptxo = test_ctx.task.create_pending_tx_out(mtxo.clone()).unwrap();
-                let quote = Quote::new(ptxo.sci.clone(), None).unwrap();
+                let quote = Quote::new(ptxo.sci, None).unwrap();
                 ListedTxOut {
                     matched_tx_out: mtxo.clone(),
                     quote,
