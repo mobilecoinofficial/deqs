@@ -100,11 +100,13 @@ async fn test_basic_submission(logger: Logger) {
     deqs_server.set_submit_quotes_response(Ok(resp));
 
     // Feed the bot a block with a TxOut belonging to its account.
-    liquidity_bot.notify_wallet_event(WalletEvent::BlockProcessed {
-        block_index: block_data.block().index,
-        received_tx_outs: matched_tx_outs.clone(),
-        spent_tx_outs: vec![],
-    });
+    liquidity_bot
+        .interface()
+        .notify_wallet_event(WalletEvent::BlockProcessed {
+            block_index: block_data.block().index,
+            received_tx_outs: matched_tx_outs.clone(),
+            spent_tx_outs: vec![],
+        });
 
     // Wait for the bot to process the block. We expect it to submit an SCI to
     // the test server.
