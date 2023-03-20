@@ -1,7 +1,10 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use deqs_liquidity_bot_api::{
-    liquidity_bot::{GetPendingTxOutsRequest, GetPendingTxOutsResponse},
+    liquidity_bot::{
+        GetListedTxOutsRequest, GetListedTxOutsResponse, GetPendingTxOutsRequest,
+        GetPendingTxOutsResponse,
+    },
     liquidity_bot_grpc::{create_deqs_liquidity_bot_admin_api, DeqsLiquidityBotAdminApi},
 };
 use futures::executor::block_on;
@@ -38,6 +41,16 @@ impl AdminService {
             ..Default::default()
         })
     }
+
+    async fn get_listed_tx_outs_impl(&self) -> Result<GetListedTxOutsResponse, RpcStatus> {
+        let listed_tx_outs = self.liquidity_bot.listed_tx_outs().await;
+        Ok(GetListedTxOutsResponse {
+            listed_tx_outs: listed_tx_outs.iter().map(|tx_out| tx_out.into()).collect(),
+            ..Default::default()
+        })
+    }
+
+
 }
 
 impl DeqsLiquidityBotAdminApi for AdminService {
@@ -49,6 +62,17 @@ impl DeqsLiquidityBotAdminApi for AdminService {
     ) {
         scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
             send_result(ctx, sink, block_on(self.get_pending_tx_outs_impl()), logger)
+        })
+    }
+
+    fn get_listed_tx_outs(
+        &mut self,
+        ctx: RpcContext,
+        _req: GetListedTxOutsRequest,
+        sink: UnarySink<GetListedTxOutsResponse>,
+    ) {
+        scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
+            send_result(ctx, sink, block_on(self.get_listed_tx_outs_impl()), logger)
         })
     }
 }

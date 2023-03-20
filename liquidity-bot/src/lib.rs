@@ -180,6 +180,9 @@ enum Command {
 
     /// Get pending TxOuts
     GetPendingTxOuts(oneshot::Sender<Vec<PendingTxOut>>),
+
+    /// Get listed TxOuts
+    GetListedTxOuts(oneshot::Sender<Vec<ListedTxOut>>),
 }
 
 struct LiquidityBotTask {
@@ -269,6 +272,11 @@ impl LiquidityBotTask {
                         Some(Command::GetPendingTxOuts(tx)) => {
                             tx.send(self.pending_tx_outs.clone()).expect("channel should be open");
                         }
+
+                        Some(Command::GetListedTxOuts(tx)) => {
+                            tx.send(self.listed_tx_outs.clone()).expect("channel should be open");
+                        }
+
 
                         None => {
                             log::error!(self.logger, "Wallet event receiver closed");
@@ -802,6 +810,15 @@ impl LiquidityBotInterface {
         let (tx, rx) = oneshot::channel();
         self.command_tx
             .send(Command::GetPendingTxOuts(tx))
+            .expect("command tx failed");
+        rx.await.expect("command rx failed")
+    }
+
+    /// Get listed tx outs.
+    pub async fn listed_tx_outs(&self) -> Vec<ListedTxOut> {
+        let (tx, rx) = oneshot::channel();
+        self.command_tx
+            .send(Command::GetListedTxOuts(tx))
             .expect("command tx failed");
         rx.await.expect("command rx failed")
     }
