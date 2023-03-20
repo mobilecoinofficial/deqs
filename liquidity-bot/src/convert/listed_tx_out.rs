@@ -35,7 +35,8 @@ mod tests {
     use mc_crypto_keys::RistrettoPrivate;
     use mc_crypto_ring_signature_signer::NoKeysRingSigner;
     use mc_transaction_builder::{
-        test_utils::get_input_credentials, EmptyMemoBuilder, SignedContingentInputBuilder, ReservedSubaddresses,
+        test_utils::get_input_credentials, EmptyMemoBuilder, ReservedSubaddresses,
+        SignedContingentInputBuilder,
     };
     use mc_transaction_core::{constants::MILLIMOB_TO_PICOMOB, Amount, Token, TokenId};
     use mc_transaction_core_test_utils::{KeyImage, Mob, MockFogResolver, TxOut};

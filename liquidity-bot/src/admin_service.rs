@@ -49,8 +49,6 @@ impl AdminService {
             ..Default::default()
         })
     }
-
-
 }
 
 impl DeqsLiquidityBotAdminApi for AdminService {
