@@ -328,7 +328,7 @@ mod tests {
         let client_service = ClientService::new(
             msg_bus_tx.clone(),
             quote_book.clone(),
-            sci_validator.clone(),
+            sci_validator,
             logger.clone(),
         )
         .into_service();
@@ -343,7 +343,7 @@ mod tests {
 
         let client_env = Arc::new(EnvBuilder::new().build());
         let ch = ChannelBuilder::default_channel_builder(client_env).connect_to_uri(
-            &DeqsClientUri::from_str(&format!("insecure-deqs://127.0.0.1:{}", port)).unwrap(),
+            &DeqsClientUri::from_str(&format!("insecure-deqs://127.0.0.1:{port}")).unwrap(),
             logger,
         );
         let client_api = DeqsClientApiClient::new(ch);

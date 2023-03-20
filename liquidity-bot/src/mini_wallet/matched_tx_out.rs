@@ -62,7 +62,7 @@ impl MatchedTxOut {
                 log::info!(
                     logger,
                     "Found tx_out pub key {} with amount {:?} with unknown subaddress index",
-                    hex::encode(&tx_out.public_key),
+                    hex::encode(tx_out.public_key),
                     amount,
                 );
                 return Ok(None);
@@ -80,7 +80,7 @@ impl MatchedTxOut {
         log::trace!(
             logger,
             "Found tx_out pub key {} with amount {:?} with subaddress index {}",
-            hex::encode(&tx_out.public_key),
+            hex::encode(tx_out.public_key),
             amount,
             subaddress_index,
         );

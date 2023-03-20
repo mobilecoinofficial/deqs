@@ -93,7 +93,7 @@ impl AccountLedgerScanner {
         {
             spsk_to_index.insert(
                 *account_key.subaddress(*idx).spend_public_key(),
-                *idx as u64,
+                *idx,
             );
         }
         spsk_to_index

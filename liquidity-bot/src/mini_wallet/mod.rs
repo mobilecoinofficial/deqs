@@ -53,7 +53,7 @@ impl State {
         default_first_block_index: BlockIndex,
     ) -> Result<Self, Error> {
         if state_file.exists() {
-            let bytes = std::fs::read(&state_file)?;
+            let bytes = std::fs::read(state_file)?;
             Ok(mc_util_serial::deserialize(&bytes)?)
         } else {
             Ok(Self {
@@ -65,7 +65,7 @@ impl State {
 
     pub fn save(&self, path: &PathBuf) -> Result<(), Error> {
         let bytes = mc_util_serial::serialize(&self)?;
-        std::fs::write(&path, bytes)?;
+        std::fs::write(path, bytes)?;
         Ok(())
     }
 }
@@ -164,7 +164,7 @@ mod tests {
             account_key.clone(),
             0,
             Arc::new(move |event| events2.lock().unwrap().push(event)),
-            logger.clone(),
+            logger,
         )
         .unwrap();
 

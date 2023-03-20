@@ -381,7 +381,7 @@ mod tests {
 
     #[test_with_logger]
     fn basic_happy_flow(logger: Logger) {
-        let test_context = setup(logger.clone());
+        let test_context = setup(logger);
         test_suite::basic_happy_flow(
             &test_context.synchronized_quote_book,
             Some(&test_context.ledger),
@@ -398,14 +398,14 @@ mod tests {
 
     #[test_with_logger]
     fn cannot_add_invalid_sci(logger: Logger) {
-        let test_context = setup(logger.clone());
+        let test_context = setup(logger);
         let synchronized_quote_book = test_context.synchronized_quote_book;
         test_suite::cannot_add_invalid_sci(&synchronized_quote_book, Some(&test_context.ledger));
     }
 
     #[test_with_logger]
     fn get_quotes_filtering_works(logger: Logger) {
-        let test_context = setup(logger.clone());
+        let test_context = setup(logger);
         let synchronized_quote_book = test_context.synchronized_quote_book;
         test_suite::get_quotes_filtering_works(
             &synchronized_quote_book,
@@ -415,21 +415,21 @@ mod tests {
 
     #[test_with_logger]
     fn get_quote_ids_works(logger: Logger) {
-        let test_context = setup(logger.clone());
+        let test_context = setup(logger);
         let synchronized_quote_book = test_context.synchronized_quote_book;
         test_suite::get_quote_ids_works(&synchronized_quote_book, Some(&test_context.ledger));
     }
 
     #[test_with_logger]
     fn get_quote_by_id_works(logger: Logger) {
-        let test_context = setup(logger.clone());
+        let test_context = setup(logger);
         let synchronized_quote_book = test_context.synchronized_quote_book;
         test_suite::get_quote_by_id_works(&synchronized_quote_book, Some(&test_context.ledger));
     }
 
     #[test_with_logger]
     fn cannot_add_sci_with_key_image_in_ledger(logger: Logger) {
-        let test_context = setup(logger.clone());
+        let test_context = setup(logger);
         let mut ledger = test_context.ledger.clone();
         let synchronized_quote_book = test_context.synchronized_quote_book;
 
@@ -481,7 +481,7 @@ mod tests {
 
     #[test_with_logger]
     fn sci_that_are_added_to_ledger_are_removed_in_the_background(logger: Logger) {
-        let test_context = setup(logger.clone());
+        let test_context = setup(logger);
         let mut ledger = test_context.ledger.clone();
         let synchronized_quote_book = test_context.synchronized_quote_book;
 
@@ -545,7 +545,7 @@ mod tests {
     fn cannot_add_sci_past_tombstone_block(logger: Logger) {
         let pair = test_suite::pair();
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let test_context = setup(logger.clone());
+        let test_context = setup(logger);
         let ledger = test_context.ledger.clone();
         let synchronized_quote_book = test_context.synchronized_quote_book;
 
@@ -601,7 +601,7 @@ mod tests {
     fn sci_past_tombstone_block_get_removed_in_the_background(logger: Logger) {
         let pair = test_suite::pair();
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let test_context = setup(logger.clone());
+        let test_context = setup(logger);
         let mut ledger = test_context.ledger.clone();
         let starting_blocks = test_context.ledger.num_blocks().unwrap();
         let synchronized_quote_book = test_context.synchronized_quote_book;
@@ -664,7 +664,7 @@ mod tests {
     fn sci_with_invalid_ring_is_rejected(logger: Logger) {
         let pair = test_suite::pair();
         let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
-        let test_context = setup(logger.clone());
+        let test_context = setup(logger);
         let ledger = test_context.ledger.clone();
         let starting_blocks = test_context.ledger.num_blocks().unwrap();
         let synchronized_quote_book = test_context.synchronized_quote_book;
