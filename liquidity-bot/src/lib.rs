@@ -44,7 +44,7 @@ use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
-    time::{Duration, Instant},
+    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 use tokio::{
     sync::{mpsc, oneshot},
@@ -77,8 +77,10 @@ pub struct ListedTxOut {
     /// The quote we got from the DEQS.
     quote: Quote,
 
-    /// Last time we tried to submit this TxOut to the DEQS
-    last_submitted_at: Instant,
+    /// Last time we tried to submit this TxOut to the DEQS.
+    /// This is represented as milliseconds since Epoch to make it compatible
+    /// with with Protobufs.
+    last_submitted_at: u64,
 }
 
 /// Statistics about the liquidity bot's current state.
@@ -509,7 +511,7 @@ impl LiquidityBotTask {
                     let listed_tx_out = ListedTxOut {
                         matched_tx_out: pending_tx_out.matched_tx_out,
                         quote,
-                        last_submitted_at: Instant::now(),
+                        last_submitted_at: now_since_epoch(),
                     };
                     self.listed_tx_outs.push(listed_tx_out);
                 }
@@ -540,11 +542,16 @@ impl LiquidityBotTask {
     async fn resubmit_listed_tx_outs(&mut self, older_than: Duration) -> Result<(), Error> {
         // Split our listed list into two: those that we want to try and resubmit and
         // those that have been resubmitted recently enough.
+        let current_time = now_since_epoch();
+
         let (to_resubmit, to_keep) =
             self.listed_tx_outs
                 .drain(..)
                 .partition::<Vec<_>, _>(|listed_tx_out| {
-                    listed_tx_out.last_submitted_at.elapsed() > older_than
+                    current_time
+                        .checked_sub(listed_tx_out.last_submitted_at)
+                        .unwrap_or_default()
+                        > older_than.as_millis() as u64
                 });
         self.listed_tx_outs = to_keep;
 
@@ -598,7 +605,7 @@ impl LiquidityBotTask {
                         quote.id(),
                     );
                     listed_tx_out.quote = quote.clone();
-                    listed_tx_out.last_submitted_at = Instant::now();
+                    listed_tx_out.last_submitted_at = now_since_epoch();
                     self.listed_tx_outs.push(listed_tx_out);
                 }
 
@@ -624,7 +631,7 @@ impl LiquidityBotTask {
                         listed_tx_out.quote = quote;
                     }
 
-                    listed_tx_out.last_submitted_at = Instant::now();
+                    listed_tx_out.last_submitted_at = now_since_epoch();
                     self.listed_tx_outs.push(listed_tx_out);
                 }
 
@@ -885,6 +892,13 @@ fn sanity_check_submit_quotes_response(
     }
 
     Ok(())
+}
+
+fn now_since_epoch() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("System time is before UNIX_EPOCH")
+        .as_millis() as u64
 }
 
 #[cfg(test)]
@@ -1204,7 +1218,7 @@ mod tests {
                 ListedTxOut {
                     matched_tx_out: mtxo.clone(),
                     quote,
-                    last_submitted_at: Instant::now(),
+                    last_submitted_at: now_since_epoch(),
                 }
             })
             .collect();
@@ -1235,7 +1249,7 @@ mod tests {
                 ListedTxOut {
                     matched_tx_out: ptxo.matched_tx_out.clone(),
                     quote,
-                    last_submitted_at: Instant::now(),
+                    last_submitted_at: now_since_epoch(),
                 }
             })
             .collect();
@@ -1256,7 +1270,8 @@ mod tests {
         // The order changes because resubmit_listed_tx_outs() first splits
         // the listed_tx_outs list into two parts: the ones that are older than the
         // resubmit threshold, and the ones that are not.
-        test_ctx.task.listed_tx_outs[0].last_submitted_at -= Duration::from_secs(20);
+        test_ctx.task.listed_tx_outs[0].last_submitted_at -=
+            Duration::from_secs(20).as_millis() as u64;
         let orig_listed_tx_outs = test_ctx.task.listed_tx_outs.clone();
         assert_matches!(
             test_ctx
@@ -1319,7 +1334,7 @@ mod tests {
         };
         test_ctx.deqs_server.set_submit_quotes_response(Ok(resp));
 
-        let now = Instant::now();
+        let now = now_since_epoch();
         test_ctx
             .task
             .resubmit_listed_tx_outs(Duration::from_secs(10))
@@ -1342,8 +1357,9 @@ mod tests {
         };
         test_ctx.deqs_server.set_submit_quotes_response(Ok(resp));
 
-        test_ctx.task.listed_tx_outs[0].last_submitted_at -= Duration::from_secs(20);
-        let now = Instant::now();
+        test_ctx.task.listed_tx_outs[0].last_submitted_at -=
+            Duration::from_secs(20).as_millis() as u64;
+        let now = now_since_epoch();
         test_ctx
             .task
             .resubmit_listed_tx_outs(Duration::from_secs(10))
@@ -1363,7 +1379,8 @@ mod tests {
         };
         test_ctx.deqs_server.set_submit_quotes_response(Ok(resp));
 
-        test_ctx.task.listed_tx_outs[0].last_submitted_at -= Duration::from_secs(20);
+        test_ctx.task.listed_tx_outs[0].last_submitted_at -=
+            Duration::from_secs(20).as_millis() as u64;
         test_ctx
             .task
             .resubmit_listed_tx_outs(Duration::from_secs(10))
