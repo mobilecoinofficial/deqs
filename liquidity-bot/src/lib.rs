@@ -1415,7 +1415,7 @@ mod tests {
 
         let quote = Quote::new(test_ctx.task.pending_tx_outs[0].sci.clone(), None).unwrap();
         let resp = SubmitQuotesResponse {
-            status_codes: vec![QuoteStatusCode::CREATED].into(),
+            status_codes: vec![QuoteStatusCode::CREATED],
             quotes: vec![grpc_api::Quote::from(&quote)].into(),
             error_messages: vec!["".to_string()].into(),
             ..Default::default()
@@ -1478,7 +1478,7 @@ mod tests {
 
             let input_credentials = get_input_credentials(
                 BlockVersion::MAX,
-                Amount::new((mob_amount_to_consume / 2) as u64, TokenId::from(1)),
+                Amount::new(mob_amount_to_consume / 2, TokenId::from(1)),
                 &counterparty,
                 &fog_resolver,
                 &mut test_ctx.rng,
