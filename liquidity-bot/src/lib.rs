@@ -537,7 +537,7 @@ impl LiquidityBot {
             deqs_client,
             shutdown_rx,
             shutdown_ack_tx: Some(shutdown_ack_tx),
-            logger: logger.clone(),
+            logger,
         };
         tokio::spawn(task.run());
         Self {
@@ -638,7 +638,7 @@ mod tests {
             let (shutdown_ack_tx, _shutdown_ack_rx) = mpsc::unbounded_channel();
 
             let pairs = pairs
-                .into_iter()
+                .iter()
                 .map(|(base_token, counter_token, rate)| (*base_token, (*counter_token, *rate)))
                 .collect();
 
@@ -666,7 +666,7 @@ mod tests {
 
         pub fn create_matched_tx_out(&mut self, amount: Amount) -> MatchedTxOut {
             let recipient = self.account_key.default_subaddress();
-            let recipient_and_amount = vec![(recipient.clone(), amount)];
+            let recipient_and_amount = vec![(recipient, amount)];
             let outputs = get_outputs(BlockVersion::MAX, &recipient_and_amount, &mut self.rng);
 
             let block_data = add_txos_and_key_images_to_ledger(
@@ -794,8 +794,7 @@ mod tests {
             status_codes: vec![
                 QuoteStatusCode::QUOTE_IS_STALE,
                 QuoteStatusCode::INVALID_SCI,
-            ]
-            .into(),
+            ],
             quotes: vec![grpc_api::Quote::default(), grpc_api::Quote::default()].into(),
             error_messages: vec!["".to_string(), "".to_string()].into(),
             ..Default::default()
@@ -824,8 +823,7 @@ mod tests {
             status_codes: vec![
                 QuoteStatusCode::CREATED,
                 QuoteStatusCode::QUOTE_ALREADY_EXISTS,
-            ]
-            .into(),
+            ],
             quotes: vec![
                 grpc_api::Quote::from(&quote1),
                 grpc_api::Quote::from(&quote2),
@@ -914,7 +912,7 @@ mod tests {
         // quote.  In this case the last_submitted_at value should update, but
         // everything else should stay the same.
         let resp = SubmitQuotesResponse {
-            status_codes: vec![QuoteStatusCode::QUOTE_ALREADY_EXISTS].into(),
+            status_codes: vec![QuoteStatusCode::QUOTE_ALREADY_EXISTS],
             quotes: vec![grpc_api::Quote::from(
                 &test_ctx.task.listed_tx_outs[0].quote,
             )]
@@ -949,7 +947,7 @@ mod tests {
         let quote = Quote::new(ptxo.sci, None).unwrap();
 
         let resp = SubmitQuotesResponse {
-            status_codes: vec![QuoteStatusCode::QUOTE_ALREADY_EXISTS].into(),
+            status_codes: vec![QuoteStatusCode::QUOTE_ALREADY_EXISTS],
             quotes: vec![grpc_api::Quote::from(&quote)].into(),
             error_messages: vec!["".to_string()].into(),
             ..Default::default()
@@ -969,7 +967,7 @@ mod tests {
 
         // Test that a CREATED response behaves correctly
         let resp = SubmitQuotesResponse {
-            status_codes: vec![QuoteStatusCode::CREATED].into(),
+            status_codes: vec![QuoteStatusCode::CREATED],
             quotes: vec![grpc_api::Quote::from(
                 &test_ctx.task.listed_tx_outs[0].quote,
             )]
@@ -993,7 +991,7 @@ mod tests {
 
         // When a quote is stale, we remove it from the list.
         let resp = SubmitQuotesResponse {
-            status_codes: vec![QuoteStatusCode::QUOTE_IS_STALE].into(),
+            status_codes: vec![QuoteStatusCode::QUOTE_IS_STALE],
             quotes: vec![grpc_api::Quote::default()].into(),
             error_messages: vec!["".to_string()].into(),
             ..Default::default()
@@ -1018,7 +1016,7 @@ mod tests {
         let mtxo = test_ctx.create_matched_tx_out(Amount::new(100, token_id));
         assert_matches!(
             test_ctx.task.create_pending_tx_out(mtxo),
-            Err(Error::UnknownTokenId(token_id)) if token_id == token_id
+            Err(Error::UnknownTokenId(err_token_id)) if err_token_id == token_id
         );
     }
 

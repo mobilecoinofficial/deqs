@@ -93,7 +93,7 @@ async fn test_basic_submission(logger: Logger) {
     // re-submit.
     let resp = SubmitQuotesResponse {
         quotes: vec![Quote::default()].into(),
-        status_codes: vec![QuoteStatusCode::QUOTE_IS_STALE].into(),
+        status_codes: vec![QuoteStatusCode::QUOTE_IS_STALE],
         error_messages: vec!["".into()].into(),
         ..Default::default()
     };
