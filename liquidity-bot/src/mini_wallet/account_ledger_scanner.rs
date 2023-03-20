@@ -91,10 +91,7 @@ impl AccountLedgerScanner {
         ]
         .iter()
         {
-            spsk_to_index.insert(
-                *account_key.subaddress(*idx).spend_public_key(),
-                *idx,
-            );
+            spsk_to_index.insert(*account_key.subaddress(*idx).spend_public_key(), *idx);
         }
         spsk_to_index
     }
