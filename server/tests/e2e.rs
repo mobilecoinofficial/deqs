@@ -175,7 +175,7 @@ async fn e2e_two_nodes_quote_propagation(logger: Logger) {
         match quote {
             Ok(Some(quote)) => Ok(quote),
             Ok(None) => Err("not yet".to_string()),
-            Err(e) => Err(format!("error: {:?}", e)),
+            Err(e) => Err(format!("error: {e:?}")),
         }
     })
     .await
@@ -250,7 +250,7 @@ async fn e2e_two_nodes_dust_propagation(logger: Logger) {
         match quote {
             Ok(Some(quote)) => Ok(quote),
             Ok(None) => Err("not yet".to_string()),
-            Err(e) => Err(format!("error: {:?}", e)),
+            Err(e) => Err(format!("error: {e:?}")),
         }
     })
     .await
@@ -297,7 +297,7 @@ async fn e2e_two_nodes_quote_propagation_and_removal(logger: Logger) {
         match quote {
             Ok(Some(quote)) => Ok(quote),
             Ok(None) => Err("not yet".to_string()),
-            Err(e) => Err(format!("error: {:?}", e)),
+            Err(e) => Err(format!("error: {e:?}")),
         }
     })
     .await
@@ -345,7 +345,7 @@ async fn e2e_two_nodes_quote_propagation_and_removal(logger: Logger) {
         match quote {
             Ok(Some(_quote)) => Err("not yet".to_string()),
             Ok(None) => Ok(()),
-            Err(e) => Err(format!("error: {:?}", e)),
+            Err(e) => Err(format!("error: {e:?}")),
         }
     })
     .await
@@ -358,7 +358,7 @@ async fn e2e_two_nodes_quote_propagation_and_removal(logger: Logger) {
         match quote {
             Ok(Some(_quote)) => Err("not yet".to_string()),
             Ok(None) => Ok(()),
-            Err(e) => Err(format!("error: {:?}", e)),
+            Err(e) => Err(format!("error: {e:?}")),
         }
     })
     .await
@@ -513,7 +513,7 @@ async fn e2e_multiple_nodes_play_nicely(logger: Logger) {
             match quote {
                 Ok(Some(quote)) => Ok(quote),
                 Ok(None) => Err("not yet".to_string()),
-                Err(e) => Err(format!("error: {:?}", e)),
+                Err(e) => Err(format!("error: {e:?}")),
             }
         })
         .await
