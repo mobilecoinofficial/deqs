@@ -1,11 +1,11 @@
 // Copyright (c) 2023 MobileCoin Inc.
 
 use clap::Parser;
-use deqs_liquidity_bot::{mini_wallet::MiniWallet, Config};
-use mc_common::logger::o;
+use deqs_liquidity_bot::{mini_wallet::MiniWallet, Config, LiquidityBot};
+use mc_common::logger::{log, o};
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 use tokio::sync::mpsc;
 
 #[tokio::main]
@@ -43,22 +43,50 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     });
 
     // Start our mini wallet scanner thingie.
-    let (wallet_tx, wallet_rx) = mpsc::unbounded_channel();
+    let (wallet_tx, mut wallet_rx) = mpsc::unbounded_channel();
     let _wallet = MiniWallet::new(
         &config.wallet_db,
-        ledger_db,
-        account_key,
+        ledger_db.clone(),
+        account_key.clone(),
         config.first_block_index,
         Arc::new(move |event| {
             wallet_tx
                 .send(event)
                 .expect("Could not send event to wallet");
         }),
-        logger,
+        logger.clone(),
     )
     .expect("Could not create MiniWallet");
 
-    drop(wallet_rx); // This gets used in a followup PR
+    // Start the liquidity bot.
+    let pairs = HashMap::from_iter([(
+        config.base_token_id,
+        (config.counter_token_id, config.swap_rate),
+    )]);
+    let liquidity_bot =
+        LiquidityBot::new(account_key, ledger_db, pairs, &config.deqs, logger.clone());
 
-    todo!("bot implementation is in a followup pr");
+    loop {
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {
+                log::info!(logger, "Ctrl-C received, exiting");
+                break;
+            }
+
+            event = wallet_rx.recv() => {
+                match event {
+                    Some(event) => {
+                        log::trace!(logger, "Wallet event: {:?}", event);
+                        liquidity_bot.notify_wallet_event(event);
+                    }
+                   None => {
+                        log::info!(logger, "Wallet event channel closed");
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
