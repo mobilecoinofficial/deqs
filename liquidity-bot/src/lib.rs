@@ -4,12 +4,6 @@
 
 // TODO:
 //
-// - The bot loses all state when it dies, and the wallet will not re-feed it
-//   TxOuts (because the wallet does keep track of which block it last scanned).
-//   Even if it did re-feed it, we wouldn't know which ones were already
-//   previously submitted to the DEQS. As such, we will need to persist the
-//   bot's state
-//
 // - It could be nice for the bot to try and figure out if its orders got
 //   fulfilled. It can do that by looking at spent key images in a given
 //   processed block. If it sees a key image for one of its SCIs, it can look
@@ -189,11 +183,38 @@ impl LiquidityBotTask {
         let mut added = false;
 
         for matched_tx_out in matched_tx_outs.iter().cloned() {
-            if self.pairs.contains_key(&matched_tx_out.amount.token_id) {
-                let tracked_tx_out = self.create_pending_tx_out(matched_tx_out)?;
-                self.pending_tx_outs.push(tracked_tx_out);
-                added = true;
+            // Check if this is a TxOut for a token we are capable of calculating a swap
+            // rate for.
+            if !self.pairs.contains_key(&matched_tx_out.amount.token_id) {
+                continue;
             }
+
+            // See if we already have this TxOut in our lists. We want to do this
+            // check since its possible we will encounter the same TxOut twice
+            // when the bot starts up due to a race between when the ledger
+            // scanner starts scanning the blockchain and when we grab the list of currently
+            // matched TxOuts in the ledger.
+            // We compare by key image since its faster than comparing the whole
+            // MatchedTxOut and it uniquely identifies a TxOut.
+            if self
+                .pending_tx_outs
+                .iter()
+                .any(|ptxo| ptxo.matched_tx_out.key_image == matched_tx_out.key_image)
+            {
+                continue;
+            }
+
+            if self
+                .listed_tx_outs
+                .iter()
+                .any(|ltxo| ltxo.matched_tx_out.key_image == matched_tx_out.key_image)
+            {
+                continue;
+            }
+
+            let tracked_tx_out = self.create_pending_tx_out(matched_tx_out)?;
+            self.pending_tx_outs.push(tracked_tx_out);
+            added = true;
         }
 
         Ok(added)
@@ -850,6 +871,71 @@ mod tests {
             matched_tx_outs[1]
         );
         assert_eq!(test_ctx.task.listed_tx_outs[1].quote, quote2);
+    }
+
+    #[async_test_with_logger]
+    async fn update_pending_tx_outs_from_received_tx_outs_ignores_duplicates(logger: Logger) {
+        let mut test_ctx = TestContext::new(&default_pairs(), &logger);
+
+        // Note that while they have the same value, they are different TxOuts so not
+        // considered duplicates.
+        let matched_tx_outs = vec![
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB)),
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB)),
+        ];
+
+        assert!(test_ctx
+            .task
+            .update_pending_tx_outs_from_received_tx_outs(&matched_tx_outs)
+            .unwrap());
+
+        assert_eq!(test_ctx.task.pending_tx_outs.len(), 2);
+
+        // Trying to add again should return false and nothing should change.
+        let orig_pending_tx_outs = test_ctx.task.pending_tx_outs.clone();
+        assert!(!test_ctx
+            .task
+            .update_pending_tx_outs_from_received_tx_outs(&matched_tx_outs)
+            .unwrap());
+        assert_eq!(orig_pending_tx_outs, test_ctx.task.pending_tx_outs);
+
+        // Adding a new ones should work.
+        let matched_tx_outs = vec![
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB)),
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB)),
+        ];
+        assert!(test_ctx
+            .task
+            .update_pending_tx_outs_from_received_tx_outs(&matched_tx_outs)
+            .unwrap());
+
+        assert_eq!(test_ctx.task.pending_tx_outs.len(), 4);
+
+        // We also ignore duplicates in the listed_tx_outs list.
+        let matched_tx_outs = vec![
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB)),
+            test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB)),
+        ];
+
+        test_ctx.task.listed_tx_outs = matched_tx_outs
+            .iter()
+            .map(|mtxo| {
+                let ptxo = test_ctx.task.create_pending_tx_out(mtxo.clone()).unwrap();
+                let quote = Quote::new(ptxo.sci, None).unwrap();
+                ListedTxOut {
+                    matched_tx_out: mtxo.clone(),
+                    quote,
+                    last_submitted_at: Instant::now(),
+                }
+            })
+            .collect();
+
+        let orig_pending_tx_outs = test_ctx.task.pending_tx_outs.clone();
+        assert!(!test_ctx
+            .task
+            .update_pending_tx_outs_from_received_tx_outs(&matched_tx_outs)
+            .unwrap());
+        assert_eq!(orig_pending_tx_outs, test_ctx.task.pending_tx_outs);
     }
 
     #[async_test_with_logger]
