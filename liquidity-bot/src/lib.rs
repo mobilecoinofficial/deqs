@@ -323,7 +323,7 @@ impl LiquidityBotTask {
             if num_partial_fill_outputs != 1 {
                 // At the moment, `create_pending_tx_out`, which generates the SCI, always
                 // creates SCIs with a single partial fill output.
-                log::warn!(self.logger, "Somehow ended with a listed TxOut {} without an exactly one partial fill output.", listed_tx_out.matched_tx_out.tx_out.public_key);
+                log::warn!(self.logger, "Somehow ended up with a spent listed TxOut {} without exactly one partial fill output.", listed_tx_out.matched_tx_out.tx_out.public_key);
                 continue;
             }
 
