@@ -336,7 +336,7 @@ impl LiquidityBotTask {
                 .find(|mtxo| mtxo.tx_out.public_key == partial_fill_output.tx_out.public_key);
 
             // There might be a change output holding whatever wasn't consumed from the
-            // input the SCI was offering.
+            // input the SCI was offering. This will happen for partial SCIs.
             let received_base_change_output = listed_tx_out
                 .quote
                 .sci()
