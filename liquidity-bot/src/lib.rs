@@ -233,8 +233,10 @@ impl LiquidityBotTask {
                 event = self.command_rx.recv() => {
                     match event {
                         Some(Command::WalletEvent(WalletEvent::BlockProcessed { received_tx_outs, spent_tx_outs, .. })) => {
-                            // Look at spent TxOuts and see if they match any SCIs we submitted
-                            match self.look_for_fulfilled_scis(&spent_tx_outs, &received_tx_outs) {
+                            // Look at spent TxOuts and see if they match any SCIs we submitted.
+                            let spent_listed_tx_outs = self.unlist_spent_tx_outs(&spent_tx_outs);
+
+                            match self.look_for_fulfilled_scis(&spent_listed_tx_outs, &received_tx_outs) {
                                 Ok(fulfilled_scis) => {
                                     for fulfilled_sci in fulfilled_scis {
                                         metrics::PER_TOKEN_METRICS.update_metrics_from_fulfilled_sci(&fulfilled_sci);
@@ -307,25 +309,27 @@ impl LiquidityBotTask {
     }
 
     /// Go over the list of spent TxOuts and see if any of them match any of the
-    /// listed ones, If so, use the received TxOuts to see if the SCI was
-    /// consumed or cancelled.
+    /// listed ones, returning the removed listed TxOuts.
+    fn unlist_spent_tx_outs(&mut self, spent_tx_outs: &[MatchedTxOut]) -> Vec<ListedTxOut> {
+        spent_tx_outs
+            .iter()
+            .filter_map(|mtxo| {
+                let listed_txo_idx = self
+                    .listed_tx_outs
+                    .iter()
+                    .position(|ltxo| ltxo.matched_tx_out.key_image == mtxo.key_image);
+                listed_txo_idx.map(|idx| self.listed_tx_outs.remove(idx))
+            })
+            .collect()
+    }
+
+    /// Go over a list of spent ListedTxOuts and see if they were fulfilled or
+    /// cancelled.
     fn look_for_fulfilled_scis(
         &mut self,
-        spent_tx_outs: &[MatchedTxOut],
+        spent_listed_tx_outs: &[ListedTxOut],
         received_tx_outs: &[MatchedTxOut],
     ) -> Result<Vec<FulfilledSci>, Error> {
-        // Go over the spent_tx_outs and try to match them against listed_tx_outs.
-        // If we find a match, remove the listed tx out and return it. We can then
-        // go over this list and try to match the listed tx outs against the received
-        // ones, and that way we can see if our SCI got consumed or cancelled.
-        let spent_listed_tx_outs = spent_tx_outs.iter().filter_map(|mtxo| {
-            let listed_txo_idx = self
-                .listed_tx_outs
-                .iter()
-                .position(|ltxo| ltxo.matched_tx_out.key_image == mtxo.key_image);
-            listed_txo_idx.map(|idx| self.listed_tx_outs.remove(idx))
-        });
-
         let mut fulfilled_scis = Vec::new();
 
         for listed_tx_out in spent_listed_tx_outs {
@@ -383,7 +387,7 @@ impl LiquidityBotTask {
                 Some(received_counter_output) => {
                     let fulfilled_sci = FulfilledSci {
                         requested_counter_output: partial_fill_output.clone(),
-                        listed_tx_out,
+                        listed_tx_out: listed_tx_out.clone(),
                         received_counter_output,
                         received_base_change_output,
                     };
@@ -1473,7 +1477,7 @@ mod tests {
     }
 
     #[async_test_with_logger]
-    async fn look_for_fulfilled_scis_identifies_consumed_scis(logger: Logger) {
+    async fn unlist_spend_tx_outs_behaves_correctly(logger: Logger) {
         let mut test_ctx = TestContext::new(&default_pairs(), &logger);
 
         // The bot is going to generate an SCI that offers MOB in exchange for eUSD.
@@ -1507,43 +1511,67 @@ mod tests {
         // anything.
         let orig_listed_tx_outs = test_ctx.task.listed_tx_outs.clone();
         let mtxo2 = test_ctx.create_matched_tx_out(Amount::new(100, TokenId::MOB));
-        assert_eq!(
-            test_ctx
-                .task
-                .look_for_fulfilled_scis(&[mtxo2], &[])
-                .unwrap(),
-            vec![]
-        );
+        assert_eq!(test_ctx.task.unlist_spent_tx_outs(&[mtxo2]), vec![]);
         assert_eq!(test_ctx.task.listed_tx_outs, orig_listed_tx_outs);
 
-        // Try again, but this time with the tx out the bot is tracking. Since no tx
-        // outs were received in this block, it will assume the SCI got cancelled.
+        // Try again, but this time with the tx out the bot is tracking.
         assert_eq!(
-            test_ctx
-                .task
-                .look_for_fulfilled_scis(&[mtxo.clone()], &[])
-                .unwrap(),
-            vec![]
+            test_ctx.task.unlist_spent_tx_outs(&[mtxo.clone()]),
+            orig_listed_tx_outs,
         );
         // The listed tx out gets removed since it was spent
         assert_eq!(test_ctx.task.listed_tx_outs, vec![]);
+    }
 
-        // Try again with a real tx that consumes the SCI.
-        test_ctx.task.listed_tx_outs = orig_listed_tx_outs.clone();
+    #[async_test_with_logger]
+    async fn look_for_fulfilled_scis_identifies_consumed_scis(logger: Logger) {
+        let mut test_ctx = TestContext::new(&default_pairs(), &logger);
+
+        // The bot is going to generate an SCI that offers MOB in exchange for eUSD.
+        let mob_value_offered = 1000 * MILLIMOB_TO_PICOMOB;
+        let mtxo = test_ctx.create_matched_tx_out(Amount::new(mob_value_offered, TokenId::MOB));
+
+        // Get the bot to generate an SCI for the MatchedTxOut and put it in
+        // listed_tx_outs.
+        assert!(test_ctx
+            .task
+            .update_pending_tx_outs_from_received_tx_outs(&[mtxo.clone()])
+            .unwrap());
+
+        let quote = Quote::new(test_ctx.task.pending_tx_outs[0].sci.clone(), None).unwrap();
+        let resp = SubmitQuotesResponse {
+            status_codes: vec![QuoteStatusCode::CREATED],
+            quotes: vec![grpc_api::Quote::from(&quote)].into(),
+            error_messages: vec!["".to_string()].into(),
+            ..Default::default()
+        };
+        test_ctx.deqs_server.set_submit_quotes_response(Ok(resp));
+
+        test_ctx.task.submit_pending_tx_outs().await.unwrap();
+        assert!(test_ctx.task.pending_tx_outs.is_empty());
+
+        assert_eq!(test_ctx.task.listed_tx_outs.len(), 1);
+        assert_eq!(test_ctx.task.listed_tx_outs[0].matched_tx_out, mtxo);
+
+        let listed_tx_out = test_ctx.task.listed_tx_outs[0].clone();
+
+        // Try to look for fulfilled SCIs with no tx outs received, which should make
+        // the bot think it was cancelled (so it will not be returned in the
+        // fulfilled list).
         assert_eq!(
             test_ctx
                 .task
-                .look_for_fulfilled_scis(&[mtxo.clone()], &[])
+                .look_for_fulfilled_scis(&[listed_tx_out.clone()], &[])
                 .unwrap(),
             vec![]
         );
-        assert_eq!(test_ctx.task.listed_tx_outs, vec![]);
 
+        // Try again with a real tx that consumes the SCI.
         // Create a transaction that consumes a quarter of the SCI sending half of that
         // in eUSD (the sci's ratio is 1 mob = 0.5 eusd)
         // To keep things a bit simpler, we use a fee value of 0
         let tx = {
-            let mut sci = orig_listed_tx_outs[0].quote.sci().clone();
+            let mut sci = listed_tx_out.quote.sci().clone();
 
             let fog_resolver = MockFogResolver(Default::default());
             let counterparty = AccountKey::random(&mut test_ctx.rng);
@@ -1611,16 +1639,14 @@ mod tests {
             .collect::<Vec<_>>();
 
         // Feed this whole mess to look_for_fulfilled_scis
-        test_ctx.task.listed_tx_outs = orig_listed_tx_outs.clone();
         let fulfilled_scis = test_ctx
             .task
-            .look_for_fulfilled_scis(&[mtxo.clone()], &matched_tx_outs)
+            .look_for_fulfilled_scis(&[listed_tx_out.clone()], &matched_tx_outs)
             .unwrap();
-        assert_eq!(test_ctx.task.listed_tx_outs, vec![]);
 
         assert_eq!(fulfilled_scis.len(), 1);
         let fulfilled_sci = &fulfilled_scis[0];
-        assert_eq!(fulfilled_sci.listed_tx_out, orig_listed_tx_outs[0]);
+        assert_eq!(fulfilled_sci.listed_tx_out, listed_tx_out);
         assert_eq!(
             fulfilled_sci.received_counter_output.amount,
             Amount::new(
