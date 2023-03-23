@@ -351,6 +351,14 @@ impl LiquidityBotTask {
                 })
                 .cloned();
 
+            if received_base_change_output.is_none() {
+                log::warn!(
+                    self.logger,
+                    "Somehow ended up with a spent listed TxOut {} without a change output.",
+                    listed_tx_out.matched_tx_out.tx_out.public_key
+                );
+            }
+
             match received_counter_output.cloned() {
                 Some(received_counter_output) => {
                     let fulfilled_sci = FulfilledSci {
