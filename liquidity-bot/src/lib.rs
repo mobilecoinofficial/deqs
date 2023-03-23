@@ -150,7 +150,7 @@ pub struct FulfilledSci {
     /// being consumed.
     requested_counter_output: RevealedTxOut,
 
-    /// The partial fill output we received by the counterparty.
+    /// The partial fill output we received from the counterparty.
     received_counter_output: MatchedTxOut,
 
     /// Received base token change output
