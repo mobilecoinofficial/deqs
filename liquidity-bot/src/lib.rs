@@ -244,7 +244,12 @@ impl LiquidityBotTask {
                                 }
 
                                 Err(err) => {
-                                    log::error!(self.logger, "Error looking at spent TxOuts: {}", err);
+                                    log::error!(
+                                        self.logger,
+                                        "Error looking at spent TxOuts: {} (spent listed scis pubkeys: {:?})",
+                                        err,
+                                        spent_listed_tx_outs.iter().map(|ltxo| ltxo.matched_tx_out.tx_out.public_key).collect::<Vec<_>>(),
+                                    );
                                 }
                             }
 
