@@ -81,6 +81,13 @@ impl<OB: QuoteBook> ClientService<OB> {
         // Capture timestamp before we do anything, this both ensures quotes are created
         // with the time we actually began processing the request, and that all quotes
         // are created with the same time so ordering is determinstic.
+        if req.get_quotes().len() >= MAX_SIMULTANEOUS_QUOTES {
+            return Err(rpc_invalid_arg_error(
+                "Too many quotes",
+                QuoteBookError::ImplementationSpecific("Too many quotes in one request".to_owned()),
+                logger,
+            ));
+        }
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|err| rpc_internal_error("submit_quotes", err, logger))?
@@ -245,19 +252,7 @@ impl<OB: QuoteBook> DeqsClientApi for ClientService<OB> {
     ) {
         let _timer = SVC_COUNTERS.req(&ctx);
         scoped_global_logger(&rpc_logger(&ctx, &self.logger), |logger| {
-            let result: Result<SubmitQuotesResponse, RpcStatus> =
-                if req.quotes.len() >= MAX_SIMULTANEOUS_QUOTES {
-                    Err(rpc_invalid_arg_error(
-                        "Too many quotes",
-                        QuoteBookError::ImplementationSpecific(
-                            "Too many quotes in one request".to_owned(),
-                        ),
-                        logger,
-                    ))
-                } else {
-                    self.submit_quotes_impl(req, logger)
-                };
-            send_result(ctx, sink, result, logger)
+            send_result(ctx, sink, self.submit_quotes_impl(req, logger), logger)
         })
     }
 
