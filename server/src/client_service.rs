@@ -25,6 +25,9 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+/// Maximum number of quotes to take at once.
+const MAX_SIMULTANEOUS_QUOTES: usize = 30;
+
 /// A function for validating that scis should be accepted by the server. It
 /// returns Ok if it is valid, and otherwise returns an error. It receives
 /// 1 argument:
@@ -78,6 +81,13 @@ impl<OB: QuoteBook> ClientService<OB> {
         // Capture timestamp before we do anything, this both ensures quotes are created
         // with the time we actually began processing the request, and that all quotes
         // are created with the same time so ordering is determinstic.
+        if req.get_quotes().len() >= MAX_SIMULTANEOUS_QUOTES {
+            return Err(rpc_invalid_arg_error(
+                "Too many quotes",
+                QuoteBookError::ImplementationSpecific("Too many quotes in one request".to_owned()),
+                logger,
+            ));
+        }
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
             .map_err(|err| rpc_internal_error("submit_quotes", err, logger))?
@@ -453,6 +463,88 @@ mod tests {
         quotes2.sort();
 
         assert_eq!(quotes2, quotes);
+    }
+
+    #[test_with_logger]
+    fn submit_quotes_rejects_quotes_above_max_simultaneous_quotes(logger: Logger) {
+        let pair = Pair {
+            base_token_id: TokenId::from(1),
+            counter_token_id: TokenId::from(2),
+        };
+        let mut rng: StdRng = SeedableRng::from_seed([1u8; 32]);
+        let quote_book = InMemoryQuoteBook::default();
+        let (client_api, _server, _msg_bus_tx, _msg_bus_rx) =
+            create_test_client_and_server(&quote_book, &logger);
+
+        // Submitting SCIs under MAX_SIMULTANEOUS_QUOTES should be successful
+        let scis = (0..MAX_SIMULTANEOUS_QUOTES - 1)
+            .map(|_| {
+                create_sci(
+                    pair.base_token_id,
+                    pair.counter_token_id,
+                    10,
+                    20,
+                    &mut rng,
+                    None,
+                )
+            })
+            .map(|sci| mc_api::external::SignedContingentInput::from(&sci))
+            .collect::<Vec<_>>();
+
+        let req = SubmitQuotesRequest {
+            quotes: scis.clone().into(),
+            ..Default::default()
+        };
+        let resp = client_api.submit_quotes(&req).expect("submit quote failed");
+
+        assert_eq!(
+            resp.get_status_codes(),
+            vec![QuoteStatusCode::CREATED; scis.len()]
+        );
+
+        assert_eq!(resp.get_error_messages(), vec![""; scis.len()]);
+        let mut quotes = resp
+            .get_quotes()
+            .iter()
+            .map(|o| Quote::try_from(o).unwrap())
+            .collect::<Vec<_>>();
+
+        let mut quotes2 = quote_book
+            .get_quotes(&pair, .., 0)
+            .unwrap()
+            .into_iter()
+            .rev() // Quotes returned in newest to oldest quote
+            .collect::<Vec<_>>();
+
+        // Since quotes are added in parallel, the exact quote at which they get added
+        // is not determinstic.
+        quotes.sort();
+        quotes2.sort();
+
+        assert_eq!(quotes2, quotes);
+
+        // Submitting SCIs above MAX_SIMULTANEOUS_QUOTES should fail
+        let too_many_scis_at_once = (0..MAX_SIMULTANEOUS_QUOTES)
+            .map(|_| {
+                create_sci(
+                    pair.base_token_id,
+                    pair.counter_token_id,
+                    10,
+                    20,
+                    &mut rng,
+                    None,
+                )
+            })
+            .map(|sci| mc_api::external::SignedContingentInput::from(&sci))
+            .collect::<Vec<_>>();
+
+        let too_many_scis_at_once_req = SubmitQuotesRequest {
+            quotes: too_many_scis_at_once.clone().into(),
+            ..Default::default()
+        };
+        client_api
+            .submit_quotes(&too_many_scis_at_once_req)
+            .expect_err("Submitting too many requests should fail");
     }
 
     #[test_with_logger]
