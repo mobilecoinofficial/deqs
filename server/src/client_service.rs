@@ -476,7 +476,7 @@ mod tests {
         let (client_api, _server, _msg_bus_tx, _msg_bus_rx) =
             create_test_client_and_server(&quote_book, &logger);
 
-        // Submitting SCIs under MAX_Simultaneous_Quote should be successful
+        // Submitting SCIs under MAX_SIMULTANEOUS_QUOTES should be successful
         let scis = (0..MAX_SIMULTANEOUS_QUOTES - 1)
             .map(|_| {
                 create_sci(
