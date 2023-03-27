@@ -7,6 +7,7 @@ use deqs_api::{
     DeqsClientUri,
 };
 use deqs_mc_test_utils::{create_partial_sci, create_sci};
+use deqs_p2p::libp2p::PeerId;
 use deqs_quote_book_api::Quote;
 use grpcio::{ChannelBuilder, EnvBuilder};
 use mc_common::logger::{log, o};
@@ -163,6 +164,7 @@ fn main() {
                 .to_protobuf_encoding()
                 .expect("failed encoding to protobuf");
             std::fs::write(out, bytes).expect("failed to write keypair");
+            println!("Peer id: {}", PeerId::from(keypair.public()));
         }
     }
 }
