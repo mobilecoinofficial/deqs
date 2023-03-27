@@ -3,14 +3,14 @@
 use clap::Parser;
 use deqs_liquidity_bot::{
     mini_wallet::{MiniWallet, WalletEvent},
-    Config, LiquidityBot,
+    update_periodic_metrics, Config, LiquidityBot, METRICS_POLL_INTERVAL,
 };
 use itertools::Itertools;
 use mc_common::logger::{log, o};
 use mc_ledger_db::{Ledger, LedgerDB};
 use mc_util_grpc::AdminServer;
 use std::{collections::HashMap, sync::Arc};
-use tokio::sync::mpsc;
+use tokio::{sync::mpsc, time::interval};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -95,6 +95,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
     }
 
+    // Event loop.
+    let mut metrics_interval = interval(METRICS_POLL_INTERVAL);
+    metrics_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
+
     loop {
         tokio::select! {
             _ = tokio::signal::ctrl_c() => {
@@ -113,6 +117,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         break;
                     }
                 }
+            }
+
+            _ = metrics_interval.tick() => {
+                update_periodic_metrics(&wallet, &liquidity_bot).await;
             }
         }
     }

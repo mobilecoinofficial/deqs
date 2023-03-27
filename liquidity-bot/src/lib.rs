@@ -15,10 +15,12 @@
 
 mod config;
 mod error;
+mod metrics;
 pub mod mini_wallet;
 
 pub use config::Config;
 pub use error::Error;
+pub use metrics::{update_periodic_metrics, METRICS_POLL_INTERVAL};
 
 use deqs_api::{
     deqs::{QuoteStatusCode, SubmitQuotesRequest, SubmitQuotesResponse},
@@ -41,12 +43,16 @@ use mc_util_grpc::ConnectionUriGrpcioChannel;
 use mini_wallet::{MatchedTxOut, WalletEvent};
 use rand::Rng;
 use rust_decimal::{prelude::ToPrimitive, Decimal};
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
     time::{Duration, Instant},
 };
-use tokio::{sync::mpsc, time::interval};
+use tokio::{
+    sync::{mpsc, oneshot},
+    time::interval,
+};
 
 // Minimum time to wait between attempts to submit SCIs to the DEQS.
 const RESUBMIT_POLL_INTERVAL: Duration = Duration::from_secs(30);
@@ -78,6 +84,76 @@ pub struct ListedTxOut {
     last_submitted_at: Instant,
 }
 
+/// Statistics about the liquidity bot's current state.
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+pub struct Stats {
+    /// Number of pending TxOuts grouped by the TxOut's token id.
+    num_pending_tx_outs_by_token_id: HashMap<TokenId, usize>,
+
+    /// Total value of pending TxOuts grouped by the TxOut's token id.
+    total_pending_tx_outs_value_by_token_id: HashMap<TokenId, u64>,
+
+    /// Number of listed TxOuts grouped by the TxOut's token id.
+    num_listed_tx_outs_by_token_id: HashMap<TokenId, usize>,
+
+    /// Total value of listed TxOuts grouped by the TxOut's token id.
+    total_listed_tx_outs_value_by_token_id: HashMap<TokenId, u64>,
+}
+impl From<&LiquidityBotTask> for Stats {
+    fn from(task: &LiquidityBotTask) -> Self {
+        let mut num_pending_tx_outs_by_token_id = HashMap::new();
+        let mut total_pending_tx_outs_value_by_token_id = HashMap::new();
+
+        for pending_tx_out in &task.pending_tx_outs {
+            let token_id = pending_tx_out.matched_tx_out.amount.token_id;
+            *num_pending_tx_outs_by_token_id.entry(token_id).or_default() += 1;
+            *total_pending_tx_outs_value_by_token_id
+                .entry(token_id)
+                .or_default() += pending_tx_out.matched_tx_out.amount.value;
+        }
+
+        let mut num_listed_tx_outs_by_token_id = HashMap::new();
+        let mut total_listed_tx_outs_value_by_token_id = HashMap::new();
+        for listed_tx_out in &task.listed_tx_outs {
+            let token_id = listed_tx_out.matched_tx_out.amount.token_id;
+            *num_listed_tx_outs_by_token_id.entry(token_id).or_default() += 1;
+            *total_listed_tx_outs_value_by_token_id
+                .entry(token_id)
+                .or_default() += listed_tx_out.matched_tx_out.amount.value;
+        }
+
+        // Ensure there's a zero value for each token id we know about but haven't
+        // encountered.
+        for token_id in task.pairs.keys().copied() {
+            num_pending_tx_outs_by_token_id.entry(token_id).or_default();
+            total_pending_tx_outs_value_by_token_id
+                .entry(token_id)
+                .or_default();
+            num_listed_tx_outs_by_token_id.entry(token_id).or_default();
+            total_listed_tx_outs_value_by_token_id
+                .entry(token_id)
+                .or_default();
+        }
+
+        Self {
+            num_pending_tx_outs_by_token_id,
+            total_pending_tx_outs_value_by_token_id,
+            num_listed_tx_outs_by_token_id,
+            total_listed_tx_outs_value_by_token_id,
+        }
+    }
+}
+
+/// Commands used for interfacing with the LiquidityBotTask.
+#[derive(Debug)]
+enum Command {
+    /// Incoming wallet event.
+    WalletEvent(WalletEvent),
+
+    /// Get stats
+    GetStats(oneshot::Sender<Stats>),
+}
+
 struct LiquidityBotTask {
     /// Account key
     account_key: AccountKey,
@@ -100,8 +176,8 @@ struct LiquidityBotTask {
     /// Logger.
     logger: Logger,
 
-    /// Wallet event receiver.
-    wallet_event_rx: mpsc::UnboundedReceiver<WalletEvent>,
+    /// Command receiver.
+    command_rx: mpsc::UnboundedReceiver<Command>,
 
     /// Shutdown receiver, used to signal the event loop to shutdown.
     shutdown_rx: mpsc::UnboundedReceiver<()>,
@@ -119,13 +195,13 @@ impl LiquidityBotTask {
         let shutdown_ack_tx = self.shutdown_ack_tx.take();
 
         let mut resubmit_tx_outs_interval = interval(RESUBMIT_POLL_INTERVAL);
-        resubmit_tx_outs_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+        resubmit_tx_outs_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
 
         loop {
             tokio::select! {
-                event = self.wallet_event_rx.recv() => {
+                event = self.command_rx.recv() => {
                     match event {
-                        Some(WalletEvent::BlockProcessed { received_tx_outs, .. }) => {
+                        Some(Command::WalletEvent(WalletEvent::BlockProcessed { received_tx_outs, .. })) => {
                             // TODO look at spent TxOuts and see if they match any SCIs we submitted
 
                             // Try and add any new TxOuts to the pending list.
@@ -146,7 +222,12 @@ impl LiquidityBotTask {
                                 }
                             }
                         }
-                       None => {
+
+                        Some(Command::GetStats(tx)) => {
+                            tx.send(Stats::from(&self)).expect("channel should be open");
+                        }
+
+                        None => {
                             log::error!(self.logger, "Wallet event receiver closed");
                             break;
                         }
@@ -234,7 +315,7 @@ impl LiquidityBotTask {
         let mut req = SubmitQuotesRequest::default();
         req.set_quotes(scis);
 
-        let resp = self.deqs_client.submit_quotes_async(&req)?.await?;
+        let resp = self.submit_quotes(&req).await?;
         sanity_check_submit_quotes_response(&resp, req.quotes.len())?;
 
         for (pending_tx_out, status_code, error_msg, quote) in itertools::izip!(
@@ -344,17 +425,11 @@ impl LiquidityBotTask {
 
         // Try and submit the quotes to the DEQS, if it fails we need to put them back
         // and assume they are still listed. We will try again later.
-        let resp = match self.deqs_client.submit_quotes_async(&req) {
-            Ok(async_resp) => match async_resp.await {
-                Ok(resp) => resp,
-                Err(err) => {
-                    self.listed_tx_outs.extend(to_resubmit);
-                    return Err(err.into());
-                }
-            },
+        let resp = match self.submit_quotes(&req).await {
+            Ok(resp) => resp,
             Err(err) => {
                 self.listed_tx_outs.extend(to_resubmit);
-                return Err(err.into());
+                return Err(err);
             }
         };
         sanity_check_submit_quotes_response(&resp, req.quotes.len())?;
@@ -519,11 +594,35 @@ impl LiquidityBotTask {
             sci,
         })
     }
+
+    async fn submit_quotes(
+        &self,
+        req: &SubmitQuotesRequest,
+    ) -> Result<SubmitQuotesResponse, Error> {
+        let start = Instant::now();
+
+        let resp = self
+            .deqs_client
+            .submit_quotes_async(req)
+            .map_err(|err| {
+                metrics::SUBMIT_QUOTES_GRPC_FAIL.observe(start.elapsed().as_secs_f64());
+                err
+            })?
+            .await
+            .map_err(|err| {
+                metrics::SUBMIT_QUOTES_GRPC_FAIL.observe(start.elapsed().as_secs_f64());
+                err
+            })?;
+
+        metrics::SUBMIT_QUOTES_GRPC_SUCCESS.observe(start.elapsed().as_secs_f64());
+
+        Ok(resp)
+    }
 }
 
 pub struct LiquidityBot {
-    /// Wallet event tx
-    wallet_event_tx: mpsc::UnboundedSender<WalletEvent>,
+    /// Command tx, used to send commands to the event loop.
+    command_tx: mpsc::UnboundedSender<Command>,
 
     /// Shutdown sender, used to signal the event loop to shutdown.
     shutdown_tx: mpsc::UnboundedSender<()>,
@@ -540,7 +639,7 @@ impl LiquidityBot {
         deqs_uri: &DeqsClientUri,
         logger: Logger,
     ) -> Self {
-        let (wallet_event_tx, wallet_event_rx) = mpsc::unbounded_channel();
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
         let (shutdown_tx, shutdown_rx) = mpsc::unbounded_channel();
         let (shutdown_ack_tx, shutdown_ack_rx) = mpsc::unbounded_channel();
 
@@ -554,7 +653,7 @@ impl LiquidityBot {
             pairs,
             pending_tx_outs: Vec::new(),
             listed_tx_outs: Vec::new(),
-            wallet_event_rx,
+            command_rx,
             deqs_client,
             shutdown_rx,
             shutdown_ack_tx: Some(shutdown_ack_tx),
@@ -562,7 +661,7 @@ impl LiquidityBot {
         };
         tokio::spawn(task.run());
         Self {
-            wallet_event_tx,
+            command_tx,
             shutdown_tx,
             shutdown_ack_rx,
         }
@@ -570,11 +669,20 @@ impl LiquidityBot {
 
     /// Bridge in a wallet event.
     pub fn notify_wallet_event(&self, event: WalletEvent) {
-        self.wallet_event_tx
-            .send(event)
-            .expect("wallet event tx failed"); // We assume the channel stays
-                                               // open for as long as the bot is
-                                               // running.
+        self.command_tx
+            .send(Command::WalletEvent(event))
+            .expect("command tx failed"); // We assume the channel stays
+                                          // open for as long as the bot is
+                                          // running.
+    }
+
+    /// Get statistics.
+    pub async fn stats(&self) -> Stats {
+        let (tx, rx) = oneshot::channel();
+        self.command_tx
+            .send(Command::GetStats(tx))
+            .expect("command tx failed");
+        rx.await.expect("command rx failed")
     }
 
     /// Request the event loop task to shut down.
@@ -654,7 +762,7 @@ mod tests {
             let deqs_server = DeqsTestServer::start(logger.clone());
             let deqs_client = deqs_server.client();
 
-            let (_wallet_event_tx, wallet_event_rx) = mpsc::unbounded_channel();
+            let (_command_tx, command_rx) = mpsc::unbounded_channel();
             let (_shutdown_tx, shutdown_rx) = mpsc::unbounded_channel();
             let (shutdown_ack_tx, _shutdown_ack_rx) = mpsc::unbounded_channel();
 
@@ -669,7 +777,7 @@ mod tests {
                 pairs,
                 pending_tx_outs: Vec::new(),
                 listed_tx_outs: Vec::new(),
-                wallet_event_rx,
+                command_rx,
                 deqs_client,
                 shutdown_rx,
                 shutdown_ack_tx: Some(shutdown_ack_tx),
