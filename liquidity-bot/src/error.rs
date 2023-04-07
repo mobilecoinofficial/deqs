@@ -6,7 +6,7 @@ use displaydoc::Display;
 use mc_crypto_keys::KeyError;
 use mc_ledger_db::Error as LedgerDbError;
 use mc_transaction_builder::{SignedContingentInputBuilderError, TxBuilderError};
-use mc_transaction_core::{AmountError, TokenId, TxOutConversionError};
+use mc_transaction_core::{AmountError, RevealedTxOutError, TokenId, TxOutConversionError};
 use mc_util_serial::{decode::Error as DeserializeError, encode::Error as SerializeError};
 use serde_json::Error as JsonError;
 
@@ -59,6 +59,9 @@ pub enum Error {
 
     /// Prometheus: {0}
     Prometheus(prometheus::Error),
+
+    /// RevealedTxOut: {0}
+    RevealedTxOutError(RevealedTxOutError),
 }
 impl From<LedgerDbError> for Error {
     fn from(src: LedgerDbError) -> Self {
@@ -123,5 +126,10 @@ impl From<SerializeError> for Error {
 impl From<prometheus::Error> for Error {
     fn from(src: prometheus::Error) -> Self {
         Self::Prometheus(src)
+    }
+}
+impl From<RevealedTxOutError> for Error {
+    fn from(src: RevealedTxOutError) -> Self {
+        Self::RevealedTxOutError(src)
     }
 }
