@@ -2,7 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use deqs_api::{
-    deqs::{QuoteStatusCode, GetQuotesRequest, Pair, SubmitQuotesRequest},
+    deqs::{GetQuotesRequest, Pair, QuoteStatusCode, SubmitQuotesRequest},
     deqs_grpc::DeqsClientApiClient,
     DeqsClientUri,
 };
@@ -129,14 +129,14 @@ fn main() {
                 ..Default::default()
             };
             req.set_pair(Pair {
-                    base_token_id: *base_token_id,
-                    counter_token_id: *counter_token_id,
-                    ..Default::default()
-                });
+                base_token_id: *base_token_id,
+                counter_token_id: *counter_token_id,
+                ..Default::default()
+            });
             let resp = client_api.get_quotes(&req).expect("get quotes failed");
             println!("got successful response");
             println!("{resp:#?}");
-        },
+        }
         Command::SubmitQuotes {
             deqs_uri,
             num_quotes,
