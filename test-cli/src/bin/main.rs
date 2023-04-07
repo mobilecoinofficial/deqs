@@ -2,7 +2,7 @@
 
 use clap::{Parser, Subcommand};
 use deqs_api::{
-    deqs::{QuoteStatusCode, SubmitQuotesRequest},
+    deqs::{GetQuotesRequest, Pair, QuoteStatusCode, SubmitQuotesRequest},
     deqs_grpc::DeqsClientApiClient,
     DeqsClientUri,
 };
@@ -19,6 +19,29 @@ use std::{path::PathBuf, sync::Arc};
 
 #[derive(Subcommand)]
 pub enum Command {
+    /// Get quotes from the DEQS server.
+    GetQuotes {
+        /// gRPC URI for client requests.
+        #[clap(long)]
+        deqs_uri: DeqsClientUri,
+
+        /// Base token id
+        #[clap(long, default_value = "0")]
+        base_token_id: TokenId,
+
+        /// Counter token id
+        #[clap(long, default_value = "1")]
+        counter_token_id: TokenId,
+
+        /// Base volume minimum
+        #[clap(long, default_value = "0")]
+        base_vol_min: u64,
+
+        /// Maximum number of quotes to return
+        #[clap(long, default_value = "10")]
+        limit: u64,
+    },
+
     /// Submit quotes to the DEQS server.
     SubmitQuotes {
         /// gRPC URI for client requests.
@@ -88,6 +111,32 @@ fn main() {
     let mut rng: StdRng = SeedableRng::from_seed(seed_bytes);
 
     match config.command {
+        Command::GetQuotes {
+            deqs_uri,
+            base_token_id,
+            counter_token_id,
+            base_vol_min,
+            limit,
+        } => {
+            let ch =
+                ChannelBuilder::default_channel_builder(env).connect_to_uri(&deqs_uri, &logger);
+            let client_api = DeqsClientApiClient::new(ch);
+
+            let mut req = GetQuotesRequest {
+                base_range_min: base_vol_min,
+                base_range_max: u64::MAX,
+                limit,
+                ..Default::default()
+            };
+            req.set_pair(Pair {
+                base_token_id: *base_token_id,
+                counter_token_id: *counter_token_id,
+                ..Default::default()
+            });
+            let resp = client_api.get_quotes(&req).expect("get quotes failed");
+            println!("got successful response");
+            println!("{resp:#?}");
+        }
         Command::SubmitQuotes {
             deqs_uri,
             num_quotes,
