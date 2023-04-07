@@ -4,6 +4,7 @@ cargo-features = ["named-profiles"]
 members = [
     "api",
     "liquidity-bot",
+    "liquidity-bot/api",
     "mc-test-utils",
     "p2p",
     "quote-book/api",
