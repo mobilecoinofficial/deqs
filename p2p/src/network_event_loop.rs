@@ -302,7 +302,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
                 QueryResult::GetProviders(Ok(ok)) if ok.key == self.peer_discovery_key => {
                     for peer in ok.providers {
                         let addrs = self.swarm.behaviour_mut().kademlia.addresses_of_peer(&peer);
-                        log::info!(
+                        log::debug!(
                             &self.logger,
                             "Peer {:?} provides key {:?} via addresses {:?}",
                             peer,
@@ -312,7 +312,7 @@ impl<REQ: RpcRequest, RESP: RpcResponse> NetworkEventLoop<REQ, RESP> {
                     }
                 }
                 evt => {
-                    log::info!(&self.logger, "Kademlia event: {:?}", evt);
+                    log::debug!(&self.logger, "Kademlia event: {:?}", evt);
                 }
             },
 

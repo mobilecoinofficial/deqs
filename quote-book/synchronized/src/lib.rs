@@ -30,6 +30,10 @@ pub struct SynchronizedQuoteBook<Q: QuoteBook, L: Ledger + Clone + Sync + 'stati
     /// Thread management. This is being held purely for the destructor so that
     /// the SyncThread will be dropped after all the Quotebooks using it.
     _thread_manager: Arc<SyncThread>,
+
+    /// Logger
+    #[allow(unused)]
+    logger: Logger,
 }
 
 impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, L> {
@@ -46,6 +50,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
         let thread_highest_processed_block_index = highest_processed_block_index.clone();
         let stop_requested = Arc::new(AtomicBool::new(false));
         let thread_stop_requested = stop_requested.clone();
+        let thread_logger = logger.clone();
         let join_handle = Some(
             ThreadBuilder::new()
                 .name("LedgerDbFetcher".to_owned())
@@ -56,7 +61,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
                         remove_quote_callback,
                         thread_highest_processed_block_index,
                         thread_stop_requested,
-                        logger,
+                        thread_logger,
                     )
                 })
                 .expect("Could not spawn thread"),
@@ -70,6 +75,7 @@ impl<Q: QuoteBook, L: Ledger + Clone + Sync + 'static> SynchronizedQuoteBook<Q, 
             ledger,
             highest_processed_block_index,
             _thread_manager,
+            logger,
         }
     }
 

@@ -27,7 +27,7 @@ pub enum Error {
     /// Quote cannot fulfill the desired amount ({0}) of base tokens
     InsufficientBaseTokens(u64),
 
-    /// Quote has an invalid ring
+    /// Quote has an invalid ring: {0}
     InvalidRing(String),
 
     /// Implementation specific error: {0}
