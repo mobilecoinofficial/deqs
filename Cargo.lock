@@ -295,7 +295,7 @@ checksum = "b84f9ebcc6c1f5b8cb160f6990096a5c127f423fcb6e1ccc46c370cbdfb75dfc"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -386,6 +386,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a4a4ddaa51a5bc52a6948f74c06d20aaaddb71924eab79b8c97a8c556e942d6a"
 
 [[package]]
+name = "base64ct"
+version = "1.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8c3c1a368f70d6cf7302d78f8f7093da241fb8e8807c05cc9e51a125895a6d5b"
+
+[[package]]
 name = "bimap"
 version = "0.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -393,38 +399,15 @@ checksum = "bc0455254eb5c6964c4545d8bac815e1a1be4f3afe0ae695ea539c12d728d44b"
 
 [[package]]
 name = "bindgen"
-version = "0.58.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0f8523b410d7187a43085e7e064416ea32ded16bd0a4e6fc025e21616d01258f"
-dependencies = [
- "bitflags",
- "cexpr 0.4.0",
- "clang-sys",
- "clap 2.34.0",
- "env_logger 0.8.4",
- "lazy_static",
- "lazycell",
- "log",
- "peeking_take_while",
- "proc-macro2",
- "quote",
- "regex",
- "rustc-hash",
- "shlex",
- "which 3.1.1",
-]
-
-[[package]]
-name = "bindgen"
 version = "0.59.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bd2a9a458e8f4304c52c43ebb0cfbd520289f8379a52e329a38afda99bf8eb8"
 dependencies = [
- "bitflags",
- "cexpr 0.6.0",
+ "bitflags 1.3.2",
+ "cexpr",
  "clang-sys",
  "clap 2.34.0",
- "env_logger 0.9.3",
+ "env_logger",
  "lazy_static",
  "lazycell",
  "log",
@@ -434,20 +417,51 @@ dependencies = [
  "regex",
  "rustc-hash",
  "shlex",
- "which 4.4.0",
+ "which",
+]
+
+[[package]]
+name = "bindgen"
+version = "0.64.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c4243e6031260db77ede97ad86c27e501d646a27ab57b59a574f725d98ab1fb4"
+dependencies = [
+ "bitflags 1.3.2",
+ "cexpr",
+ "clang-sys",
+ "lazy_static",
+ "lazycell",
+ "log",
+ "peeking_take_while",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash",
+ "shlex",
+ "syn 1.0.109",
+ "which",
 ]
 
 [[package]]
 name = "bit-vec"
-version = "0.5.1"
+version = "0.6.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f59bbe95d4e52a6398ec21238d31577f2b28a9d86807f06ca59d191d8440d0bb"
+checksum = "349f9b6a179ed607305526ca489b34ad0a41aed5f7980fa90eb03160b69598fb"
 
 [[package]]
 name = "bitflags"
 version = "1.3.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bef38d45163c2f1dde094a7dfd33ccf595c92905c8f8f4fdc18d06fb1037718a"
+
+[[package]]
+name = "bitflags"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c70beb79cbb5ce9c4f8e20849978f34225931f665bb49efa6982875a4d5facb3"
+dependencies = [
+ "serde",
+]
 
 [[package]]
 name = "blake2"
@@ -519,7 +533,7 @@ dependencies = [
  "borsh-schema-derive-internal",
  "proc-macro-crate 0.1.5",
  "proc-macro2",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -530,7 +544,7 @@ checksum = "186b734fa1c9f6743e90c95d7233c9faab6360d1a96d4ffa19d9cfd1e9350f8a"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -541,7 +555,7 @@ checksum = "99b7ff1008316626f485991b960ade129253d4034014616b94f309a15366cc49"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -553,12 +567,11 @@ checksum = "771fe0050b883fcc3ea2359b1a96bcfbc090b7116eae7c3c512c7a083fdf23d3"
 [[package]]
 name = "bulletproofs-og"
 version = "3.0.0-pre.1"
-source = "git+https://github.com/mobilecoinfoundation/bulletproofs.git?rev=65f8af4ca0bc1cb2fd2148c3259a0a76b155ff3e#65f8af4ca0bc1cb2fd2148c3259a0a76b155ff3e"
+source = "git+https://github.com/mobilecoinfoundation/bulletproofs.git?rev=9abfdc054d9ba65f1e185ea1e6eff3947ce879dc#9abfdc054d9ba65f1e185ea1e6eff3947ce879dc"
 dependencies = [
  "byteorder",
  "clear_on_drop",
- "curve25519-dalek 4.0.0-pre.2",
- "digest 0.10.6",
+ "curve25519-dalek 4.0.0-rc.1",
  "merlin",
  "rand_core 0.6.4",
  "serde",
@@ -592,14 +605,8 @@ checksum = "e31225543cb46f81a7e224762764f4a6a0f097b1db0b175f69e8065efaa42de5"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
-
-[[package]]
-name = "bytecount"
-version = "0.6.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2c676a478f63e9fa2dd5368a42f28bba0d6c560b775f38583c8bbaa7fcd67c9c"
 
 [[package]]
 name = "byteorder"
@@ -617,41 +624,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "camino"
-version = "1.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c530edf18f37068ac2d977409ed5cd50d53d73bc653c7647b48eb78976ac9ae2"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "cargo-emit"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1582e1c9e755dd6ad6b224dcffb135d199399a4568d454bd89fe515ca8425695"
-
-[[package]]
-name = "cargo-platform"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cbdb825da8a5df079a43676dbe042702f1707b1109f713a01420fbb4cc71fa27"
-dependencies = [
- "serde",
-]
-
-[[package]]
-name = "cargo_metadata"
-version = "0.14.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4acbb09d9ee8e23699b9634375c72795d095bf268439da88562cf9b501f181fa"
-dependencies = [
- "camino",
- "cargo-platform",
- "semver",
- "serde",
- "serde_json",
-]
 
 [[package]]
 name = "cc"
@@ -661,20 +637,11 @@ checksum = "50d30906286121d95be3d479533b458f87493b30a4b5f79a607db8f5d11aa91f"
 
 [[package]]
 name = "cexpr"
-version = "0.4.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f4aedb84272dbe89af497cf81375129abda4fc0a9e7c5d317498c15cc30c0d27"
-dependencies = [
- "nom 5.1.2",
-]
-
-[[package]]
-name = "cexpr"
 version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6fac387a98bb7c37292057cffc56d62ecb629900026402633ae9160df93a8766"
 dependencies = [
- "nom 7.1.3",
+ "nom",
 ]
 
 [[package]]
@@ -761,7 +728,7 @@ checksum = "a0610544180c38b88101fecf2dd634b174a62eef6946f84dfc6a7127512b381c"
 dependencies = [
  "ansi_term",
  "atty",
- "bitflags",
+ "bitflags 1.3.2",
  "strsim 0.8.0",
  "textwrap",
  "unicode-width",
@@ -774,7 +741,7 @@ version = "4.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9a9d6ada83c1edcce028902ea27dd929069c70df4c7600b131b4d9a1ad2879cc"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
  "clap_derive",
  "clap_lex",
  "is-terminal",
@@ -793,7 +760,7 @@ dependencies = [
  "proc-macro-error",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1020,7 +987,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6d2301688392eb071b0bf1a37be05c469d3cc4dbbd95df672fe28ab021e6a096"
 dependencies = [
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1067,12 +1034,14 @@ dependencies = [
 
 [[package]]
 name = "curve25519-dalek"
-version = "4.0.0-pre.2"
-source = "git+https://github.com/mobilecoinfoundation/curve25519-dalek.git?rev=8791722e0273762552c9a056eaccb7df6baf44d7#8791722e0273762552c9a056eaccb7df6baf44d7"
+version = "4.0.0-rc.1"
+source = "git+https://github.com/dalek-cryptography/curve25519-dalek?rev=99c0520aa79401b69fb51d38172cd58c6a256cfb#99c0520aa79401b69fb51d38172cd58c6a256cfb"
 dependencies = [
- "byteorder",
+ "cfg-if",
  "digest 0.10.6",
+ "fiat-crypto",
  "packed_simd_2",
+ "platforms",
  "rand_core 0.6.4",
  "serde",
  "subtle",
@@ -1103,7 +1072,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "scratch",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1120,7 +1089,7 @@ checksum = "0b75aed41bb2e6367cae39e6326ef817a851db13c13e4f3263714ca3cfb8de56"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1144,7 +1113,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "strsim 0.10.0",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1155,7 +1124,7 @@ checksum = "a4aab4dbc9f7611d8b55048a3a16d2d010c2c8334e46304b40ac1cc14bf3b48e"
 dependencies = [
  "darling_core",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1472,6 +1441,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "der"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "82b10af9f9f9f2134a42d3f8aa74658660f2e0234b0eb81bd171df8aa32779ed"
+dependencies = [
+ "const-oid",
+ "zeroize",
+]
+
+[[package]]
 name = "diesel"
 version = "2.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1491,7 +1470,7 @@ dependencies = [
  "proc-macro-error",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1560,7 +1539,7 @@ checksum = "3bf95dc3f046b9da4f2d51833c0d3547d8564ef6910f5c1ed130306a75b92886"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1591,10 +1570,10 @@ version = "0.14.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "413301934810f597c1d19ca71c8710e99a3f1ba28a0d2ebc01551a2daeea3c5c"
 dependencies = [
- "der",
+ "der 0.6.1",
  "elliptic-curve",
  "rfc6979",
- "signature",
+ "signature 1.6.4",
 ]
 
 [[package]]
@@ -1603,8 +1582,18 @@ version = "1.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
 dependencies = [
+ "signature 1.6.4",
+]
+
+[[package]]
+name = "ed25519"
+version = "2.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5fb04eee5d9d907f29e80ee6b0e78f7e2c82342c63e3580d8c4f69d9d5aad963"
+dependencies = [
+ "pkcs8",
  "serde",
- "signature",
+ "signature 2.0.0",
 ]
 
 [[package]]
@@ -1614,7 +1603,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c762bae6dcaf24c4c84667b8579785430908723d5c889f469d76a41d59cc7a9d"
 dependencies = [
  "curve25519-dalek 3.2.0",
- "ed25519",
+ "ed25519 1.5.3",
  "rand 0.7.3",
  "serde",
  "sha2 0.9.9",
@@ -1623,15 +1612,15 @@ dependencies = [
 
 [[package]]
 name = "ed25519-dalek"
-version = "2.0.0-pre.1"
-source = "git+https://github.com/mobilecoinfoundation/ed25519-dalek.git?rev=4194e36abc75722e6fba7d552e719448fc38c51f#4194e36abc75722e6fba7d552e719448fc38c51f"
+version = "2.0.0-pre.0"
+source = "git+https://github.com/dalek-cryptography/ed25519-dalek.git?rev=2931c688eb11341a1145e257bc41d8ecbe36277c#2931c688eb11341a1145e257bc41d8ecbe36277c"
 dependencies = [
- "curve25519-dalek 4.0.0-pre.2",
- "ed25519",
- "rand 0.8.5",
+ "curve25519-dalek 4.0.0-rc.1",
+ "ed25519 2.2.1",
+ "rand_core 0.6.4",
  "serde",
- "serde_bytes",
  "sha2 0.10.6",
+ "signature 2.0.0",
  "zeroize",
 ]
 
@@ -1649,7 +1638,7 @@ checksum = "e7bb888ab5300a19b8e5bceef25ac745ad065f3c9f7efc6de1b91958110891d3"
 dependencies = [
  "base16ct",
  "crypto-bigint",
- "der",
+ "der 0.6.1",
  "digest 0.10.6",
  "ff",
  "generic-array",
@@ -1678,20 +1667,7 @@ dependencies = [
  "heck",
  "proc-macro2",
  "quote",
- "syn",
-]
-
-[[package]]
-name = "env_logger"
-version = "0.8.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a19187fea3ac7e84da7dacf48de0c45d63c6a76f9490dae389aead16c243fce3"
-dependencies = [
- "atty",
- "humantime",
- "log",
- "regex",
- "termcolor",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -1738,15 +1714,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "error-chain"
-version = "0.12.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d2f06b9cac1506ece98fe3231e3cc9c4410ec3d5b1f24ae1c8946f0742cdefc"
-dependencies = [
- "version_check",
-]
-
-[[package]]
 name = "event-listener"
 version = "2.5.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1770,7 +1737,7 @@ checksum = "aa4da3c766cd7a0db8242e326e9e4e081edd567072893ed320008189715366a4"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
  "synstructure",
 ]
 
@@ -1792,6 +1759,12 @@ dependencies = [
  "rand_core 0.6.4",
  "subtle",
 ]
+
+[[package]]
+name = "fiat-crypto"
+version = "0.1.20"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e825f6987101665dea6ec934c09ec6d721de7bc1bf92248e1d5810c8cd636b77"
 
 [[package]]
 name = "fixedbitset"
@@ -1912,7 +1885,7 @@ checksum = "3eb14ed937631bd8b8b8977f2c198443447a8355b6e3ca599f38c975e5a963b6"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -3041,7 +3014,7 @@ checksum = "a0eddc4497a8b5a506013c40e8189864f9c3a00db2b25671f428ae9007f3ba32"
 dependencies = [
  "heck",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -3216,7 +3189,7 @@ name = "lmdb-rkv"
 version = "0.14.0"
 source = "git+https://github.com/mozilla/lmdb-rs?rev=df1c2f5#df1c2f56e3088f097c719c57b9925ab51e26f3f4"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
  "byteorder",
  "libc",
  "lmdb-rkv-sys",
@@ -3285,9 +3258,9 @@ checksum = "2532096657941c2fea9c289d370a250971c689d4f143798ff67113ec042024a5"
 [[package]]
 name = "mbedtls"
 version = "0.8.1"
-source = "git+https://github.com/mobilecoinfoundation/rust-mbedtls.git?rev=ac6ee17a31e37311ce7f4fa0649c340e5d85258d#ac6ee17a31e37311ce7f4fa0649c340e5d85258d"
+source = "git+https://github.com/mobilecoinfoundation/rust-mbedtls.git?rev=98d3af413c1e23ea89cc5f41ab4dddb1944405af#98d3af413c1e23ea89cc5f41ab4dddb1944405af"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
  "byteorder",
  "cc",
  "cfg-if",
@@ -3296,7 +3269,6 @@ dependencies = [
  "mbedtls-sys-auto",
  "rs-libc",
  "serde",
- "serde_derive",
  "spin 0.9.6",
  "yasna",
 ]
@@ -3304,9 +3276,9 @@ dependencies = [
 [[package]]
 name = "mbedtls-sys-auto"
 version = "2.26.1"
-source = "git+https://github.com/mobilecoinfoundation/rust-mbedtls.git?rev=ac6ee17a31e37311ce7f4fa0649c340e5d85258d#ac6ee17a31e37311ce7f4fa0649c340e5d85258d"
+source = "git+https://github.com/mobilecoinfoundation/rust-mbedtls.git?rev=98d3af413c1e23ea89cc5f41ab4dddb1944405af#98d3af413c1e23ea89cc5f41ab4dddb1944405af"
 dependencies = [
- "bindgen 0.58.1",
+ "bindgen 0.64.0",
  "cc",
  "cfg-if",
  "cmake",
@@ -3314,14 +3286,14 @@ dependencies = [
  "libc",
  "libz-sys",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
 name = "mc-account-keys"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
- "curve25519-dalek 4.0.0-pre.2",
+ "curve25519-dalek 4.0.0-rc.1",
  "displaydoc",
  "hex_fmt",
  "hkdf",
@@ -3343,30 +3315,30 @@ dependencies = [
 
 [[package]]
 name = "mc-account-keys-types"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "mc-crypto-keys",
 ]
 
 [[package]]
 name = "mc-api"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "bs58",
  "cargo-emit",
  "crc",
- "curve25519-dalek 4.0.0-pre.2",
+ "curve25519-dalek 4.0.0-rc.1",
  "displaydoc",
  "mc-account-keys",
  "mc-attest-verifier-types",
  "mc-blockchain-types",
  "mc-common",
- "mc-crypto-dalek",
  "mc-crypto-keys",
  "mc-crypto-multisig",
  "mc-crypto-ring-signature-signer",
  "mc-transaction-core",
  "mc-transaction-extra",
+ "mc-transaction-summary",
  "mc-util-build-grpc",
  "mc-util-build-script",
  "mc-util-repr-bytes",
@@ -3377,10 +3349,10 @@ dependencies = [
 
 [[package]]
 name = "mc-attest-core"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "base64 0.21.0",
- "bitflags",
+ "bitflags 2.1.0",
  "cargo-emit",
  "chrono",
  "digest 0.10.6",
@@ -3406,7 +3378,7 @@ dependencies = [
 
 [[package]]
 name = "mc-attest-verifier"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "cargo-emit",
  "cfg-if",
@@ -3431,7 +3403,7 @@ dependencies = [
 
 [[package]]
 name = "mc-attest-verifier-types"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "base64 0.21.0",
  "displaydoc",
@@ -3445,7 +3417,7 @@ dependencies = [
 
 [[package]]
 name = "mc-blockchain-test-utils"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "mc-blockchain-types",
  "mc-common",
@@ -3459,7 +3431,7 @@ dependencies = [
 
 [[package]]
 name = "mc-blockchain-types"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "displaydoc",
  "hex_fmt",
@@ -3482,7 +3454,7 @@ dependencies = [
 
 [[package]]
 name = "mc-common"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "backtrace",
  "cfg-if",
@@ -3493,10 +3465,9 @@ dependencies = [
  "hex_fmt",
  "hostname",
  "lazy_static",
- "mc-crypto-dalek",
  "mc-crypto-digestible",
  "mc-crypto-keys",
- "mc-crypto-rand",
+ "mc-rand",
  "mc-util-build-info",
  "mc-util-logger-macros",
  "mc-util-serial",
@@ -3510,7 +3481,6 @@ dependencies = [
  "slog-async",
  "slog-atomic",
  "slog-envlogger",
- "slog-gelf",
  "slog-json",
  "slog-scope",
  "slog-stdlog",
@@ -3519,7 +3489,7 @@ dependencies = [
 
 [[package]]
 name = "mc-consensus-scp-types"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "mc-common",
  "mc-crypto-digestible",
@@ -3534,14 +3504,13 @@ dependencies = [
 
 [[package]]
 name = "mc-core"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
- "curve25519-dalek 4.0.0-pre.2",
- "ed25519-dalek 2.0.0-pre.1",
+ "curve25519-dalek 4.0.0-rc.1",
+ "ed25519-dalek 2.0.0-pre.0",
  "generic-array",
  "hkdf",
  "mc-core-types",
- "mc-crypto-dalek",
  "mc-crypto-hashes",
  "mc-crypto-keys",
  "sha2 0.10.6",
@@ -3554,7 +3523,7 @@ dependencies = [
 name = "mc-core-types"
 version = "2.0.0"
 dependencies = [
- "curve25519-dalek 4.0.0-pre.2",
+ "curve25519-dalek 4.0.0-rc.1",
  "mc-crypto-keys",
  "subtle",
  "zeroize",
@@ -3562,7 +3531,7 @@ dependencies = [
 
 [[package]]
 name = "mc-crypto-box"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "aead 0.5.1",
  "digest 0.10.6",
@@ -3575,39 +3544,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "mc-crypto-dalek"
-version = "4.0.2"
-dependencies = [
- "curve25519-dalek 4.0.0-pre.2",
- "ed25519-dalek 2.0.0-pre.1",
- "mc-crypto-dalek-backend-simd",
- "mc-crypto-dalek-backend-u64",
- "x25519-dalek 2.0.0-pre.2",
-]
-
-[[package]]
-name = "mc-crypto-dalek-backend-simd"
-version = "2.0.0"
-dependencies = [
- "curve25519-dalek 4.0.0-pre.2",
-]
-
-[[package]]
-name = "mc-crypto-dalek-backend-u64"
-version = "2.0.0"
-dependencies = [
- "curve25519-dalek 4.0.0-pre.2",
-]
-
-[[package]]
 name = "mc-crypto-digestible"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "cfg-if",
- "curve25519-dalek 4.0.0-pre.2",
- "ed25519-dalek 2.0.0-pre.1",
+ "curve25519-dalek 4.0.0-rc.1",
+ "ed25519-dalek 2.0.0-pre.0",
  "generic-array",
- "mc-crypto-dalek",
  "mc-crypto-digestible-derive",
  "merlin",
  "x25519-dalek 2.0.0-pre.2",
@@ -3615,25 +3558,25 @@ dependencies = [
 
 [[package]]
 name = "mc-crypto-digestible-derive"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
 name = "mc-crypto-digestible-signature"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "mc-crypto-digestible",
  "schnorrkel-og",
- "signature",
+ "signature 2.0.0",
 ]
 
 [[package]]
 name = "mc-crypto-hashes"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "blake2",
  "digest 0.10.6",
@@ -3642,27 +3585,27 @@ dependencies = [
 
 [[package]]
 name = "mc-crypto-keys"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "base64 0.21.0",
- "curve25519-dalek 4.0.0-pre.2",
+ "curve25519-dalek 4.0.0-rc.1",
  "digest 0.10.6",
  "displaydoc",
- "ed25519",
- "ed25519-dalek 2.0.0-pre.1",
+ "ed25519 2.2.1",
+ "ed25519-dalek 2.0.0-pre.0",
  "hex",
  "hex_fmt",
- "mc-crypto-dalek",
  "mc-crypto-digestible",
  "mc-crypto-digestible-signature",
  "mc-util-from-random",
  "mc-util-repr-bytes",
+ "mc-util-serial",
  "rand_core 0.6.4",
  "rand_hc 0.3.1",
  "schnorrkel-og",
  "serde",
  "sha2 0.10.6",
- "signature",
+ "signature 2.0.0",
  "static_assertions",
  "subtle",
  "x25519-dalek 2.0.0-pre.2",
@@ -3671,7 +3614,7 @@ dependencies = [
 
 [[package]]
 name = "mc-crypto-multisig"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "mc-crypto-digestible",
  "mc-crypto-keys",
@@ -3680,24 +3623,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "mc-crypto-rand"
-version = "4.0.2"
-dependencies = [
- "cfg-if",
- "rand 0.8.5",
- "rand_core 0.6.4",
-]
-
-[[package]]
 name = "mc-crypto-ring-signature"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
- "curve25519-dalek 4.0.0-pre.2",
+ "curve25519-dalek 4.0.0-rc.1",
  "displaydoc",
- "ed25519-dalek 2.0.0-pre.1",
+ "ed25519-dalek 2.0.0-pre.0",
  "mc-account-keys-types",
  "mc-core-types",
- "mc-crypto-dalek",
  "mc-crypto-digestible",
  "mc-crypto-hashes",
  "mc-crypto-keys",
@@ -3713,14 +3646,13 @@ dependencies = [
 
 [[package]]
 name = "mc-crypto-ring-signature-signer"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
- "curve25519-dalek 4.0.0-pre.2",
+ "curve25519-dalek 4.0.0-rc.1",
  "displaydoc",
  "generic-array",
  "hex_fmt",
  "mc-account-keys",
- "mc-crypto-dalek",
  "mc-crypto-keys",
  "mc-crypto-ring-signature",
  "mc-transaction-types",
@@ -3734,7 +3666,7 @@ dependencies = [
 
 [[package]]
 name = "mc-crypto-x509-utils"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "displaydoc",
  "mc-crypto-keys",
@@ -3744,7 +3676,7 @@ dependencies = [
 
 [[package]]
 name = "mc-fog-ingest-report"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "displaydoc",
  "mc-attest-core",
@@ -3756,7 +3688,7 @@ dependencies = [
 
 [[package]]
 name = "mc-fog-report-resolver"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "mc-account-keys",
  "mc-attest-verifier",
@@ -3770,7 +3702,7 @@ dependencies = [
 
 [[package]]
 name = "mc-fog-report-types"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "mc-attest-core",
  "mc-crypto-digestible",
@@ -3780,7 +3712,7 @@ dependencies = [
 
 [[package]]
 name = "mc-fog-report-validation"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "displaydoc",
  "mc-account-keys",
@@ -3792,7 +3724,7 @@ dependencies = [
 
 [[package]]
 name = "mc-fog-report-validation-test-utils"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "mc-account-keys",
  "mc-fog-report-validation",
@@ -3800,7 +3732,7 @@ dependencies = [
 
 [[package]]
 name = "mc-fog-sig"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "displaydoc",
  "mc-account-keys",
@@ -3810,33 +3742,32 @@ dependencies = [
  "mc-fog-sig-authority",
  "mc-fog-sig-report",
  "pem",
- "signature",
+ "signature 2.0.0",
  "x509-signature",
 ]
 
 [[package]]
 name = "mc-fog-sig-authority"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "mc-crypto-keys",
- "signature",
 ]
 
 [[package]]
 name = "mc-fog-sig-report"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "displaydoc",
  "mc-attest-core",
  "mc-crypto-digestible-signature",
  "mc-crypto-keys",
  "mc-fog-report-types",
- "signature",
+ "signature 2.0.0",
 ]
 
 [[package]]
 name = "mc-ledger-db"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "displaydoc",
  "lazy_static",
@@ -3877,8 +3808,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "mc-rand"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce58f86dffd114bcefd8bcc6043658feec24b1f29be9972924651fe999ecf4a8"
+dependencies = [
+ "cfg-if",
+ "rand 0.8.5",
+ "rand_core 0.6.4",
+]
+
+[[package]]
 name = "mc-sgx-css"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "displaydoc",
  "sha2 0.10.6",
@@ -3886,24 +3828,24 @@ dependencies = [
 
 [[package]]
 name = "mc-sgx-types"
-version = "4.0.2"
+version = "4.1.0-pre0"
 
 [[package]]
 name = "mc-transaction-builder"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "cfg-if",
- "curve25519-dalek 4.0.0-pre.2",
+ "curve25519-dalek 4.0.0-rc.1",
  "displaydoc",
  "hmac 0.12.1",
  "mc-account-keys",
- "mc-crypto-dalek",
  "mc-crypto-hashes",
  "mc-crypto-keys",
  "mc-crypto-ring-signature-signer",
  "mc-fog-report-validation",
  "mc-transaction-core",
  "mc-transaction-extra",
+ "mc-transaction-summary",
  "mc-transaction-types",
  "mc-util-from-random",
  "mc-util-serial",
@@ -3919,13 +3861,13 @@ dependencies = [
 
 [[package]]
 name = "mc-transaction-core"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "aes 0.8.2",
  "bulletproofs-og",
  "crc",
  "ctr 0.9.2",
- "curve25519-dalek 4.0.0-pre.2",
+ "curve25519-dalek 4.0.0-rc.1",
  "displaydoc",
  "generic-array",
  "hex_fmt",
@@ -3934,7 +3876,6 @@ dependencies = [
  "mc-account-keys",
  "mc-common",
  "mc-crypto-box",
- "mc-crypto-dalek",
  "mc-crypto-digestible",
  "mc-crypto-hashes",
  "mc-crypto-keys",
@@ -3958,14 +3899,14 @@ dependencies = [
 
 [[package]]
 name = "mc-transaction-core-test-utils"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "mc-account-keys",
  "mc-crypto-keys",
  "mc-crypto-multisig",
- "mc-crypto-rand",
  "mc-crypto-ring-signature-signer",
  "mc-fog-report-validation-test-utils",
+ "mc-rand",
  "mc-transaction-core",
  "mc-util-from-random",
  "mc-util-serial",
@@ -3973,21 +3914,21 @@ dependencies = [
 
 [[package]]
 name = "mc-transaction-extra"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "cfg-if",
- "curve25519-dalek 4.0.0-pre.2",
+ "curve25519-dalek 4.0.0-rc.1",
  "displaydoc",
  "hmac 0.12.1",
  "mc-account-keys",
  "mc-core",
- "mc-crypto-dalek",
  "mc-crypto-digestible",
  "mc-crypto-hashes",
  "mc-crypto-keys",
  "mc-crypto-ring-signature",
  "mc-crypto-ring-signature-signer",
  "mc-transaction-core",
+ "mc-transaction-summary",
  "mc-transaction-types",
  "mc-util-from-random",
  "mc-util-repr-bytes",
@@ -4005,13 +3946,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "mc-transaction-summary"
+version = "4.1.0-pre0"
+dependencies = [
+ "displaydoc",
+ "mc-account-keys",
+ "mc-core",
+ "mc-crypto-digestible",
+ "mc-crypto-keys",
+ "mc-crypto-ring-signature",
+ "mc-transaction-types",
+ "mc-util-vec-map",
+ "mc-util-zip-exact",
+ "prost",
+ "serde",
+ "subtle",
+ "zeroize",
+]
+
+[[package]]
 name = "mc-transaction-types"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "crc",
  "displaydoc",
  "hkdf",
- "mc-crypto-dalek",
  "mc-crypto-digestible",
  "mc-crypto-hashes",
  "mc-crypto-keys",
@@ -4025,7 +3984,7 @@ dependencies = [
 
 [[package]]
 name = "mc-util-build-grpc"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "mc-util-build-script",
  "protoc-grpcio",
@@ -4033,14 +3992,14 @@ dependencies = [
 
 [[package]]
 name = "mc-util-build-info"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "cargo-emit",
 ]
 
 [[package]]
 name = "mc-util-build-script"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "cargo-emit",
  "displaydoc",
@@ -4051,7 +4010,7 @@ dependencies = [
 
 [[package]]
 name = "mc-util-build-sgx"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "cargo-emit",
  "cc",
@@ -4062,7 +4021,7 @@ dependencies = [
 
 [[package]]
 name = "mc-util-encodings"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "base64 0.21.0",
  "displaydoc",
@@ -4073,14 +4032,14 @@ dependencies = [
 
 [[package]]
 name = "mc-util-from-random"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "rand_core 0.6.4",
 ]
 
 [[package]]
 name = "mc-util-grpc"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "base64 0.21.0",
  "clap 4.1.9",
@@ -4111,11 +4070,11 @@ dependencies = [
 
 [[package]]
 name = "mc-util-host-cert"
-version = "4.0.2"
+version = "4.1.0-pre0"
 
 [[package]]
 name = "mc-util-keyfile"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "base64 0.21.0",
  "clap 4.1.9",
@@ -4124,7 +4083,7 @@ dependencies = [
  "mc-account-keys",
  "mc-api",
  "mc-core",
- "mc-crypto-rand",
+ "mc-rand",
  "mc-util-from-random",
  "mc-util-parse",
  "mc-util-serial",
@@ -4141,7 +4100,7 @@ dependencies = [
 
 [[package]]
 name = "mc-util-lmdb"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "displaydoc",
  "lmdb-rkv",
@@ -4151,16 +4110,16 @@ dependencies = [
 
 [[package]]
 name = "mc-util-logger-macros"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 2.0.12",
 ]
 
 [[package]]
 name = "mc-util-metrics"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "chrono",
  "grpcio",
@@ -4173,7 +4132,7 @@ dependencies = [
 
 [[package]]
 name = "mc-util-parse"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "hex",
  "itertools",
@@ -4182,7 +4141,7 @@ dependencies = [
 
 [[package]]
 name = "mc-util-repr-bytes"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "generic-array",
  "hex_fmt",
@@ -4192,7 +4151,7 @@ dependencies = [
 
 [[package]]
 name = "mc-util-serial"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "prost",
  "protobuf",
@@ -4203,7 +4162,7 @@ dependencies = [
 
 [[package]]
 name = "mc-util-telemetry"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "cfg-if",
  "displaydoc",
@@ -4213,7 +4172,7 @@ dependencies = [
 
 [[package]]
 name = "mc-util-test-helper"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "clap 4.1.9",
  "lazy_static",
@@ -4224,11 +4183,11 @@ dependencies = [
 
 [[package]]
 name = "mc-util-u64-ratio"
-version = "4.0.2"
+version = "4.1.0-pre0"
 
 [[package]]
 name = "mc-util-uri"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "base64 0.21.0",
  "displaydoc",
@@ -4243,7 +4202,7 @@ dependencies = [
 
 [[package]]
 name = "mc-util-vec-map"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "displaydoc",
  "heapless",
@@ -4251,14 +4210,14 @@ dependencies = [
 
 [[package]]
 name = "mc-util-zip-exact"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "mc-watcher-api"
-version = "4.0.2"
+version = "4.1.0-pre0"
 dependencies = [
  "displaydoc",
  "serde",
@@ -4369,7 +4328,7 @@ dependencies = [
  "cfg-if",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -4415,7 +4374,7 @@ dependencies = [
  "proc-macro-error",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
  "synstructure",
 ]
 
@@ -4458,7 +4417,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d9ea4302b9759a7a88242299225ea3688e63c85ea136371bb6cf94fd674efaab"
 dependencies = [
  "anyhow",
- "bitflags",
+ "bitflags 1.3.2",
  "byteorder",
  "libc",
  "netlink-packet-core",
@@ -4511,7 +4470,7 @@ version = "0.24.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fa52e972a9a719cecb6864fb88568781eb706bac2cd1d4f04a648542dbf78069"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
  "cfg-if",
  "libc",
 ]
@@ -4521,16 +4480,6 @@ name = "nohash-hasher"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2bf50223579dc7cdcfb3bfcacf7069ff68243f8c363f62ffa99cf000a6b9c451"
-
-[[package]]
-name = "nom"
-version = "5.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ffb4262d26ed83a1c0a33a38fe2bb15797329c85770da05e6b828ddb782627af"
-dependencies = [
- "memchr",
- "version_check",
-]
 
 [[package]]
 name = "nom"
@@ -4550,9 +4499,9 @@ checksum = "61807f77802ff30975e01f4f071c8ba10c022052f98b3294119f3e615d13e5be"
 
 [[package]]
 name = "num-bigint"
-version = "0.2.6"
+version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "090c7f9998ee0ff65aa5b723e4009f7b217707f1fb5ea551329cc4d6231fb304"
+checksum = "f93ab6289c7b344a8a9f60f88d80aa20032336fe78da341afc91c8a2341fc75f"
 dependencies = [
  "autocfg",
  "num-integer",
@@ -4782,11 +4731,12 @@ checksum = "19b17cddbe7ec3f8bc800887bab5e717348c95ea2ca0b1bf0837fb964dc67099"
 
 [[package]]
 name = "pem"
-version = "1.1.1"
+version = "2.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a8835c273a76a90455d7344889b0964598e3316e2a79ede8e36f16bdcf2228b8"
+checksum = "6b13fe415cdf3c8e44518e18a7c95a13431d9bdf6d15367d82b23c377fdd441a"
 dependencies = [
- "base64 0.13.1",
+ "base64 0.21.0",
+ "serde",
 ]
 
 [[package]]
@@ -4822,7 +4772,7 @@ checksum = "069bdb1e05adc7a8990dce9cc75370895fbe4e3d58b9b73bf1aee56359344a55"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -4844,10 +4794,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
+name = "pkcs8"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f950b2377845cebe5cf8b5165cb3cc1a5e0fa5cfa3e1f7f55707d8fd82e0a7b7"
+dependencies = [
+ "der 0.7.3",
+ "spki",
+]
+
+[[package]]
 name = "pkg-config"
 version = "0.3.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6ac9a59f73473f1b8d852421e59e64809f025994837ef743615c6d0c5b305160"
+
+[[package]]
+name = "platforms"
+version = "3.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e3d7ddaed09e0eb771a79ab0fd64609ba0afb0a8366421957936ad14cbd13630"
 
 [[package]]
 name = "polling"
@@ -4856,7 +4822,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7e1f879b2998099c2d69ab9605d145d5b661195627eccc680002c4918a7fb6fa"
 dependencies = [
  "autocfg",
- "bitflags",
+ "bitflags 1.3.2",
  "cfg-if",
  "concurrent-queue",
  "libc",
@@ -4965,7 +4931,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6c8646e95016a7a6c4adea95bafa8a16baab64b583356217f2c85db4a39d9a86"
 dependencies = [
  "proc-macro2",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -4996,7 +4962,7 @@ dependencies = [
  "proc-macro-error-attr",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
  "version_check",
 ]
 
@@ -5055,7 +5021,7 @@ checksum = "66a455fbcb954c1a7decf3c586e860fd7889cddf4b8e164be736dbac95a953cd"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -5085,9 +5051,9 @@ dependencies = [
  "prost",
  "prost-types",
  "regex",
- "syn",
+ "syn 1.0.109",
  "tempfile",
- "which 4.4.0",
+ "which",
 ]
 
 [[package]]
@@ -5113,7 +5079,7 @@ dependencies = [
  "itertools",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -5147,7 +5113,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0218039c514f9e14a5060742ecd50427f8ac4f85a6dc58f2ddb806e318c55ee"
 dependencies = [
  "log",
- "which 4.4.0",
+ "which",
 ]
 
 [[package]]
@@ -5181,18 +5147,7 @@ checksum = "16b845dbfca988fa33db069c0e230574d15a3088f147a87b64c7589eb662c9ac"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
-]
-
-[[package]]
-name = "pulldown-cmark"
-version = "0.9.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2d9cc634bc78768157b5cbfe988ffcd1dcba95cd2b2f03a88316c08c6d00ed63"
-dependencies = [
- "bitflags",
- "memchr",
- "unicase",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -5340,7 +5295,7 @@ version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fb5a58c1855b4b6819d59012155603f0b22ad30cad752600aadfcb695265519a"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
 ]
 
 [[package]]
@@ -5492,7 +5447,7 @@ checksum = "ff26ed6c7c4dfc2aa9480b86a60e3c7233543a270a680e10758a507c5a4ce476"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -5574,7 +5529,7 @@ version = "0.36.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fd5c6ff11fecd55b40746d1995a02f2eb375bf8c00d192d521ee09f42bef37bc"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
  "errno",
  "io-lifetimes",
  "libc",
@@ -5656,11 +5611,12 @@ dependencies = [
 [[package]]
 name = "schnorrkel-og"
 version = "0.11.0-pre.0"
-source = "git+https://github.com/mobilecoinfoundation/schnorrkel.git?rev=5c98ae068ee4652d6df6463b549fbf2d5d132faa#5c98ae068ee4652d6df6463b549fbf2d5d132faa"
+source = "git+https://github.com/mobilecoinfoundation/schnorrkel.git?rev=b76d8c3a50671b08af0874b25b2543d3302d794d#b76d8c3a50671b08af0874b25b2543d3302d794d"
 dependencies = [
  "arrayref",
  "arrayvec",
- "curve25519-dalek 4.0.0-pre.2",
+ "cfg-if",
+ "curve25519-dalek 4.0.0-rc.1",
  "merlin",
  "rand_core 0.6.4",
  "sha2 0.10.6",
@@ -5703,7 +5659,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "3be24c1842290c45df0a7bf069e0c268a747ad05a192f2fd7dcfdbc1cba40928"
 dependencies = [
  "base16ct",
- "der",
+ "der 0.6.1",
  "generic-array",
  "subtle",
  "zeroize",
@@ -5714,9 +5670,6 @@ name = "semver"
 version = "1.0.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bebd363326d05ec3e2f532ab7660680f3b02130d780c299bca73469d521bc0ed"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "send_wrapper"
@@ -5851,15 +5804,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "serde_bytes"
-version = "0.11.9"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "416bda436f9aab92e02c8e10d49a15ddd339cea90b6e340fe51ed97abb548294"
-dependencies = [
- "serde",
-]
-
-[[package]]
 name = "serde_cbor"
 version = "0.11.1"
 source = "git+https://github.com/mobilecoinofficial/cbor?rev=4c886a7c1d523aae1ec4aa7386f402cb2f4341b5#4c886a7c1d523aae1ec4aa7386f402cb2f4341b5"
@@ -5876,7 +5820,7 @@ checksum = "d7e29c4601e36bcec74a223228dce795f4cd3616341a4af93520ca1a837c087d"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -5921,7 +5865,7 @@ dependencies = [
  "darling",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -6007,6 +5951,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "signature"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8fe458c98333f9c8152221191a77e2a44e8325d0193484af2e9421a53019e57d"
+dependencies = [
+ "digest 0.10.6",
+]
+
+[[package]]
 name = "simdutf8"
 version = "0.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6017,21 +5970,6 @@ name = "siphasher"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7bd3e3206899af3f8b12af284fafc038cc1dc2b41d1b89dd17297221c5d225de"
-
-[[package]]
-name = "skeptic"
-version = "0.13.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16d23b015676c90a0f01c197bfdc786c20342c73a0afdda9025adb0bc42940a8"
-dependencies = [
- "bytecount",
- "cargo_metadata",
- "error-chain",
- "glob",
- "pulldown-cmark",
- "tempfile",
- "walkdir",
-]
 
 [[package]]
 name = "slab"
@@ -6098,21 +6036,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "slog-gelf"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b634d825581a7ef6f0600d425e14cdaa7d5a3a4775202d0c90624afd775b738"
-dependencies = [
- "chrono",
- "flate2",
- "rand 0.7.3",
- "serde",
- "serde_json",
- "skeptic",
- "slog",
-]
-
-[[package]]
 name = "slog-json"
 version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6167,14 +6090,14 @@ checksum = "a507befe795404456341dfab10cef66ead4c041f62b8b11bbb92bffe5d0953e0"
 
 [[package]]
 name = "snow"
-version = "0.9.0"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "774d05a3edae07ce6d68ea6984f3c05e9bba8927e3dd591e3b479e5b03213d0d"
+checksum = "5ccba027ba85743e09d15c03296797cad56395089b832b48b5a5217880f57733"
 dependencies = [
  "aes-gcm",
  "blake2",
  "chacha20poly1305",
- "curve25519-dalek 4.0.0-pre.2",
+ "curve25519-dalek 4.0.0-rc.1",
  "rand_core 0.6.4",
  "ring",
  "rustc_version",
@@ -6224,6 +6147,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "spki"
+version = "0.7.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "37a5be806ab6f127c3da44b7378837ebf01dadca8510a0e572460216b228bd0e"
+dependencies = [
+ "base64ct",
+ "der 0.7.3",
+]
+
+[[package]]
 name = "stable_deref_trait"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6265,6 +6198,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "syn"
+version = "2.0.12"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "79d9531f94112cfc3e4c8f5f02cb2b58f72c97b7efd85f70203cc6d8efda5927"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "unicode-ident",
+]
+
+[[package]]
 name = "synstructure"
 version = "0.12.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6272,7 +6216,7 @@ checksum = "f36bdaa60a83aca3921b5259d5400cbf5e90fc51931376a9bd4a0eb79aa7210f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
  "unicode-xid",
 ]
 
@@ -6282,7 +6226,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d75182f12f490e953596550b65ee31bda7c8e043d9386174b353bda50838c3fd"
 dependencies = [
- "bitflags",
+ "bitflags 1.3.2",
  "core-foundation",
  "system-configuration-sys",
 ]
@@ -6368,7 +6312,7 @@ checksum = "5420d42e90af0c38c3290abcca25b9b3bdf379fc9f55c528f53a269d9c9a267e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -6482,7 +6426,7 @@ checksum = "d266c00fde287f55d3f1c3e96c500c362a2b8c695076ec180f27918820bc6df8"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -6556,7 +6500,7 @@ checksum = "4017f8f45139870ca7e672686113917c71c7a6e02d4924eda67186083c03081a"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
 ]
 
 [[package]]
@@ -6644,15 +6588,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b72f89f0ca32e4db1c04e2a72f5345d59796d4866a1ee0609084569f73683dc8"
 dependencies = [
  "libc",
-]
-
-[[package]]
-name = "unicase"
-version = "2.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "50f37be617794602aabbeee0be4f259dc1778fabe05e2d67ee8f79326d5cb4f6"
-dependencies = [
- "version_check",
 ]
 
 [[package]]
@@ -6862,7 +6797,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
  "wasm-bindgen-shared",
 ]
 
@@ -6896,7 +6831,7 @@ checksum = "2aff81306fcac3c7515ad4e177f521b5c9a15f2b08f4e32d823066102f35a5f6"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]
@@ -6949,15 +6884,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b6c71e40d7d2c34a5106301fb632274ca37242cd0c9d3e64dbece371a40a2d87"
 dependencies = [
  "webpki",
-]
-
-[[package]]
-name = "which"
-version = "3.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d011071ae14a2f6671d0b74080ae0cd8ebf3a6f8c9589a2cd45f23126fe29724"
-dependencies = [
- "libc",
 ]
 
 [[package]]
@@ -7155,9 +7081,9 @@ dependencies = [
 [[package]]
 name = "x25519-dalek"
 version = "2.0.0-pre.2"
-source = "git+https://github.com/mobilecoinfoundation/x25519-dalek.git?rev=c1966b8743d320cd07a54191475e5c0f94b2ea30#c1966b8743d320cd07a54191475e5c0f94b2ea30"
+source = "git+https://github.com/mobilecoinfoundation/x25519-dalek.git?rev=4fbaa3343301c62cfdbc3023c9f485257e6b718a#4fbaa3343301c62cfdbc3023c9f485257e6b718a"
 dependencies = [
- "curve25519-dalek 4.0.0-pre.2",
+ "curve25519-dalek 4.0.0-rc.1",
  "rand_core 0.6.4",
  "zeroize",
 ]
@@ -7188,9 +7114,9 @@ dependencies = [
 
 [[package]]
 name = "yasna"
-version = "0.2.2"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "79af3189e6b0484c9fd54208f8eeb8818cadee00ec81438b67a64c8e6f2f3694"
+checksum = "e17bb3549cc1321ae1296b9cdc2698e2b6cb1992adfa19a8c72e5b7a738f44cd"
 dependencies = [
  "bit-vec",
  "num-bigint",
@@ -7213,6 +7139,6 @@ checksum = "44bf07cb3e50ea2003396695d58bf46bc9887a1f362260446fad6bc4e79bd36c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn",
+ "syn 1.0.109",
  "synstructure",
 ]
