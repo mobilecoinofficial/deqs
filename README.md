@@ -23,7 +23,7 @@ are being used. Because a Quote reveals the key image of the input that it signe
 any required TxOut's, it becomes clear to anyone watching the DEQS that this quote was filled.
 
 Filling quotes in this way is inherently racy, if two people try to fill a quote at the same time, only one of them
-can succeed, because the mobilecoin network prevents the same key image from appearing twice in the blockchain in order
+can succeed, because the MobileCoin network prevents the same key image from appearing twice in the blockchain in order
 to prevent double-spends generally.
 
 The DEQS node offers several features.
