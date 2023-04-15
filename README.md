@@ -14,13 +14,22 @@ This quoting service can be used to facilitate private peer-to-peer trades.
 
 ## Overview
 
-The DEQS is organized as a decentralized peer-to-peer network for distributing signed quotes.
+The DEQS is organized as a decentralized peer-to-peer network for distributing signed quotes. (A quote consists of
+an Signed Contingent Input (SCI) together with some metadata such as a timestamp, an ID, a and list of involved currencies for convenience.)
+
+The DEQS is somewhat restrictive about what SCIs it accepts. The MCIPs and the consensus network permit
+SCIs involving potentially many outputs, and as long as the rules are followed, the transaction is valid.
+However, the DEQS only accepts SCIs with exactly one fractional output, or, with exactly one required output,
+corresponding to either "partial fill" quotes or "all-or-nothing" quotes for exactly one currency in terms of
+some other currency. This makes it easy for the DEQS to expose a "quote book" across currency pairs and not have to
+keep track of and represent any more complex three currency swap offers and so on.
+
 Any MobileCoin network participant is able to take one or more signed quotes, incorporate them into a transaction,
 and settle that transaction to the MobileCoin blockchain, completing a trade.
 
 This does not reveal the identity of any party to the other, or reveal the volume of the trade, if partial fills
 are being used. Because a Quote reveals the key image of the input that it signed over, and reveals the public keys of
-any required TxOut's, it becomes clear to anyone watching the DEQS that this quote was filled.
+any required TxOut's, it becomes clear to anyone watching the blockchain and the DEQS that this quote was filled.
 
 Filling quotes in this way is inherently racy, if two people try to fill a quote at the same time, only one of them
 can succeed, because the MobileCoin network prevents the same key image from appearing twice in the blockchain in order
@@ -43,7 +52,7 @@ A local sqllite database that backs up the known quotes:
 
 1. Helps the node recover quickly if it is rebooted.
 
-The DEQS node relies on a local copy of the mobilecoin ledger, which it uses to validate quotes
+The DEQS node relies on a local copy of the MobileCoin ledger, which it uses to validate quotes
 and prune expired quotes. This needs to be synced by a separate process, such as `mobilecoind` or `full-service`.
 
 ## Usage and Documentation
